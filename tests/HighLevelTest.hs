@@ -5,7 +5,7 @@
   System requirements:
 
   1. Port `testPort` (currently 8392) must be available on localhost
-  2. You must allow for outgoing HTTP traffic, as we POST to html5.validator.nu
+  2. You must allow for outgoing HTTP traffic, as we POST to validator.w3.org
      for HTML validation.
 -}
 
@@ -190,11 +190,11 @@ runPackageTests = do
        validateETagHandling "/packages/index.tar.gz"
     do info "Getting testpackage info"
        xs <- validate NoAuth "/package/testpackage"
-       unless ("The testpackage package" `isInfixOf` xs) $
+       unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
            die ("Bad package info: " ++ show xs)
     do info "Getting testpackage-1.0.0.0 info"
        xs <- validate NoAuth "/package/testpackage-1.0.0.0"
-       unless ("The testpackage package" `isInfixOf` xs) $
+       unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
            die ("Bad package info: " ++ show xs)
     do info "Getting testpackage Cabal file"
        cabalFile <- getUrl NoAuth "/package/testpackage-1.0.0.0/testpackage.cabal"

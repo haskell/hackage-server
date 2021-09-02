@@ -1,24 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
+  $if(doc.hasQuickNavV1)$
+  <link href="$doc.baseUrl$/quick-jump.css" rel="stylesheet" type="text/css" title="QuickJump" />
+  $endif$
   $hackageCssTheme()$
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
-  <link rel="canonical" href="$baseurl$/package/$package.name$" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:site" content="@hackage" />
+  <meta property="og:url" content="$baseurl$/package/$package.name$" />
+  <meta property="og:site_name" content="Hackage" />
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="$package.name$" />
+  <meta property="og:description" content="$package.optional.synopsis$" />
+  $if(isDeprecated)$
+    <meta name="robots" contents="noindex">
+  $endif$
+  <link rel="canonical" href="$sbaseurl$/package/$package.name$" />
+  <script src="/static/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+  <base href="$baseurl$/package/$package.name$-$package.version$/" />
 </head>
 
 <body>
-  $hackagePageHeader(title={
-    <a class="caption" href="$baseurl$/package/$package.name$">
-    $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
-    </a>})$
+  $hackagePageHeader()$
 
   <div id="content">
-
-    <h1>The $package.name$ package</h1>
+    <h1><a href="$baseurl$/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
     <div style="font-size: small">
-      [<a href="/packages/tags">Tags</a>:$tags$]
+      [ $tags$ ]
+      [ <a href="/package/$package.name$/tags/edit">Propose Tags </a> ]
     </div>
 
     $if(isDeprecated)$
@@ -28,29 +41,30 @@
     </div>
     $endif$
 
+    <div id="description">
     $if(package.optional.hasDescription)$
     $package.optional.description$
     $endif$
-
     $if(package.optional.hasReadme)$
     <hr>
     [<a href="#readme">Skip to Readme</a>]
     $endif$
+    </div>
+
 
     <div id="properties">
-    <h2>Properties</h2>
     <table class="properties">
       <tbody>
 
         <tr>
-          <th>Versions</th>
+          <th>Versions <span style="font-weight:normal;font-size: small;">[<a href="/package/$package.name$.rss">RSS</a>]  [<a href="https://pvp.haskell.org/faq">faq</a>]</span></th>
           <td>$versions$</td>
         </tr>
 
         $if(package.optional.hasChangelog)$
         <tr>
-          <th>Change log</th>
-          <td>$package.optional.changelog$</td>
+          <th>Change&nbsp;log</th>
+          <td class="word-wrap">$package.optional.changelog$</td>
         </tr>
         $endif$
 
@@ -61,29 +75,39 @@
 
         <tr>
           <th>License</th>
-          <td>$package.license$</td>
+          <td class="word-wrap">$package.license$</td>
         </tr>
 
         $if(package.optional.hasCopyright)$
         <tr>
           <th>Copyright</th>
-          <td>$package.optional.copyright$</td>
+          <td class="word-wrap">$package.optional.copyright$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Author</th>
-          <td>$package.author$</td>
+          <td class="word-wrap">$package.author$</td>
         </tr>
         <tr>
           <th>Maintainer</th>
-          <td>$package.maintainer$</td>
+          <td class="word-wrap">$package.maintainer$</td>
         </tr>
 
+        $if(hackage.hasUpdateTime)$
+        <tr>
+          <th>Revised</th>
+          <td>$hackage.updateTime$</td>
+        </tr>
+        $endif$
+
+        <!-- Obsolete/deprecated 'Stability' field hidden
+             c.f. http://stackoverflow.com/questions/3841218/conventions-for-stability-field-of-cabal-packages
         <tr>
           <th>Stability</th>
           <td>$stability$</td>
         </tr>
+        -->
 
         $if(package.optional.hasCategories)$
         <tr>
@@ -95,7 +119,7 @@
         $if(package.optional.hasHomePage)$
         <tr>
           <th>Home page</th>
-          <td>
+          <td class="word-wrap">
             <a href=$package.optional.homepage$>
               $package.optional.homepage$
             </a>
@@ -105,8 +129,8 @@
 
         $if(package.optional.hasBugTracker)$
         <tr>
-          <th>Bug tracker</th>
-          <td>
+          <th>Bug&nbsp;tracker</th>
+          <td class="word-wrap">
             <a href="$package.optional.bugTracker$">
               $package.optional.bugTracker$
             </a>
@@ -116,8 +140,8 @@
 
         $if(package.optional.hasSourceRepository)$
         <tr>
-          <th>Source repository</th>
-          <td>$package.optional.sourceRepository$</td>
+          <th>Source&nbsp;repo</th>
+          <td class="word-wrap">$package.optional.sourceRepository$</td>
         </tr>
         $endif$
 
@@ -126,17 +150,18 @@
           <td>$hackage.uploadTime$</td>
         </tr>
 
-        $if(hackage.hasUpdateTime)$
-        <tr>
-          <th>Updated</th>
-          <td>$hackage.updateTime$</td>
-        </tr>
-        $endif$
 
         $if(hackage.hasDistributions)$
         <tr>
           <th>Distributions</th>
           <td>$hackage.distributions$</td>
+        </tr>
+        $endif$
+
+        $if(hasexecs)$
+        <tr>
+          <th>Executables</th>
+          <td>$executables$</td>
         </tr>
         $endif$
 
@@ -146,16 +171,39 @@
         </tr>
 
         <tr>
-          <th>Votes</th>
-          <td>$votesSection$</td>
+          <th> Rating</th>
+	  <td>$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
+	  <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Bayesian_average">Bayesian average</a>]</span></td>
+	</tr>
+
+	<tr>
+	  <th>Your&nbsp;Rating</th>
+	  <td>
+            <ul class="star-rating">
+              <li class="star uncool" id="1">&lambda;</li>
+              <li class="star uncool" id="2">&lambda;</li>
+              <li class="star uncool" id="3">&lambda;</li>
+	    </ul>
+          $if(userRating)$
+            <input type="hidden" id="userRating" value="$userRating$">
+            [<a href="" class="clear-rating">clear rating</a>]
+          $endif$
+          </td>
         </tr>
         <tr>
           <th>Status</th>
-          <td>$buildStatus$</td>
+	  <td><a href="https://matrix.hackage.haskell.org/package/$package.name$"><img src="https://matrix.hackage.haskell.org/api/v2/packages/$package.name$/badge" alt="Hackage Matrix CI" style="max-width:100%;" /></a><br/>$buildStatus$</td>
         </tr>
       </tbody>
     </table>
     </div> <!-- /properties -->
+
+    <div id="badges" style="margin-top: 20px;">
+        $if(install.0)$<img src="https://img.shields.io/static/v1?label=Build&message=$install.2$&color=$install.1$" />$endif$
+        $if(test.0)$<img src="https://img.shields.io/static/v1?label=Tests&message=$test.2$&color=$test.1$" />$endif$
+        $if(covg.0)$<img src="https://img.shields.io/static/v1?label=Coverage&message=$covg.2$%&color=$covg.1$" />$endif$
+        $if(!hasExecOnly)$<img src="https://img.shields.io/static/v1?label=Documentation&message=$if(hasDocs)$Available$else$Unavailable$endif$&color=$if(hasDocs)$success$else$critical$endif$" />$endif$
+    </div>
 
     <div id="modules">
       $moduleList$
@@ -173,26 +221,39 @@
 
     <div id="maintainer-corner">
       <h4>Maintainer's Corner</h4>
-      <p>For package maintainers and hackage trustees</p>
+      <p>For $package.maintainerURL$ and hackage trustees</p>
       <ul>
         <li>
-          <a href="$package.name$/maintain">
+          <a href="$baseurl$/package/$package.name$/maintain">
             edit package information
           </a>
+        </li>
+      </ul>
+      <p>Candidates</p>
+      <ul>
+        <li>
+          $candidates$
         </li>
       </ul>
     </div>
 
     $if(package.optional.hasReadme)$
+    <hr />
     <div id="readme-container">
-      <h2 id="readme">Readme for $package.name$</h2>
+      <h2 id="readme">Readme for $package.name$-$package.version$</h2>
+      [<a href="#description">back to package description</a>]
       $package.optional.readme$
     </div>
     $endif$
-
   </div> <!-- /content -->
 
+  $packagePageAssets()$
+  <div style="clear:both"></div>
   $footer()$
 
+  $if(doc.hasQuickNavV1)$
+  <script src="$doc.baseUrl$/quick-jump.min.js" type="text/javascript"></script>
+  <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function(toggle) {var t = document.getElementById('quickjump-trigger');if (t) {t.onclick = function(e) { e.preventDefault(); toggle(); };}}); </script>
+  $endif$
 </body>
 </html>

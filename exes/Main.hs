@@ -11,10 +11,8 @@ import Distribution.Server.Framework.BackupDump (dumpServerBackup, BackupType(..
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Util.SigTerm
 
-import Distribution.Text
-         ( display )
 import Distribution.Simple.Utils
-         ( topHandler, die )
+         ( topHandler, dieNoVerbosity )
 import Distribution.Verbosity as Verbosity
 
 import System.Environment
@@ -48,6 +46,8 @@ import Data.List
          ( intercalate, isInfixOf )
 import Data.Traversable
          ( forM )
+import Data.Version
+         ( showVersion )
 import Control.Monad
          ( void, unless, when, filterM )
 import Control.Applicative
@@ -86,7 +86,7 @@ main = topHandler $ do
     printErrors errs = do
       putStr (intercalate "\n" errs)
       exitWith (ExitFailure 1)
-    printVersion = putStrLn $ "hackage-server " ++ display version
+    printVersion = putStrLn $ "hackage-server " ++ showVersion version
 
     commands =
       [ runCommand     `commandAddActionNoArgs` runAction
@@ -99,7 +99,7 @@ main = topHandler $ do
     commandAddActionNoArgs cmd action =
       commandAddAction cmd $ \flags extraArgs -> do
         when (not (null extraArgs)) $
-          die $ "'" ++ commandName cmd
+          dieNoVerbosity $ "'" ++ commandName cmd
              ++ "' does not take any extra arguments: " ++ unwords extraArgs
         action flags
 
@@ -248,7 +248,7 @@ runCommand =
           flagRunPort (\v flags -> flags { flagRunPort = v })
           (reqArgFlag "PORT")
       , option [] ["ip"]
-          "IPv4 address to listen on (default 0.0.0.0)"
+          "IPv4 address to listen on (default 127.0.0.1)"
           flagRunIP (\v flags -> flags { flagRunIP = v })
           (reqArgFlag "IP")
       , option [] ["base-uri"]
@@ -418,7 +418,7 @@ runAction opts = do
       where
         setHandler h = Signal.installHandler signal h Nothing
 
-    checkBlankServerState  hasSavedState = when (not hasSavedState) . die $
+    checkBlankServerState  hasSavedState = when (not hasSavedState) . dieNoVerbosity $
             "There is no existing server state.\nYou can either import "
          ++ "existing data using the various import modes, or start with "
          ++ "an empty state using the new mode. Either way, we have to make "
@@ -443,16 +443,16 @@ checkStaticDir staticDir staticDirFlag = do
     exists <- doesDirectoryExist staticDir
     when (not exists) $
       case staticDirFlag of
-        Flag _ -> die $ "The given static files directory " ++ staticDir
+        Flag _ -> dieNoVerbosity $ "The given static files directory " ++ staticDir
                      ++ " does not exist."
         -- Be helpful to people running from the build tree
-        NoFlag -> die $ "It looks like you are running the server without "
+        NoFlag -> dieNoVerbosity $ "It looks like you are running the server without "
                      ++ "installing it. That is fine but you will have to "
                      ++ "give the location of the static html files with the "
                      ++ "--static-dir flag."
     perms <- getPermissions staticDir
     when (not $ readable perms) $
-      die $ "The static files directory " ++ staticDir
+      dieNoVerbosity $ "The static files directory " ++ staticDir
           ++ " exists but is not readable by the server."
 
 
@@ -875,7 +875,7 @@ restoreCommand =
       ]
 
 restoreAction :: RestoreFlags -> [String] -> IO ()
-restoreAction _ [] = die "No restore tarball given."
+restoreAction _ [] = dieNoVerbosity "No restore tarball given."
 restoreAction opts [tarFile] = do
     defaults <- Server.defaultServerConfig
 
@@ -903,7 +903,7 @@ restoreAction opts [tarFile] = do
             _ ->
                 do createDirectory (stateDir </> "tmp")
                    lognotice verbosity "Successfully imported."
-restoreAction _ _ = die "There should be exactly one argument: the backup tarball."
+restoreAction _ _ = dieNoVerbosity "There should be exactly one argument: the backup tarball."
 
 
 -------------------------------------------------------------------------------
@@ -938,7 +938,7 @@ withServer config doTemp = bracket initialise shutdown
 -- Import utilities
 checkAccidentalDataLoss :: Bool -> IO ()
 checkAccidentalDataLoss hasSavedState =
-    when hasSavedState . die $
+    when hasSavedState . dieNoVerbosity $
         "The server already has an initialised database!!\n"
      ++ "If you really *really* intend to completely reset the "
      ++ "whole database you should remove the state/ directory."

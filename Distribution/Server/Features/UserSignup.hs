@@ -443,7 +443,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
               mailHeaders = [(BS.pack "Subject",
                               T.pack "Hackage account confirmation")],
               mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
-                                    None Nothing [] mailBody]]
+                                    None DefaultDisposition [] (PartContent mailBody)]]
             }
             mailBody = renderTemplate $ templateEmail
               [ "realname"    $= realname
@@ -538,7 +538,8 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
         uid <- updateAddUser username userauth
            >>= either errNameClash return
         updateUserDetails uid acctDetails
-        liftIO $ addUserToGroup uploadersGroup uid
+        -- Temporarily disabled to prevent spam -- GB 2/22/2018
+        -- liftIO $ addUserToGroup uploadersGroup uid
         seeOther (userPageUri userResource "" username) (toResponse ())
       where
         lookPasswd = body $ (,) <$> look "password"
@@ -586,7 +587,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
               mailHeaders = [(BS.pack "Subject",
                               T.pack "Hackage password reset confirmation")],
               mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
-                                    None Nothing [] mailBody]]
+                                    None DefaultDisposition [] (PartContent mailBody)]]
             }
             mailBody = renderTemplate $ templateEmail
               [ "realname"    $= accountName

@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Distribution.Client.Mirror.Repo (
     -- * Repository types
     SourceRepo(..)
@@ -12,6 +13,7 @@ module Distribution.Client.Mirror.Repo (
   , readCachedTargetIndex
   , authenticate
   , uploadPackage
+  , packageExists
     -- ** Finalizing a mirror
   , finalizeMirror
   , cacheTargetIndex
@@ -174,6 +176,19 @@ uploadPackage targetRepo doMirrorUploaders pkgInfo locCab locTgz =
          Local.uploadPackage targetRepoPath
                              pkgInfo
                              locTgz
+
+-- | Check if a package already exists
+--
+-- Currently always returns 'False' for remote repos.
+packageExists :: TargetRepo
+              -> PkgIndexInfo
+              -> MirrorSession Bool
+packageExists targetRepo pkgInfo =
+     case targetRepo of
+       TargetHackage2{} ->
+         return False
+       TargetLocal{..} ->
+         Local.packageExists targetRepoPath pkgInfo
 
 {-------------------------------------------------------------------------------
   Finalizing

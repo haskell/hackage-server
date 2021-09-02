@@ -12,16 +12,16 @@ where
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Nonce
 
-import Distribution.Text
-         ( Text(..) )
-import qualified Distribution.Compat.ReadP as Parse
-import qualified Text.PrettyPrint          as Disp
+import qualified Text.PrettyPrint as Disp
 import qualified Data.Char as Char
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Crypto.Hash.SHA256 as SHA256
+import Distribution.Pretty (Pretty(..))
+import Distribution.Parsec (Parsec(..))
+import qualified Distribution.Compat.CharParsing as P
 
 import Control.Applicative ((<$>))
 import Data.SafeCopy
@@ -56,7 +56,7 @@ generateOriginalToken = OriginalToken <$> newRandomNonce 32
 parseOriginalToken :: T.Text -> Either String OriginalToken
 parseOriginalToken t = OriginalToken <$> parseNonce (T.unpack t)
 
-parseAuthTokenM :: Monad m => T.Text -> m AuthToken
+parseAuthTokenM :: (Monad m, MonadFail m) => T.Text -> m AuthToken
 parseAuthTokenM t =
     case parseAuthToken t of
       Left err -> fail err
@@ -66,19 +66,20 @@ parseAuthToken :: T.Text -> Either String AuthToken
 parseAuthToken t
     | T.length t /= 64 = Left "auth token must be 64 charaters long"
     | not (T.all Char.isHexDigit t) = Left "only hex digits are allowed in tokens"
-    | otherwise =
-          Right $ AuthToken $ BSS.toShort $ fst $ BS16.decode $ T.encodeUtf8 t
+    | otherwise = AuthToken . BSS.toShort <$> BS16.decode (T.encodeUtf8 t)
 
 renderAuthToken :: AuthToken -> T.Text
 renderAuthToken (AuthToken bss) = T.decodeUtf8 $ BS16.encode $ BSS.fromShort bss
 
-instance Text AuthToken where
-    disp tok = Disp.text . T.unpack . renderAuthToken $ tok
-    parse =
-        Parse.munch1 Char.isHexDigit >>= \x ->
+instance Parsec AuthToken where
+    parsec =
+        P.munch1 Char.isHexDigit >>= \x ->
         case parseAuthToken (T.pack x) of
           Left err -> fail err
           Right ok -> return ok
+
+instance Pretty AuthToken where
+    pretty = Disp.text . T.unpack . renderAuthToken
 
 instance SafeCopy AuthToken where
     putCopy (AuthToken bs) = contain $ safePut (BSS.fromShort bs)

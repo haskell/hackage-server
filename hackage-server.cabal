@@ -1,5 +1,7 @@
+cabal-version: 3.0
 name:         hackage-server
 version:      0.5.1
+
 category:     Distribution
 synopsis:     The Hackage web server
 description:  The new implementation of the Hackage web server, based on the
@@ -8,6 +10,7 @@ description:  The new implementation of the Hackage web server, based on the
               .
               It is designed to be easy to run your own instance.
               It also includes a doc builder client and a mirroring client.
+
 author:       Duncan Coutts <duncan@community.haskell.org>,
               David Himmelstrup <lemmih@gmail.com>,
               Ross Paterson <ross@soi.city.ac.uk>,
@@ -21,30 +24,20 @@ copyright:    2008-2015 Duncan Coutts,
               2009-2010 Antoine Latter,
               2008 David Himmelstrup,
               2007 Ross Paterson
-license:      BSD3
+license:      BSD-3-Clause
 license-file: LICENSE
 
-build-type: Simple
-cabal-version: >=1.10
-tested-with: GHC==8.0.1, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3
+tested-with: GHC == { 8.10.4 }
 
 data-dir: datafiles
 data-files:
-  templates/*.html.st
-  templates/*.st
-  templates/*.txt.st
-  templates/EditCabalFile/*.html.st
-  templates/Html/*.html.st
-  templates/LegacyPasswds/*.html.st
-  templates/Search/*.xml.st
-  templates/UserSignupReset/*.html.st
-  templates/UserSignupReset/*.email.st
-  templates/AdminFrontend/*.html.st
-  templates/Users/*.html.st
+  templates/**/*.st
 
-  static/*.css
-  static/*.ico
-  static/*.png
+  static/**/*.css
+  static/**/*.js
+  static/**/*.svg
+  static/**/*.png
+  static/**/*.ico
 
   TUF/README.md
   TUF/mirrors.json
@@ -62,6 +55,10 @@ extra-source-files:
   tests/unpack-checks/missing-configure-0.1.0.0/Main.hs
   tests/unpack-checks/missing-configure-0.1.0.0/Setup.hs
   tests/unpack-checks/missing-configure-0.1.0.0/missing-configure.cabal
+  tests/unpack-checks/bad-specver-package-0/LICENSE
+  tests/unpack-checks/bad-specver-package-0/Main.hs
+  tests/unpack-checks/bad-specver-package-0/Setup.hs
+  tests/unpack-checks/bad-specver-package-0/bad-specver-package.cabal
 
 source-repository head
   type: git
@@ -77,43 +74,107 @@ flag debug
   description: Include debugging features
   manual: True
 
-flag build-hackage-server
-  default: True
-  manual: True
-
-flag build-hackage-mirror
-  default: True
-  manual: True
-
-flag build-hackage-build
-  default: True
-  manual: True
-
-flag build-hackage-import
-  default: False
-  manual: True
-
 -- Requires working local outgoing email
 flag test-create-user
   default: False
   manual: True
 
-flag network-uri
-  description: Get Network.URI from the network-uri package
-  default: True
+flag cabal-parsers
+  description: Enable experimental @cabal-parsers@ checks
+  manual: True
+  default: False
 
-executable hackage-server
-  if ! flag(build-hackage-server)
-    buildable: False
-  main-is: Main.hs
+----------------------------------------------------------------------------
+
+common defaults
+  default-language: Haskell2010
+
+  -- version ranges of pre-installed packages for GHC
+  --
+  -- when possible, the CI jobs use `installed`-constraints on these;
+  -- see `cabal.project.local-ghc-${VERSION}` files
+  build-depends:
+    , array                  >= 0.5   && < 0.6
+    , base                   >= 4.13  && < 4.16
+    , binary                 >= 0.8   && < 0.9
+    , bytestring             >= 0.10  && < 0.11
+    , containers            ^>= 0.6.0
+    , deepseq                >= 1.4   && < 1.5
+    , directory              >= 1.3   && < 1.4
+    , filepath               >= 1.4   && < 1.5
+    , mtl                   ^>= 2.2.1
+    , pretty                 >= 1.1   && < 1.2
+    , process                >= 1.6   && < 1.7
+    , text                  ^>= 1.2.2
+    , time                   >= 1.9   && < 1.12
+    , transformers           >= 0.5   && < 0.6
+    , unix                   >= 2.7   && < 2.8
+    , scientific
+  -- other dependencies shared by most components
+  build-depends:
+    , aeson                 ^>= 1.5
+    , Cabal                 ^>= 3.2.1.0
+    , fail                  ^>= 4.9.0
+      -- we use Control.Monad.Except, introduced in mtl-2.2.1
+    , network               >=  3 && < 3.2
+    , network-bsd           ^>= 2.8
+    , network-uri           ^>= 2.6
+    , parsec                ^>= 3.1.13
+    , tar                   ^>= 0.5
+    , unordered-containers  ^>= 0.2.10
+    , vector                ^>= 0.12
+    , zlib                  ^>= 0.6.2
+
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags -funbox-strict-fields
+
+  if impl(ghc >= 8.2)
+    ghc-options: -Werror=incomplete-patterns -Werror=missing-methods
+
+  other-extensions: CPP, TemplateHaskell
+
+
+library lib-server
+  import: defaults
+
+  -- TODO: move this into a 'library lib-client';
+  --       needs minor source-tree restructuring
+  exposed-modules:
+    Distribution.Client
+    Distribution.Client.Cron
+    Distribution.Client.UploadLog
+    Distribution.Client.Index
+    Distribution.Client.Mirror.CmdLine
+    Distribution.Client.Mirror.Config
+    Distribution.Client.Mirror.Repo.Hackage2
+    Distribution.Client.Mirror.Repo.Local
+    Distribution.Client.Mirror.Repo.Util
+    Distribution.Client.Mirror.Repo.Secure
+    Distribution.Client.Mirror.Repo.Types
+    Distribution.Client.Mirror.Repo
+    Distribution.Client.Mirror.Session
+    Distribution.Client.Mirror.State
+
+    Distribution.Client.DistroMap
+    Distribution.Client.HtPasswdDb
+    Distribution.Client.ParseApacheLogs
+    Distribution.Client.TagsFile
+    Distribution.Client.UserAddressesDb
+
+  -- misc internal modules
   other-modules:
-    Paths_hackage_server
-
     Data.IntTrie
     Data.StringTable
     Data.TarIndex
 
+  exposed-modules:
+    Paths_hackage_server
+  autogen-modules:
+    Paths_hackage_server
+
+  exposed-modules:
     Distribution.Server
+
+    Distribution.Server.Prelude
 
     Distribution.Server.Framework
     Distribution.Server.Framework.Auth
@@ -150,15 +211,13 @@ executable hackage-server
     Distribution.Server.Packages.Readme
     Distribution.Server.Packages.Metadata
 
-    Distribution.Server.Pages.Distributions
+    -- [not used by anyone] Distribution.Server.Pages.Distributions
     Distribution.Server.Pages.Group
     Distribution.Server.Pages.Index
     Distribution.Server.Pages.Package
     Distribution.Server.Pages.PackageFromTemplate
     Distribution.Server.Pages.Package.HaddockHtml
-    Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
-    Distribution.Server.Pages.Package.HaddockTypes
     Distribution.Server.Pages.Recent
     Distribution.Server.Pages.AdminLog
     -- [reverse index disabled] Distribution.Server.Pages.Reverse
@@ -176,14 +235,18 @@ executable hackage-server
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.CountingMap
     Distribution.Server.Util.CabalRevisions
+    Distribution.Server.Util.DocMeta
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
-    Distribution.Server.Util.TarIndex
+    -- [unused] Distribution.Server.Util.TarIndex
     Distribution.Server.Util.GZip
     Distribution.Server.Util.ContentType
     Distribution.Server.Util.SigTerm
     Distribution.Server.Util.ReadDigest
     Distribution.Server.Util.Nonce
+    Distribution.Server.Util.Merge
+    Distribution.Server.Util.ParseSpecVer
+    Distribution.Server.Util.Markdown
 
     Distribution.Server.Features
     Distribution.Server.Features.Core
@@ -205,10 +268,11 @@ executable hackage-server
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
 
+
   if flag(minimal)
     cpp-options: -DMINIMAL
   else
-    other-modules:
+    exposed-modules:
       Distribution.Server.Features.TarIndexCache
       Distribution.Server.Features.TarIndexCache.State
       Distribution.Server.Features.LegacyRedirects
@@ -227,6 +291,7 @@ executable hackage-server
       Distribution.Server.Features.PackageCandidates.Types
       Distribution.Server.Features.PackageCandidates.State
       Distribution.Server.Features.PackageCandidates.Backup
+      Distribution.Server.Features.PackageFeed
       Distribution.Server.Features.PackageList
       Distribution.Server.Features.Distro
       Distribution.Server.Features.Distro.Distributions
@@ -264,7 +329,7 @@ executable hackage-server
       Distribution.Server.Features.PreferredVersions.State
       Distribution.Server.Features.PreferredVersions.Backup
       -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies
-    -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies.State
+      -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies.State
       Distribution.Server.Features.Tags
       Distribution.Server.Features.Tags.Backup
       Distribution.Server.Features.Tags.State
@@ -279,328 +344,216 @@ executable hackage-server
     other-modules:
       Distribution.Server.Features.Crash
 
+  -- Except for GHC-bundled libraries (see above), it's more easier/manageable from
+  -- a maintenance POV to support only single major-version-ranges
+  --
+  -- NB: see also build-depends in `common defaults`!
   build-depends:
-    base       >= 4.6 && < 5,
-    filepath   >= 1.1,
-    directory  >= 1.0 && < 1.3,
-    random     >= 1.0,
-    array      >= 0.1,
-    vector     >= 0.10,
-    containers >= 0.5 && < 0.6,
-    pretty     >= 1.0,
-    base64-bytestring ==0.1.* || == 1.0.*,
-    base16-bytestring ==0.1.*,
-    bytestring >= 0.10.4.1,
-    --NOTE: blaze-builder-0.4 is now a compat package that uses
-    -- bytestring-0.10 builder
-    blaze-builder >= 0.4,
-    text       >= 0.11,
-    split      >= 0.2,
-    time       >= 1.1 && < 1.7,
-    time-locale-compat >= 0.1.0.1,
---    old-locale >= 1.0,
-    deepseq    == 1.1.* || > 1.3.0,
-    transformers >= 0.3,
-    -- we use Control.Monad.Except, introduced in mtl-2.2.1
-    mtl        >= 2.2.1,
-    parsec     == 3.1.*,
-    network    >= 2.1,
-    unix       >= 2.6,
-    zlib       >= 0.5.3 && < 0.6,
-    tar        >= 0.4.5 && < 0.6,
-    async      == 2.1.*,
-    cereal     == 0.5.*,
-    safecopy   >= 0.9.1 && < 0.10,
-    xhtml      >= 3000.1,
-    aeson      >= 0.6.2,
-    unordered-containers >= 0.2.3.0,
-    rss        >= 3000.2.0.3,
-    Cabal      == 1.24.*,
-    csv        == 0.1.*,
-    stm        >= 2.2 && < 2.5,
-    acid-state >= 0.12.2,
-    happstack-server == 7.4.*,
-    hslogger,
-    mime-mail  ==0.4.*,
-    HStringTemplate > 0.7 && < 0.9,
-    lifted-base >= 0.2.1 && < 0.3,
-    QuickCheck >= 2.5 && < 2.10,
-    friendly-time >= 0.4 && < 0.5,
-    cheapskate >= 0.1,
-    blaze-html >= 0.7,
-    xmlgen     >= 0.6,
-    hackage-security >= 0.5.2 && < 0.6,
-    ed25519,
-    cryptohash-md5    == 0.11.*,
-    cryptohash-sha256 == 0.11.*,
-    binary,
-    base16-bytestring >= 0.1 && < 0.2
+    , HStringTemplate       ^>= 0.8
+    , HTTP                  ^>= 4000.3.6
+    , QuickCheck            ^>= 2.14
+    , acid-state            ^>= 0.16
+    , async                 ^>= 2.2.1
+    -- requires bumping http-io-streams
+    , attoparsec            ^>= 0.13
+    , base16-bytestring     ^>= 1.0
+    -- requires bumping http-io-streams
+    , base64-bytestring     ^>= 1.1
+      --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder
+    , blaze-builder         ^>= 0.4
+    , blaze-html            ^>= 0.9
+    , cereal                ^>= 0.5
+    , commonmark	    ^>= 0.1
+    , commonmark-extensions ^>= 0.2
+    , cryptohash-md5        ^>= 0.11.100
+    , cryptohash-sha256     ^>= 0.11.100
+    , csv                   ^>= 0.1
+    , ed25519               ^>= 0.0.5
+    , hackage-security      ^>= 0.6
+    , hackage-security-HTTP ^>= 0.1.1
+    , haddock-library       > 1.7 && < 2
+    , happstack-server      ^>= 7.7.1
+    , hashable              ^>= 1.3
+    , hslogger              ^>= 1.3.1
+    , lifted-base           ^>= 0.2.1
+    , mime-mail             ^>= 0.5
+    , random                ^>= 1.2
+    , rss                   ^>= 3000.2.0.7
+    , safecopy              ^>= 0.10
+    , semigroups            ^>= 0.19
+    , split                 ^>= 0.2
+    , stm                   ^>= 2.5.0
+    , tagged                ^>= 0.8.5
+    , time-locale-compat    ^>= 0.1.0.1
+    , xhtml                 ^>= 3000.2
+    , xmlgen                ^>= 0.6
+    , xss-sanitize          ^>= 0.3.6
 
-  if ! flag(minimal)
-    build-depends:
-      snowball == 1.0.*,
-      tokenize >= 0.3 && < 0.4
+  if !flag(minimal)
+    build-depends: snowball ^>= 1.0
+                 , tokenize ^>= 0.3
 
-  if flag(network-uri)
-    build-depends: network-uri >= 2.6, network >= 2.6
-  else
-    build-depends: network-uri < 2.6, network < 2.6
-
-  build-tools:
-    alex       >= 2.2  && < 3.2,
-    happy      >= 1.17 && < 1.20
+  if flag(cabal-parsers)
+    build-depends: cabal-parsers ^>= 0
 
   if !os(darwin)
     extra-libraries: crypt
 
-  default-language: Haskell2010
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags
-               -threaded -funbox-strict-fields
-  other-extensions: TemplateHaskell
-  if impl(ghc >= 7.0)
-    ghc-options: -rtsopts -with-rtsopts=-I0
+----------------------------------------------------------------------------
+
+common exe-defaults
+  import: defaults
+
+  build-depends: lib-server
+  hs-source-dirs: exes
+  ghc-options: -threaded -rtsopts
+
+  other-modules:   Paths_hackage_server
+  autogen-modules: Paths_hackage_server
+
+
+executable hackage-server
+  import: exe-defaults
+
+  main-is: Main.hs
+
+  ghc-options: -with-rtsopts=-I00
 
 executable hackage-mirror
-  if ! flag(build-hackage-mirror)
-    buildable: False
+  import: exe-defaults
+
   main-is: MirrorClient.hs
-  other-modules:
-    Paths_hackage_server
-    Distribution.Client
-    Distribution.Client.Cron
-    Distribution.Client.UploadLog
-    Distribution.Client.Index
-    Distribution.Client.Mirror.CmdLine
-    Distribution.Client.Mirror.Config
-    Distribution.Client.Mirror.Repo.Hackage2
-    Distribution.Client.Mirror.Repo.Local
-    Distribution.Client.Mirror.Repo.Util
-    Distribution.Client.Mirror.Repo.Secure
-    Distribution.Client.Mirror.Repo.Types
-    Distribution.Client.Mirror.Repo
-    Distribution.Client.Mirror.Session
-    Distribution.Client.Mirror.State
-    Distribution.Server.Users.Types
-    Distribution.Server.Util.Merge
+
   build-depends:
-    base, transformers,
-    containers, array, vector, bytestring, text, pretty,
-    filepath, directory,
-    time,     random,
-    time-locale-compat >= 0.1.0.1,
-    tar,      zlib,
-    network,  HTTP >= 4000.2.11,
-    Cabal,
-    safecopy, cereal, binary, mtl,
-    unix, aeson,
-    cryptohash-sha256,
-    parsec,
-    process >= 1.2.0,
-    base16-bytestring >= 0.1 && < 0.2,
-    hackage-security >= 0.5.1 && < 0.6,
-    hackage-security-HTTP
-  default-language:   Haskell2010
-  default-extensions: ExistentialQuantification
-                      FlexibleContexts
-                      FlexibleInstances
-                      GeneralizedNewtypeDeriving
-                      MultiParamTypeClasses
-                      PatternGuards
-                      RecordWildCards
-  other-extensions:   CPP
-
-  ghc-options: -Wall -fwarn-tabs
-
-  if flag(network-uri)
-    build-depends: network-uri >= 2.6, network >= 2.6
-  else
-    build-depends: network-uri < 2.6, network < 2.6
+    -- version constraints inherited from lib-server
+    , HTTP
+    , hackage-security
 
 executable hackage-build
-  if ! flag(build-hackage-build)
-    buildable: False
-  main-is: BuildClient.hs
-  other-modules:
-    Paths_hackage_server
-    Distribution.Client
-    Distribution.Client.Index
-    Distribution.Server.Users.Types
-    Distribution.Server.Util.Merge
-  build-depends:
-    base,
-    containers, array, vector, bytestring, text, pretty,
-    filepath, directory, process >= 1.0,
-    time,
-    time-locale-compat >= 0.1.0.1,
-    tar,      zlib,
-    network,  HTTP,
-    Cabal,
-    safecopy, cereal, binary, mtl,
-    aeson >= 0.6.1.0,
-    random,
-    unix,
-    cryptohash-sha256,
-    base16-bytestring >= 0.1 && < 0.2,
-    -- Runtime dependency only:
-    hscolour >= 1.8
-  default-language: Haskell2010
-  -- the -threaded option is necessary for correct handling
-  -- of CTRL-C (not sure why :( )
-  ghc-options: -Wall -fwarn-tabs -threaded
+  import: exe-defaults
 
-  if flag(network-uri)
-    build-depends: network-uri >= 2.6, network >= 2.6
-  else
-    build-depends: network-uri < 2.6, network < 2.6
+  main-is: BuildClient.hs
+
+  build-depends:
+    -- version constraints inherited from lib-server
+    , HTTP
+
+  -- Runtime dependency only;
+  -- TODO: we have no proper support for this kind of dependencies in cabal
+  -- `build-tool-depends` specifies compile/test-time deps, but not run-time deps
+  --
+  -- build-tool-depends: hscolour:hscolour >= 1.8
+
+  -- ghc-options: -threaded option is necessary for correct handling
+  -- of CTRL-C (not sure why :( )
 
 executable hackage-import
-  if ! flag(build-hackage-import)
-    buildable: False
+  import: exe-defaults
+  -- TODO/FIXME: the code has bitrotten
+  buildable: False
+
   main-is: ImportClient.hs
-  other-modules:
-    Paths_hackage_server
-    Distribution.Client.DistroMap
-    Distribution.Client.HtPasswdDb
-    Distribution.Client.ParseApacheLogs
-    Distribution.Client.Index
-    Distribution.Client.TagsFile
-    Distribution.Client.UserAddressesDb
+
   build-depends:
-    base,
-    containers, array, vector, bytestring, text, pretty,
-    filepath, directory,
-    time,     random,
-    time-locale-compat >= 0.1.0.1,
-    tar,      zlib,
-    network,  HTTP >= 4000.2.11,
-    Cabal,
-    safecopy, cereal, binary, mtl,
-    csv, async, attoparsec,
-    aeson >= 0.6.1.0,
-    unordered-containers
-  default-language: Haskell2010
-  ghc-options: -Wall -fwarn-tabs
+      -- version constraints inherited from lib-server
+    , HTTP
+    , async
+    , csv
+    , time-locale-compat
 
-  if flag(network-uri)
-    build-depends: network-uri >= 2.6, network >= 2.6
-  else
-    build-depends: network-uri < 2.6, network < 2.6
+----------------------------------------------------------------------------
 
-Test-Suite HighLevelTest
-    type:           exitcode-stdio-1.0
-    main-is:        HighLevelTest.hs
-    other-modules:
-      Paths_hackage_server
-      HackageClientUtils
-      Run
-      MailUtils
-      HttpUtils
-      Package
-      Util
-    hs-source-dirs: tests
+common test-defaults
+  import: defaults
 
-    default-language: Haskell2010
-    ghc-options:    -threaded -Wall
-    build-depends:  base,
-                    bytestring,
-                    base64-bytestring,
-                    Cabal,
-                    directory,
-                    filepath,
-                    HTTP,
-                    network,
-                    process,
-                    tar,
-                    unix,
-                    zlib,
-                    unordered-containers,
-                    aeson,
-                    text,
-                    vector,
-                    xml,
-                    random
+  build-depends: lib-server
+  hs-source-dirs: tests
+  ghc-options: -threaded -rtsopts -fno-warn-orphans
 
-  if flag(network-uri)
-    build-depends: network-uri >= 2.6, network >= 2.6
-  else
-    build-depends: network-uri < 2.6, network < 2.6
+  other-modules:   Paths_hackage_server
+  autogen-modules: Paths_hackage_server
 
-Test-Suite CreateUserTest
-    if ! flag(test-create-user)
-      buildable: False
-    type:           exitcode-stdio-1.0
-    main-is:        CreateUserTest.hs
-    hs-source-dirs: tests
-    default-language: Haskell2010
-    ghc-options:    -threaded -Wall
-    build-depends:  base,
-                    bytestring,
-                    base64-bytestring,
-                    Cabal,
-                    directory,
-                    filepath,
-                    HTTP,
-                    network,
-                    process,
-                    tar,
-                    unix,
-                    zlib,
-                    unordered-containers,
-                    aeson,
-                    text,
-                    vector,
-                    xml,
-                    random
 
-  if flag(network-uri)
-    build-depends: network-uri >= 2.6, network >= 2.6
-  else
-    build-depends: network-uri < 2.6, network < 2.6
+test-suite HighLevelTest
+  import:         test-defaults
 
-Test-Suite PackageTests
-    type:           exitcode-stdio-1.0
-    main-is:        PackageTestMain.hs
-    other-modules:  Distribution.Server.Packages.UnpackTest
-    hs-source-dirs: ., tests
-    default-language: Haskell2010
-    ghc-options:    -threaded -Wall -fno-warn-orphans
-    build-depends:  base,
-                    bytestring,
-                    containers,
-                    filepath,
-                    mtl,
-                    tar,
-                    text,
-                    time,
-                    zlib,
-                    Cabal,
-                    test-framework,
-                    test-framework-hunit,
-                    HUnit
+  type:           exitcode-stdio-1.0
+  main-is:        HighLevelTest.hs
+  other-modules:
+    HackageClientUtils
+    Run
+    MailUtils
+    HttpUtils
+    Package
+    Util
 
-Test-Suite HashTests
-    type:           exitcode-stdio-1.0
-    main-is:        HashTestMain.hs
-    hs-source-dirs: ., tests
-    default-language: Haskell2010
-    ghc-options:    -threaded -Wall -fno-warn-orphans
-    build-depends:
-                    -- version constraints inherited from executables
-                    Cabal,
-                    array,
-                    base,
-                    base16-bytestring,
-                    binary,
-                    bytestring,
-                    cereal,
-                    containers,
-                    cryptohash-md5,
-                    cryptohash-sha256,
-                    deepseq,
-                    safecopy,
-                    text,
-                    time,
-                    vector,
-                    -- test-specific dependencies
-                    tasty       == 0.11.*,
-                    tasty-hunit >= 0.9.2 && < 0.10
+  -- This tells cabal that this test depends on the executable
+  -- component 'hackage-server' from this very same package, as well
+  -- as adding the build-folder where the `hackage-server`
+  -- executable can be found in front of $PATH
+  --
+  -- TODO: hackage-server isn't build-tool, it's run-tool!
+  -- so if this works, it's accidental!
+  build-tool-depends: hackage-server:hackage-server
+
+  -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
+  build-depends:
+    -- version constraints inherited from lib-server
+    , HTTP
+    , base64-bytestring
+    , random
+      -- component-specific dependencies
+    , xml             ^>= 1.3.14
+    , io-streams      ^>= 1.5.0.1
+    , http-io-streams ^>= 0.1.0.0
+
+test-suite CreateUserTest
+  import:         test-defaults
+
+  if ! flag(test-create-user)
+    buildable: False
+  type:           exitcode-stdio-1.0
+  main-is:        CreateUserTest.hs
+
+  -- see note in 'Test-Suite HighLevelTest'
+  build-tool-depends: hackage-server:hackage-server
+
+  -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
+  build-depends:
+    -- version constraints inherited from lib-server
+    , HTTP
+    , base64-bytestring
+    , random
+      -- component-specific dependencies
+    , xml ^>= 1.3.14
+
+test-suite PackageTests
+  import:         test-defaults
+
+  type:           exitcode-stdio-1.0
+  main-is:        PackageTestMain.hs
+  other-modules:  Distribution.Server.Packages.UnpackTest
+
+  build-depends:
+    -- version constraints inherited from lib-server
+    -- component-specific dependencies
+    , tasty        ^>= 1.4
+    , tasty-hunit  ^>= 0.10
+    , HUnit        ^>= 1.6
+
+test-suite HashTests
+  import:         test-defaults
+
+  type:           exitcode-stdio-1.0
+  main-is:        HashTestMain.hs
+
+  build-depends:
+    -- version constraints inherited from lib-server
+    , base16-bytestring
+    , cereal
+    , cryptohash-md5
+    , cryptohash-sha256
+    , safecopy
+      -- component-specific dependencies
+    , tasty       ^>= 1.4
+    , tasty-hunit ^>= 0.10

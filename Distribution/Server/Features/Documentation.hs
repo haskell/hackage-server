@@ -12,29 +12,35 @@ import Distribution.Server.Features.Documentation.State
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
+import Distribution.Server.Features.BuildReports
+import Distribution.Version ( Version )
 
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as ServerTarball
+import qualified Distribution.Server.Util.DocMeta as DocMeta
+import Distribution.Server.Features.BuildReports.BuildReport (PkgDetails(..), BuildStatus(..))
 import Data.TarIndex (TarIndex)
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Text
 import Distribution.Package
-import Distribution.Version (Version(..))
+import Distribution.Version (nullVersion)
+import qualified Distribution.Parsec as P
 
+import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as Map
 import Data.Function (fix)
 
 import Data.Aeson (toJSON)
-
+import Data.Maybe
 import Data.Time.Clock (NominalDiffTime, diffUTCTime, getCurrentTime)
 import System.Directory (getModificationTime)
-
+import Control.Applicative
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
 -- 2. Have cabal generate a standard doc tarball, and serve that here
@@ -47,6 +53,7 @@ data DocumentationFeature = DocumentationFeature {
 
     uploadDocumentation :: DynamicPath -> ServerPartE Response,
     deleteDocumentation :: DynamicPath -> ServerPartE Response,
+
 
     documentationResource :: DocumentationResource,
 
@@ -73,6 +80,7 @@ initDocumentationFeature :: String
                              -> IO [PackageIdentifier]
                              -> UploadFeature
                              -> TarIndexCacheFeature
+                             -> ReportsFeature
                              -> IO DocumentationFeature)
 initDocumentationFeature name
                          env@ServerEnv{serverStateDir} = do
@@ -82,9 +90,9 @@ initDocumentationFeature name
     -- Hooks
     documentationChangeHook <- newHook
 
-    return $ \core getPackages upload tarIndexCache -> do
+    return $ \core getPackages upload tarIndexCache reportsCore -> do
       let feature = documentationFeature name env
-                                         core getPackages upload tarIndexCache
+                                         core getPackages upload tarIndexCache reportsCore
                                          documentationState
                                          documentationChangeHook
       return feature
@@ -128,6 +136,7 @@ documentationFeature :: String
                      -> IO [PackageIdentifier]
                      -> UploadFeature
                      -> TarIndexCacheFeature
+                     -> ReportsFeature
                      -> StateComponent AcidState Documentation
                      -> Hook PackageId ()
                      -> DocumentationFeature
@@ -143,6 +152,7 @@ documentationFeature name
                      getPackages
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
+                     ReportsFeature{..}
                      documentationState
                      documentationChangeHook
   = DocumentationFeature{..}
@@ -191,14 +201,59 @@ documentationFeature name
       , packageDocsWholeUri = \format pkgid ->
           renderResource (packageDocsWhole r) [display pkgid, format]
       }
-
+      
     serveDocumentationStats :: DynamicPath -> ServerPartE Response
     serveDocumentationStats _dpath = do
-        pkgs <- mapParaM queryHasDocumentation =<< liftIO getPackages
-        return . toResponse . toJSON . map aux $ pkgs
+        hasDoc        <- optional (look "doc")
+        failCnt'      <- optional (look "fail")
+        selectedPkgs' <- optional (look "pkgs")
+        ghcid         <- optional (look "ghcid")
+        pkgs          <- mapParaM queryHasDocumentation =<< liftIO getPackages
+        
+        pkgs' <- mapM pkgReportDetails 
+                  $ filter (matchDoc hasDoc) 
+                  $ filter (isSelected $ parsePkgs $ fromMaybe "" selectedPkgs') pkgs
+
+        return . toResponse . toJSON 
+                    $ filter (isGHCok $ parseVersion' ghcid)  
+                    $ filter (isfailCntOk $ fmap read failCnt') pkgs'
       where
-        aux :: (PackageIdentifier, Bool) -> (String, Bool)
-        aux (pkgId, hasDocs) = (display pkgId, hasDocs)
+        parseVersion' :: Maybe String -> Maybe Version
+        parseVersion' Nothing = Nothing
+        parseVersion' (Just k) = P.simpleParsec k
+
+        parsePkgs :: String -> [PackageIdentifier]
+        parsePkgs pkgsStr = map fromJust $ filter isJust $ map (P.simpleParsec . C.unpack) $ C.split ',' (C.pack pkgsStr)
+
+        isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
+            | nullVersion == v =
+            packageName pkgid == packageName pkgid'
+        isSelectedPackage pkgid pkgid' =
+            pkgid == pkgid'
+
+        isSelected :: [PackageIdentifier] -> (PackageIdentifier,Bool) -> Bool
+        isSelected [] _                   = True
+        isSelected selectedPkgs (pkg, _)  = any (isSelectedPackage pkg) selectedPkgs
+
+        matchDoc :: Maybe String -> (PackageIdentifier, Bool) -> Bool
+        matchDoc (Just "true")  (_, False)  = False
+        matchDoc (Just "false") (_, True)   = False
+        matchDoc _ _                        = True
+
+        isfailCntOk:: Maybe Int -> PkgDetails -> Bool
+        isfailCntOk Nothing   _   = True
+        isfailCntOk (Just i) pkg  = case failCnt pkg of
+                                        Nothing -> True
+                                        (Just BuildOK) -> False
+                                        (Just (BuildFailCnt x)) -> i>x
+
+        isGHCok :: Maybe Version -> PkgDetails -> Bool
+        isGHCok Nothing _ = True
+        isGHCok (Just ver) pkg = case ghcId pkg of
+                              Nothing   -> True
+                              Just ver' -> ver' < ver
+
+               
 
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
@@ -314,9 +369,9 @@ documentationFeature name
       -- See https://support.google.com/webmasters/answer/139066?hl=en#6
       setHeaderM "Link" canonicalHeader
 
-      case pkgVersion pkgid of
+      case pkgVersion pkgid == nullVersion of
         -- if no version is given we want to redirect to the latest version
-        Version [] _ -> tempRedirect latestPkgPath (toResponse "")
+        True -> tempRedirect latestPkgPath (toResponse "")
           where
             latest = packageId pkginfo
             dpath' = [ if var == "package"
@@ -325,13 +380,17 @@ documentationFeature name
                      | e@(var, _) <- dpath ]
             latestPkgPath = (renderResource' self dpath')
 
-        _             -> do
+        False -> do
           mdocs <- queryState documentationState $ LookupDocumentation pkgid
           case mdocs of
             Nothing ->
               errNotFoundH "Not Found"
-                [MText $ "There is no documentation for " ++ display pkgid
-                  ++ ". See " ++ canonicalLink ++ " for the latest version."]
+                [ MText "There is no documentation for "
+                , MLink (display pkgid) ("/package/" ++ display pkgid)
+                , MText ". See "
+                , MLink canonicalLink canonicalLink
+                , MText " for the latest version."
+                ]
               where
                 -- Essentially errNotFound, but overloaded to specify a header.
                 -- (Needed since errNotFound throws away result of setHeaderM)
@@ -354,7 +413,25 @@ checkDocTarball pkgid =
    . fmapErr show             . Tar.read
   where
     fmapErr f    = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
-    checkEntries = Tar.foldEntries (\_ remainder -> remainder) (Right ()) Left
+    checkEntries = Tar.foldEntries checkEntry (Right ()) Left
+
+    checkEntry entry remainder
+      | Tar.entryPath entry == docMetaPath = checkDocMeta entry remainder
+      | otherwise                          = remainder
+
+    checkDocMeta entry remainder =
+      case Tar.entryContent entry of
+        Tar.NormalFile content size
+          | size <= maxDocMetaFileSize ->
+              case DocMeta.parseDocMeta content of
+                Just _ -> remainder
+                Nothing -> Left "meta.json is invalid"
+          | otherwise -> Left "meta.json too large"
+        _ -> Left "meta.json not a file"
+
+    maxDocMetaFileSize = 16 * 1024 -- 16KiB
+    docMetaPath = DocMeta.packageDocMetaTarPath pkgid
+
 
 {------------------------------------------------------------------------------
   Auxiliary

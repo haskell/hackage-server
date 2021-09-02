@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 module Distribution.Client.Mirror.Repo.Types (
     SourceRepo(..)
   , TargetRepo(..)

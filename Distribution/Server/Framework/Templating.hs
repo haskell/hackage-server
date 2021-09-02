@@ -24,11 +24,14 @@ module Distribution.Server.Framework.Templating (
     TemplateVal,
     templateDict,
     templateVal,
+    utcTimeTemplateVal,
     templateEnumDesriptor,
+    templateUnescaped,
     ToSElem(..),
   ) where
 
 import Text.StringTemplate
+import Text.StringTemplate.Base
 import Text.StringTemplate.Classes
 import Happstack.Server (ToMessage(..), toResponseBS)
 
@@ -59,6 +62,10 @@ import Data.IORef
 import System.FilePath ((<.>), takeExtension)
 import qualified Data.Map as Map
 
+import Data.Time (UTCTime)
+import Data.Time.Format (formatTime)
+import Data.Time.Locale.Compat (defaultTimeLocale)
+
 
 type RawTemplate = StringTemplate Builder
 type RawTemplateGroup = STGroup Builder
@@ -78,6 +85,10 @@ newtype TemplateAttr = TemplateAttr (RawTemplate -> RawTemplate)
 infix 0 $=
 ($=) :: ToSElem a => String -> a -> TemplateAttr
 ($=) k v = TemplateAttr (setAttribute k v)
+
+templateUnescaped :: String -> LBS.ByteString -> TemplateAttr
+templateUnescaped s x = TemplateAttr $ \st -> st {senv = envIns (SBLE (Builder.fromLazyByteString x)) (senv st)}
+   where envIns v e = e {smp = Map.insert s v (smp e)}
 
 newtype TemplateVal = TemplateVal (forall b. Stringable b => SElem b)
 
@@ -103,6 +114,7 @@ templateEnumDesriptor tostr xs x =
         ]
     | (i, x') <- zip [0::Int ..] xs ]
 
+
 instance ToSElem XHtml.Html where
     -- The use of SBLE here is to prevent the html being escaped
     toSElem = SBLE . stFromString . XHtml.showHtmlFragment
@@ -112,6 +124,18 @@ instance ToSElem PackageName       where toSElem = toSElem . display
 instance ToSElem Version           where toSElem = toSElem . display
 instance ToSElem PackageIdentifier where toSElem = toSElem . display
 
+-- | Format 'UTCTime' value as HTML.
+utcTimeTemplateVal :: String -> UTCTime -> (String, TemplateVal)
+utcTimeTemplateVal k utime = (k, TemplateVal (SBLE (stFromString utcSpanEl)))
+  where
+    utcSpanEl :: String
+    utcSpanEl = concat
+        [ "<span title=\""
+        , formatTime defaultTimeLocale "%c" utime
+        , "\">"
+        , formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime
+        , "</span>"
+        ]
 
 data Templates = TemplatesNormalMode !(IORef RawTemplateGroup)
                                      [FilePath] [String]
@@ -141,7 +165,7 @@ reloadTemplates (TemplatesNormalMode templateGroupRef
 
 reloadTemplates (TemplatesDesignMode _ _) = return ()
 
-getTemplate :: MonadIO m => Templates -> String -> m ([TemplateAttr] -> Template)
+getTemplate :: (MonadIO m, MonadFail m) => Templates -> String -> m ([TemplateAttr] -> Template)
 getTemplate templates@(TemplatesNormalMode _ _ expectedTemplates) name = do
     when (name `notElem` expectedTemplates) $ failMissingTemplate name
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
@@ -150,7 +174,7 @@ getTemplate templates@(TemplatesDesignMode _ expectedTemplates) name = do
     when (name `notElem` expectedTemplates) $ failMissingTemplate name
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
-tryGetTemplate :: MonadIO m => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))
+tryGetTemplate :: (MonadIO m, MonadFail m) => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))
 tryGetTemplate (TemplatesNormalMode templateGroupRef _ _) name = do
     templateGroup <- liftIO $ readIORef templateGroupRef
     let tkind     = templateKindFromExt name
@@ -198,7 +222,7 @@ templateContentType OtherTemplate = "text/plain"
 applyTemplateAttrs :: RawTemplate -> [TemplateAttr] -> RawTemplate
 applyTemplateAttrs = foldl' (\t' (TemplateAttr a) -> a t')
 
-failMissingTemplate :: Monad m => String -> m a
+failMissingTemplate :: (Monad m, MonadFail m) => String -> m a
 failMissingTemplate name =
   fail $ "getTemplate: request for unexpected template " ++ name
       ++ ". So we can do load-time checking, all templates used "
@@ -211,7 +235,7 @@ loadTemplateGroup templateDirs = do
 --                 `catchJust` IOError
     return (foldr1 (flip addSuperGroup) templateGroup)
 
-checkTemplates :: Monad m => RawTemplateGroup -> [FilePath] -> [String] -> m ()
+checkTemplates :: (Monad m, MonadFail m) => RawTemplateGroup -> [FilePath] -> [String] -> m ()
 checkTemplates templateGroup templateDirs expectedTemplates = do
     let checks    = [ (t, fmap checkTemplate
                                (getStringTemplate t templateGroup))

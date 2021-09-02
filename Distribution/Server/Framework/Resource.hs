@@ -37,17 +37,16 @@ module Distribution.Server.Framework.Resource (
     ServerErrorResponse,
   ) where
 
+import Distribution.Server.Prelude
+
 import Happstack.Server
 import Distribution.Server.Framework.HappstackUtils (remainingPathString, uriEscape)
 import Distribution.Server.Util.ContentType (parseContentAccept)
 import Distribution.Server.Framework.Error
 
 import Data.List (isSuffixOf)
-import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Monad
-import Data.Maybe
 import Data.Function (on)
 import Data.List (intercalate, unionBy, findIndices, find)
 import qualified Text.ParserCombinators.Parsec as Parse
@@ -90,8 +89,11 @@ data Resource = Resource {
 -- favors first
 instance Monoid Resource where
     mempty = Resource [] [] [] [] [] noFormat NoSlash []
-    mappend (Resource bpath rget rput rpost rdelete rformat rend desc)
-            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' desc') =
+    mappend = (<>)
+
+instance Semigroup Resource where
+    (Resource bpath rget rput rpost rdelete rformat rend desc) <>
+      (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' desc') =
         Resource (simpleCombine bpath bpath') (ccombine rget rget') (ccombine rput rput')
                    (ccombine rpost rpost') (ccombine rdelete rdelete')
                    (simpleCombine rformat rformat') (simpleCombine rend rend') (desc ++ desc')
@@ -199,7 +201,7 @@ extendResourcePath arg resource =
 
 -- Allows the formation of a URI from a URI specification (BranchPath).
 -- URIs may obey additional constraints and have special rules (e.g., formats).
--- To accomodate these, insteaduse renderResource to get a URI.
+-- To accommodate these, insteaduse renderResource to get a URI.
 --
 -- ".." is a special argument that fills in a TrailingBranch. Make sure it's
 -- properly escaped (see Happstack.Server.SURI)
@@ -267,7 +269,7 @@ renderResource resource list = case renderListURI (normalizeResourceLocation res
     (str, format:_) -> renderResourceFormat resource (Just format) str
     (str, []) -> renderResourceFormat resource Nothing str
 
--- in some cases, DynamicBranches are used to accomodate formats for StaticBranches.
+-- in some cases, DynamicBranches are used to accommodate formats for StaticBranches.
 -- this returns them to their pre-format state so renderGenURI can handle them
 normalizeResourceLocation :: Resource -> BranchPath
 normalizeResourceLocation resource = case (resourceFormat resource, resourceLocation resource) of
@@ -581,7 +583,7 @@ reinsert key newTree branchMap = Map.insertWith combine key newTree branchMap
 combine :: Monoid a => ServerTree a -> ServerTree a -> ServerTree a
 combine (ServerTree newResponse newForest) (ServerTree oldResponse oldForest) =
     -- replace old resource with new resource, combine old and new responses
-    ServerTree (mappend newResponse oldResponse) (Map.foldWithKey reinsert oldForest newForest)
+    ServerTree (mappend newResponse oldResponse) (Map.foldrWithKey reinsert oldForest newForest)
 
 addServerNode :: Monoid a => BranchPath -> a -> ServerTree a -> ServerTree a
 addServerNode trunk response tree = treeFold trunk (ServerTree (Just response) Map.empty) tree

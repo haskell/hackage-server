@@ -5,6 +5,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
 import Data.List
+import Data.Version
 import Network.Browser
 import System.Directory
 import System.Environment
@@ -136,7 +137,10 @@ mirrorOnce verbosity opts
 
               mirrorPackages verbosity opts sourceRepo targetRepo pkgsToMirror'
               finalizeMirror   sourceRepo targetRepo
-              cacheTargetIndex sourceRepo targetRepo
+
+              case length (selectedPkgs opts) of
+                0 ->  cacheTargetIndex sourceRepo targetRepo
+                _ ->  return ()
 
               case mirrorPostHook (mirrorConfig opts) of
                 Nothing       -> return ()
@@ -149,7 +153,7 @@ mirrorOnce verbosity opts
                               fromErrorState st')) $
       runMirrorSession verbosity keepGoing (toErrorState st) $ do
         browserAction $ do
-          setUserAgent  ("hackage-mirror/" ++ display version)
+          setUserAgent  ("hackage-mirror/" ++ showVersion version)
           setErrHandler (warn  verbosity)
           setOutHandler (debug verbosity)
           setAllowBasicAuth True
@@ -190,14 +194,20 @@ mirrorPackage verbosity opts sourceRepo targetRepo pkginfo = do
   where
     go :: MirrorSession ()
     go = do
-      rsp <- downloadPackage sourceRepo pkgid locCab locTgz
-      case rsp of
-        Just theError ->
-          notifyResponse (GetPackageFailed theError pkgid)
-        Nothing -> do
-          notifyResponse GetPackageOk
-          liftIO $ sanitiseTarball verbosity (stateDir opts) locTgz
-          uploadPackage targetRepo (mirrorUploaders opts) pkginfo locCab locTgz
+      skip <- if skipExists opts
+                then packageExists targetRepo pkginfo
+                else return False
+      if skip then
+         notifyResponse PackageSkipped
+      else do
+        rsp <- downloadPackage sourceRepo pkgid locCab locTgz
+        case rsp of
+          Just theError ->
+            notifyResponse (GetPackageFailed theError pkgid)
+          Nothing -> do
+            notifyResponse GetPackageOk
+            liftIO $ sanitiseTarball verbosity (stateDir opts) locTgz
+            uploadPackage targetRepo (mirrorUploaders opts) pkginfo locCab locTgz
 
     removeTempFiles :: MirrorSession ()
     removeTempFiles = liftIO $ handle ignoreDoesNotExist $ do
@@ -233,8 +243,9 @@ subsetIndex pkgids =
       any (\pkgid -> matchPackage pkgid pkgid') pkgids
 
     matchPackage :: PackageId -> PackageId -> Bool
-    matchPackage (PackageIdentifier name  (Version [] _))
-                 (PackageIdentifier name' _             ) = name == name'
+    matchPackage (PackageIdentifier name  v)
+                 (PackageIdentifier name' _)
+                 | nullVersion == v = name == name'
     matchPackage pkgid pkgid' = pkgid == pkgid'
 
 {-------------------------------------------------------------------------------

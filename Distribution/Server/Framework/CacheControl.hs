@@ -6,15 +6,20 @@ module Distribution.Server.Framework.CacheControl (
     cacheControlWithoutETag,
     CacheControl(..),
     ETag(..),
+    etagFromHash,
     maxAgeSeconds, maxAgeMinutes, maxAgeHours, maxAgeDays, maxAgeMonths,
   ) where
+
+import Prelude ()
+import Distribution.Server.Prelude
 
 import Happstack.Server.Types
 import Happstack.Server.Monads
 
 import Data.List
 import qualified Data.ByteString.Char8 as BS8
-
+import Data.Hashable
+import Numeric
 
 data CacheControl = MaxAge Int | Public | Private | NoCache | NoTransform
 
@@ -69,4 +74,7 @@ handleETag expectedtag = do
       Just actualtag | formatETag expectedtag == BS8.unpack actualtag
         -> finishWith (noContentLength . result 304 $ "")
       _ -> return ()
+
+etagFromHash :: Hashable a => a -> ETag
+etagFromHash x = ETag (showHex (fromIntegral (hash x) :: Word) "")
 

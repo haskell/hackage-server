@@ -2,8 +2,11 @@
 
 module Distribution.Server.Features.Search.ExtractDescriptionTerms (
     extractSynopsisTerms,
-    extractDescriptionTerms
+    extractDescriptionTerms,
+    extraStems
   ) where
+
+import Distribution.Server.Prelude
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -12,18 +15,21 @@ import qualified Data.Set as Set
 import Data.Char
 import qualified NLP.Tokenize as NLP
 import qualified NLP.Snowball as NLP
-import Control.Monad ((>=>))
-import Data.Maybe
+import qualified Data.Foldable as F
+import Data.List (intercalate)
 
-import Distribution.Server.Pages.Package.HaddockHtml  as Haddock (markup)
-import Distribution.Server.Pages.Package.HaddockTypes as Haddock
-import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock (parseHaddockParagraphs)
-import qualified Distribution.Server.Pages.Package.HaddockLex   as Haddock (tokenise)
+import qualified Documentation.Haddock.Markup as Haddock
+import Documentation.Haddock.Types
 
+import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock (parse)
 
-extractSynopsisTerms :: Set Text -> String -> [Text]
-extractSynopsisTerms stopWords =
-      NLP.stems NLP.English
+extraStems :: [Text] -> Text -> [Text]
+extraStems ss x = x : mapMaybe (`T.stripSuffix` x) ss
+
+extractSynopsisTerms :: [Text] -> Set Text -> String -> [Text]
+extractSynopsisTerms ss stopWords =
+      concatMap (extraStems ss) --note this adds extra possible stems, it doesn't delete any given one.
+    . NLP.stems NLP.English
     . filter (`Set.notMember` stopWords)
     . map (T.toCaseFold . T.pack)
     . concatMap splitTok
@@ -31,7 +37,7 @@ extractSynopsisTerms stopWords =
     . NLP.tokenize
 
 
-ignoreTok :: String -> Bool  
+ignoreTok :: String -> Bool
 ignoreTok = all isPunctuation
 
 splitTok :: String -> [String]
@@ -48,36 +54,46 @@ splitTok tok =
         (leading, [])         -> leading : []
 
 
-extractDescriptionTerms :: Set Text -> String -> [Text]
-extractDescriptionTerms stopWords =
-      NLP.stems NLP.English
+extractDescriptionTerms :: [Text] -> Set Text -> String -> [Text]
+extractDescriptionTerms ss stopWords =
+      concatMap (extraStems ss)
+    . NLP.stems NLP.English
     . filter (`Set.notMember` stopWords)
     . map (T.toCaseFold . T.pack)
     . maybe
         [] --TODO: something here
         (  filter (not . ignoreTok)
          . NLP.tokenize
-         . concat . markup termsMarkup)
-    . (Haddock.tokenise >=> Haddock.parseHaddockParagraphs)
+         . intercalate " " . Haddock.markup termsMarkup)
+    . Haddock.parse
 
-termsMarkup :: DocMarkup String [String]
+termsMarkup :: DocMarkupH () String [String]
 termsMarkup = Markup {
   markupEmpty         = [],
   markupString        = \s -> [s],
   markupParagraph     = id,
   markupAppend        = (++),
   markupIdentifier    = \s -> [s],
+  markupIdentifierUnchecked = const [], -- TODO
   markupModule        = const [], -- i.e. filter these out
+  markupWarning       = id,
   markupEmphasis      = id,
+  markupBold          = id,
   markupMonospaced    = \s -> if length s > 1 then [] else s,
   markupUnorderedList = concat,
   markupOrderedList   = concat,
   markupDefList       = concatMap (\(d,t) -> d ++ t),
   markupCodeBlock     = const [],
-  markupHyperlink     = \(Hyperlink _url mLabel) -> maybeToList mLabel,
+  markupTable         = concat . F.toList,
+  markupHyperlink     = \(Hyperlink _url mLabel) -> fromMaybe [] mLabel,
                         --TODO: extract main part of hostname
+  markupAName         = const [],
   markupPic           = const [],
-  markupAName         = const []
+  markupMathInline    = const [],
+  markupMathDisplay   = const [],
+  markupProperty      = const [],
+  markupExample       = const [],
+  markupHeader        = \(Header _lvl title) -> title
   }
 
 {-
@@ -90,7 +106,7 @@ main = do
     let mostFreq :: [String]
         pkgs     :: [PackageDescription]
         (mostFreq, pkgs) = read pkgsFile
-    
+
     stopWordsFile <- T.readFile "stopwords.txt"
 --    wordsFile <- T.readFile "/usr/share/dict/words"
 --    let ws = Set.fromList (map T.toLower $ T.lines wordsFile)
@@ -106,7 +122,7 @@ main = do
     sequence_
       [ putStrLn $ display (packageName pkg) ++ ": "
                 ++ --intercalate ", "
-                   (description pkg) ++ "\n" 
+                   (description pkg) ++ "\n"
                 ++ intercalate ", "
                    (map T.unpack $ extractDescriptionTerms stopWords (description pkg)) ++ "\n"
       | pkg <- pkgs

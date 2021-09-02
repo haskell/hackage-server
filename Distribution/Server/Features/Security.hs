@@ -50,23 +50,34 @@ initSecurityFeature env = do
        -- which will override any previous one.
        --
        -- TODO: We cannot deal with deletes (they are a problem elsewhere too)
-       registerHook (preIndexUpdateHook coreFeature) $ \chg -> return $
-         case chg of
-           PackageChangeAdd      pkg -> indexEntriesFor pkg
-           PackageChangeInfo s _ new -> case s of
-             PackageUpdatedTarball    -> indexEntriesFor new
-             -- .cabal file is not recorded in the TUF metadata
-             -- (until we have author signing anyway)
-             PackageUpdatedCabalFile  -> []
-             -- the uploader is not included in the TUF metadata
-             PackageUpdatedUploader   -> []
-             -- upload time is not included in the TUF metadata
-             -- (it is recorded in the MetadataEntry because we use it for
-             -- the tarball construction, but it doesn't affect the contents
-             -- of the TUF metadata)
-             PackageUpdatedUploadTime -> []
-           PackageChangeDelete _     -> []
-           PackageChangeIndexExtra{} -> []
+       --
+       -- NOTE: this hook is in general _not atomic_ with the package index update related to it.
+       -- It is atomic _only_ in the PackageChangeAdd case. As most other significant cases are no-ops
+       -- at the moment for adding index entries, this should be ok. (The exception is updated tarball
+       -- but this is only used for the mirror client).
+       --
+       -- If in the future more stuff is registered here, we may need to change code elsewhere
+       -- to ensure that it is added atomically as well...
+       registerHook (preIndexUpdateHook coreFeature) $ \chg -> do
+         let (ents,msg) = case chg of
+                      PackageChangeAdd      pkg -> (indexEntriesFor pkg,"PackageChangeAdd")
+                      PackageChangeInfo s _ new -> case s of
+                        PackageUpdatedTarball    -> (indexEntriesFor new,"PackageChangeInfo:PackageUpdatedTarball")
+                        -- .cabal file is not recorded in the TUF metadata
+                        -- (until we have author signing anyway)
+                        PackageUpdatedCabalFile  -> ([],"PackageChangeInfo:PackageUpdatedCabalFile")
+                        -- the uploader is not included in the TUF metadata
+                        PackageUpdatedUploader   -> ([],"PackageChangeInfo:PackageUpdatedUploader")
+                        -- upload time is not included in the TUF metadata
+                        -- (it is recorded in the MetadataEntry because we use it for
+                        -- the tarball construction, but it doesn't affect the contents
+                        -- of the TUF metadata)
+                        PackageUpdatedUploadTime -> ([],"PackageChangeInfo:PackageUpdatedUploadTime")
+                      PackageChangeDelete _     -> ([],"PackageChangeDelete")
+                      PackageChangeIndexExtra{} -> ([],"PackageChangeIndexExtra")
+
+         loginfo maxBound (mconcat ["TUF preIndexUpdateHook invoked (", msg, ", n = ", show (length ents), ")"])
+         return ents
 
        return $ securityFeature env securityState
   where
@@ -139,8 +150,8 @@ securityFeature env securityState =
           let tufFile = file sfiles
               eTag    = ETag $ show (tufFileHashMD5 tufFile)
           -- Higher max-age values result in higher cache hit ratios, but also
-          -- in higher likelyhood of cache incoherence problems (and of course in
-          -- higher likelyhood of caches beind out of date with updates to the
+          -- in higher likelihood of cache incoherence problems (and of course in
+          -- higher likelihood of caches beind out of date with updates to the
           -- central server).
           cacheControl [Public, NoTransform, maxAgeMinutes 1] eTag
           enableRange
@@ -242,4 +253,3 @@ getTUFFile :: Sec.Path Sec.Absolute -> IO TUFFile
 getTUFFile file =
     Sec.withFile file Sec.ReadMode $ \h ->
       evaluate . mkTUFFile =<< BS.Lazy.hGetContents h
-

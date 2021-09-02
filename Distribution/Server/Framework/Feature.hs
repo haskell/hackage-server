@@ -22,15 +22,14 @@ module Distribution.Server.Framework.Feature
   , BlobStorage
   ) where
 
+import Distribution.Server.Prelude
+
 import Distribution.Server.Framework.BackupDump (BackupType (..))
 import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), AbstractRestoreBackup(..), BackupEntry, abstractRestoreBackup)
 import Distribution.Server.Framework.Resource      (Resource, ServerErrorResponse)
 import Distribution.Server.Framework.BlobStorage   (BlobStorage)
 import Distribution.Server.Framework.MemSize
 
-import Data.Monoid
-import Control.Monad (liftM, liftM2)
-import Control.Monad.Trans (MonadIO)
 import Data.Acid
 import Data.Acid.Advanced
 
@@ -151,7 +150,7 @@ abstractAcidStateComponent' :: MemSize st
                             -> StateComponent AcidState st -> AbstractStateComponent
 abstractAcidStateComponent' cmp st = AbstractStateComponent {
     abstractStateDesc       = stateDesc st
-  , abstractStateCheckpoint = createCheckpoint (stateHandle st)
+  , abstractStateCheckpoint = createCheckpoint (stateHandle st) *> createArchive (stateHandle st)
   , abstractStateClose      = closeAcidState (stateHandle st)
   , abstractStateBackup     = \t -> liftM (backupState st t) (getState st)
   , abstractStateRestore    = abstractRestoreBackup (putState st) (restoreState st)
@@ -186,16 +185,19 @@ instance Monoid AbstractStateComponent where
     , abstractStateNewEmpty   = \_stateDir -> return (mempty, return [])
     , abstractStateSize       = return 0
     }
-  a `mappend` b = AbstractStateComponent {
+  mappend = (<>)
+
+instance Semigroup AbstractStateComponent where
+  a <> b = AbstractStateComponent {
       abstractStateDesc       = abstractStateDesc a ++ "\n" ++ abstractStateDesc b
     , abstractStateCheckpoint = abstractStateCheckpoint a >> abstractStateCheckpoint b
     , abstractStateClose      = abstractStateClose a >> abstractStateClose b
     , abstractStateBackup     = \t -> liftM2 (++) (abstractStateBackup a t) (abstractStateBackup b t)
-    , abstractStateRestore    = abstractStateRestore a `mappend` abstractStateRestore b
+    , abstractStateRestore    = abstractStateRestore a <> abstractStateRestore b
     , abstractStateNewEmpty   = \stateDir -> do
                                  (a', cmpA) <- abstractStateNewEmpty a stateDir
                                  (b', cmpB) <- abstractStateNewEmpty b stateDir
-                                 return (a' `mappend` b', liftM2 (++) cmpA cmpB)
+                                 return (a' <> b', liftM2 (++) cmpA cmpB)
     , abstractStateSize       = liftM2 (+) (abstractStateSize a)
                                            (abstractStateSize b)
     }

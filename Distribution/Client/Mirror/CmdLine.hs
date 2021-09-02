@@ -24,7 +24,8 @@ data MirrorOpts = MirrorOpts {
                     selectedPkgs    :: [PackageId],
                     continuous      :: Maybe Int, -- if so, interval in minutes
                     mo_keepGoing    :: Bool,
-                    mirrorUploaders :: Bool
+                    mirrorUploaders :: Bool,
+                    skipExists      :: Bool
                   }
 
 data MirrorFlags = MirrorFlags {
@@ -33,6 +34,7 @@ data MirrorFlags = MirrorFlags {
     flagInterval        :: Maybe String,
     flagKeepGoing       :: Bool,
     flagMirrorUploaders :: Bool,
+    flagSkipExists      :: Bool,
     flagVerbosity       :: Verbosity,
     flagHelp            :: Bool
 }
@@ -42,8 +44,9 @@ defaultMirrorFlags = MirrorFlags
   { flagCacheDir        = Nothing
   , flagContinuous      = False
   , flagInterval        = Nothing
-  , flagKeepGoing       = False
+  , flagKeepGoing       = True
   , flagMirrorUploaders = False
+  , flagSkipExists      = False
   , flagVerbosity       = normal
   , flagHelp            = False
   }
@@ -70,13 +73,17 @@ mirrorFlagDescrs =
       (ReqArg (\int opts -> opts { flagInterval = Just int }) "MIN")
       "Set the mirroring interval in minutes (default 30)"
 
-  , Option [] ["keep-going"]
-      (NoArg (\opts -> opts { flagKeepGoing = True }))
-      "Don't fail on mirroring errors, keep going."
+  , Option [] ["fail-on-error"]
+      (NoArg (\opts -> opts { flagKeepGoing = False }))
+      "Fail on mirroring errors."
 
   , Option [] ["mirror-uploaders"]
       (NoArg (\opts -> opts { flagMirrorUploaders = True }))
       "Mirror the original uploaders which requires that they are already registered on the target hackage."
+
+  , Option [] ["skip-exists"]
+      (NoArg (\opts -> opts { flagSkipExists = True }))
+      "Skip already mirrored packages (only works for local repos)"
   ]
 
 validateOpts :: [String] -> IO (Verbosity, MirrorOpts)
@@ -91,10 +98,10 @@ validateOpts args = do
       (configFile:pkgstrs) -> do
         mCfg <- readMirrorConfig configFile
         case mCfg of
-          Left theError -> die theError
+          Left theError -> dieNoVerbosity theError
           Right config -> case (mpkgs, minterval) of
-            (Left theError, _) -> die theError
-            (_, Left theError) -> die theError
+            (Left theError, _) -> dieNoVerbosity theError
+            (_, Left theError) -> dieNoVerbosity theError
             (Right pkgs, Right interval) ->
               return (flagVerbosity flags, MirrorOpts {
                    mirrorConfig = config,
@@ -104,13 +111,14 @@ validateOpts args = do
                                     then Just interval
                                     else Nothing,
                    mo_keepGoing = flagKeepGoing flags,
-                   mirrorUploaders = flagMirrorUploaders flags
+                   mirrorUploaders = flagMirrorUploaders flags,
+                   skipExists   = flagSkipExists flags
                  })
           where
             mpkgs     = validatePackageIds pkgstrs
             minterval = validateInterval (flagInterval flags)
 
-      _ -> die $ "Expected path to a config file.\n"
+      _ -> dieNoVerbosity $ "Expected path to a config file.\n"
               ++ "See hackage-mirror --help for details and an example."
 
   where
@@ -136,7 +144,7 @@ validateOpts args = do
                ++ "The post-mirror-hook is optional.\n"
                ++ "\n"
                ++ "Options:"
-    printErrors errs = die $ concat errs ++ "Try --help."
+    printErrors errs = dieNoVerbosity $ concat errs ++ "Try --help."
 
     accum flags = foldr (flip (.)) id flags
 

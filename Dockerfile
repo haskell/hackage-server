@@ -1,45 +1,49 @@
-FROM haskell:7.10.2
+# Usage:
+#
+# Build the container
+# $ docker build . -t siddhu/hackage-server
+#
+# Shell into the container
+# $ docker run -it -p 8080:8080 siddhu/hackage-server /bin/bash
+#
+# Run the server
+# Docker> # hackage-server run --static-dir=datafiles
+#
 
-# dependencies
-RUN apt-get update && apt-get install -yy unzip libicu-dev postfix
-RUN cabal update
+FROM ubuntu:18.04
 
-# haskell dependencies
+RUN apt-get update
+RUN apt-get install -y software-properties-common
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y unzip libicu-dev postfix zlib1g-dev libssl-dev
+
+RUN apt-add-repository ppa:hvr/ghc
+RUN apt-get update
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y ghc-8.2.2 cabal-install-3.0
+ENV PATH /opt/ghc/bin:$PATH
+RUN cabal v2-update
 RUN mkdir /build
 WORKDIR /build
-ADD ./hackage-server.cabal ./hackage-server.cabal
-RUN cabal sandbox init
-RUN cabal install --only-dependencies --enable-tests -j
-ENV PATH /build/.cabal-sandbox/bin:$PATH
-
-# needed for creating TUF keys
-RUN cabal install hackage-repo-tool
-
-# add code
-# note: this must come after installing the dependencies, such that
-# we don't need to rebuilt the dependencies every time the code changes
-ADD . /build
-
-# generate keys (needed for tests)
+ADD hackage-server.cabal cabal.project ./
+RUN cabal v2-build --only-dependencies --enable-tests -j
+RUN cabal v2-install hackage-repo-tool
+ENV PATH /root/.cabal/bin:$PATH
+ADD . ./
 RUN hackage-repo-tool create-keys --keys keys
 RUN cp keys/timestamp/*.private datafiles/TUF/timestamp.private
 RUN cp keys/snapshot/*.private datafiles/TUF/snapshot.private
 RUN hackage-repo-tool create-root --keys keys -o datafiles/TUF/root.json
 RUN hackage-repo-tool create-mirrors --keys keys -o datafiles/TUF/mirrors.json
-
-# build & test & install hackage
-RUN cabal configure -f-build-hackage-mirror --enable-tests
-RUN cabal build
+RUN cabal v2-build
 # tests currently don't pass: the hackage-security work introduced some
 # backup/restore errors (though they look harmless)
 # see https://github.com/haskell/hackage-server/issues/425
-#RUN cabal test
-RUN cabal copy && cabal register
+#RUN cabal v2-test
+RUN cabal v2-install all
 
 # setup server runtime environment
 RUN mkdir /runtime
 RUN cp -r /build/datafiles /runtime/datafiles
 WORKDIR /runtime
 RUN hackage-server init --static-dir=datafiles
-CMD hackage-server run --static-dir=datafiles
+CMD hackage-server run  --static-dir=datafiles
 EXPOSE 8080

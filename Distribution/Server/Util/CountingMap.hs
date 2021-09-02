@@ -17,7 +17,9 @@ import Control.Applicative ((<$>), (<*>))
 
 import Data.SafeCopy (SafeCopy(..), safeGet, safePut, contain)
 
-import Distribution.Text (Text(..), display)
+import Distribution.Parsec (Parsec(..))
+import Distribution.Pretty (Pretty(..))
+import Distribution.Text (display)
 
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
@@ -52,9 +54,9 @@ class CountingMap k a | a -> k where
   cmToList :: a -> [(k, Int)]
 
   cmToCSV        :: a -> CSV
-  cmInsertRecord :: Monad m => Record -> a -> m (a, Int)
+  cmInsertRecord :: (Monad m, MonadFail m) => Record -> a -> m (a, Int)
 
-instance (Ord k, Typeable k, Text k) => CountingMap k (SimpleCountingMap k) where
+instance (Ord k, Typeable k, Parsec k, Pretty k) => CountingMap k (SimpleCountingMap k) where
   cmEmpty = SCM (NCM 0 Map.empty)
 
   cmTotal (SCM (NCM total _)) = total
@@ -81,7 +83,7 @@ instance (Ord k, Typeable k, Text k) => CountingMap k (SimpleCountingMap k) wher
   cmInsertRecord _ _ =
     fail "cmInsertRecord: Invalid record"
 
-instance (Typeable k, Text k, Ord k, Eq l, CountingMap l a) => CountingMap (k, l) (NestedCountingMap k a) where
+instance (Typeable k, Parsec k, Pretty k, Ord k, Eq l, CountingMap l a) => CountingMap (k, l) (NestedCountingMap k a) where
   cmEmpty = NCM 0 Map.empty
 
   cmTotal (NCM total _m) = total
@@ -112,7 +114,7 @@ instance (Typeable k, Text k, Ord k, Eq l, CountingMap l a) => CountingMap (k, l
   cmInsertRecord [] _ =
     fail "cmInsertRecord: Invalid record"
 
-cmFromCSV :: (Monad m, CountingMap k a) => CSV -> m a
+cmFromCSV :: (Monad m, MonadFail m, CountingMap k a) => CSV -> m a
 cmFromCSV = go cmEmpty
   where
     go acc []     = return acc

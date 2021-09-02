@@ -17,12 +17,14 @@ import Distribution.Server.Features.Upload
 
 import Distribution.Package
 import Distribution.Text (display)
-import Distribution.Server.Util.Parse (unpackUTF8)
+import Distribution.Parsec ( showPError )
+import Distribution.Server.Util.ParseSpecVer
 import Distribution.Server.Util.CabalRevisions
          (Change(..), diffCabalRevisions, insertRevisionField)
-import Text.StringTemplate (ToSElem(..))
+import Text.StringTemplate.Classes (SElem(SM))
 
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map as Map
 import Data.Time (getCurrentTime)
 
@@ -141,11 +143,31 @@ editCabalFilesFeature _env templates
 -- stripped.
 diffCabalRevisionsByteString :: ByteString -> ByteString -> Either String [Change]
 diffCabalRevisionsByteString oldRevision newRevision =
-    diffCabalRevisions (unpackUTF8 oldRevision) (unpackUTF8 newRevision)
+    maybe (diffCabalRevisions (BS.L.toStrict oldRevision) (BS.L.toStrict newRevision))
+          Left
+          parseSpecVerCheck
+  where
+    -- HACK-Alert
+    --
+    -- make sure the parseSpecVer heuristic agrees with the full parser.
+    -- Note that diffCabalRevisions parses the newRevision a second time.
+    parseSpecVerCheck = case parseGenericPackageDescriptionChecked newRevision of
+       (True, _, Right _)      -> Nothing -- parsing successful
+       (_, _, Left (_, err:_)) -> Just $ showPError "" err -- TODO: show all errors
+       (_, _, Left (_, []))    -> Just "Parsing failed"
+       (False, _, Right _)     -> Just "The 'cabal-version' field could not be properly parsed"
 
 -- orphan
 instance ToSElem Change where
-  toSElem (Change change from to) =
-    toSElem (Map.fromList [("what", change)
-                          ,("from", from)
-                          ,("to", to)])
+  toSElem (Change severity what0 from to) = SM . Map.fromList $
+        [ ("what",     toSElem what)
+        , ("severity", toSElem (show severity))
+        ] ++
+        [ ("from",     toSElem from)   | not (null from) ] ++
+        [ ("to",       toSElem to)     | not (null to) ]
+    where
+      -- TODO/FIXME: stringly hack
+      what = case what0 of
+        ('a':'d':'d':'e':'d':_)         -> 'A' : tail what0
+        ('r':'e':'m':'o':'v':'e':'d':_) -> 'R' : tail what0
+        _                               -> "Changed " ++ what0

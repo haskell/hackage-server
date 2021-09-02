@@ -5,7 +5,7 @@ module Distribution.Server.Features.BuildReports (
     initBuildReportsFeature
   ) where
 
-import Distribution.Server.Framework hiding (BuildLog)
+import Distribution.Server.Framework hiding (BuildLog, BuildCovg)
 
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload
@@ -15,7 +15,7 @@ import Distribution.Server.Features.BuildReports.Backup
 import Distribution.Server.Features.BuildReports.State
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildLog(..))
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildCovg(..), BuildLog(..))
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Packages.Types
@@ -24,10 +24,13 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
 import Distribution.Package
-import Distribution.Version (Version(..))
+import Distribution.Version (nullVersion)
 
 import Control.Arrow (second)
-import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
+import Data.ByteString.Lazy (toStrict)
+import Data.String (fromString)
+import Data.Maybe
+import Distribution.Compiler ( CompilerId(..) )
 
 
 -- TODO:
@@ -37,11 +40,12 @@ data ReportsFeature = ReportsFeature {
     reportsFeatureInterface :: HackageFeature,
 
     packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response,
-    packageReport  :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog),
+    packageReport  :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg),
 
     queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
-
+    pkgReportDetails    :: forall m. MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails,
+    queryLastReportStats:: forall m. MonadIO m => PackageIdentifier -> m (Maybe BuildReport, Maybe BuildCovg),
     reportsResource :: ReportsResource
 }
 
@@ -53,6 +57,7 @@ data ReportsResource = ReportsResource {
     reportsList :: Resource,
     reportsPage :: Resource,
     reportsLog  :: Resource,
+    reportsReset:: Resource,
     reportsListUri :: String -> PackageId -> String,
     reportsPageUri :: String -> PackageId -> BuildReportId -> String,
     reportsLogUri  :: PackageId -> BuildReportId -> String
@@ -112,17 +117,27 @@ buildReportsFeature name
               reportsList
             , reportsPage
             , reportsLog
+            , reportsReset
             ]
       , featureState = [abstractAcidStateComponent reportsState]
       }
 
     reportsResource = ReportsResource
           { reportsList = (extendResourcePath "/reports/.:format" corePackagePage) {
-                resourceDesc = [ (GET, "List available build reports")
-                               , (POST, "Upload a new build report")
-                               ]
-              , resourceGet  = [ ("txt", textPackageReports) ]
-              , resourcePost = [ ("",    submitBuildReport) ]
+                resourceDesc  = [ (GET, "List available build reports")
+                                , (POST, "Upload a new build report")
+                                , (PUT, "Upload all build files")
+                                , (PATCH, "Reset fail count and trigger rebuild")
+                                ]
+              , resourceGet   = [ ("txt",   textPackageReports) ]
+              , resourcePost  = [ ("",      submitBuildReport) ]
+              , resourcePut   = [ ("json",    putAllReports) ]
+              }
+            
+          , reportsReset = (extendResourcePath "/reports/reset/" corePackagePage) {
+                resourceDesc  = [ (GET, "Reset fail count and trigger rebuild")
+                                 ]
+              , resourceGet   = [ ("", resetBuildFails) ]
               }
           , reportsPage = (extendResourcePath "/reports/:id.:format" corePackagePage) {
                 resourceDesc   = [ (GET, "Get a specific build report")
@@ -150,25 +165,25 @@ buildReportsFeature name
     packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response
     packageReports dpath continue = do
       pkgid <- packageInPath dpath
-      case pkgVersion pkgid of
-        Version [] [] -> do
+      if pkgVersion pkgid == nullVersion
+        then do
           -- Redirect to the latest version
           pkginfo <- lookupPackageId pkgid
           seeOther (reportsListUri reportsResource "" (pkgInfoId pkginfo)) $
             toResponse ()
-        _ -> do
+        else do
           guardValidPackageId pkgid
           queryPackageReports pkgid >>= continue
 
-    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog)
+    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg)
     packageReport dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
-      mreport  <- queryState reportsState $ LookupReport pkgid reportId
+      mreport  <- queryState reportsState $ LookupReportCovg pkgid reportId
       case mreport of
         Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
-        Just (report, mlog) -> return (reportId, report, mlog)
+        Just (report, mlog, covg) -> return (reportId, report, mlog, covg)
 
     queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)]
     queryPackageReports pkgid = do
@@ -180,21 +195,43 @@ buildReportsFeature name
         file <- liftIO $ BlobStorage.fetch store blobId
         return $ Resource.BuildLog file
 
+    
+    pkgReportDetails :: MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails--(PackageIdentifier, Bool, Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
+    pkgReportDetails (pkgid, docs) = do
+      failCnt   <- queryState reportsState $ LookupFailCount pkgid
+      latestRpt <- queryState reportsState $ LookupLatestReport pkgid
+      (time, ghcId) <- case latestRpt of
+        Nothing -> return (Nothing,Nothing)
+        Just (brp, _, _) -> do
+          let (CompilerId _ vrsn) = compiler brp
+          return (time brp, Just vrsn)
+      return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId)
+    
+    queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe BuildReport, Maybe BuildCovg)
+    queryLastReportStats pkgid = do
+      rpt <- queryState reportsState $ LookupLatestReport pkgid
+      case rpt of
+        Nothing -> return (Nothing, Nothing)
+        Just (a,_,b) -> return (Just a, b)
+
+
     ---------------------------------------------------------------------------
 
     textPackageReports dpath = packageReports dpath $ return . toResponse . show
 
     textPackageReport dpath = do
-      (_, report, _) <- packageReport dpath
+      (_, report, _, _) <- packageReport dpath
       return . toResponse $ BuildReport.show report
 
     -- result: not-found error or text file
     serveBuildLog :: DynamicPath -> ServerPartE Response
     serveBuildLog dpath = do
-      (repid, _, mlog) <- packageReport dpath
+      (repid, _, mlog, _) <- packageReport dpath
       case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
-        Just logId -> toResponse <$> queryBuildLog logId
+        Just logId -> do
+          cacheControlWithoutETag [Public, maxAgeDays 30]
+          toResponse <$> queryBuildLog logId
 
     -- result: auth error, not-found error, parse error, or redirect
     submitBuildReport :: DynamicPath -> ServerPartE Response
@@ -203,7 +240,7 @@ buildReportsFeature name
       guardValidPackageId pkgid
       guardAuthorised_ [AnyKnownUser] -- allow any logged-in user
       reportbody <- expectTextPlain
-      case BuildReport.parse $ unpack reportbody of
+      case BuildReport.parse $ toStrict reportbody of
           Left err -> errBadRequest "Error submitting report" [MText err]
           Right report -> do
               when (BuildReport.docBuilder report) $
@@ -266,6 +303,44 @@ buildReportsFeature name
       guardAuthorised_ [InGroup trusteesGroup]
       void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
       noContent (toResponse ())
+
+    resetBuildFails :: DynamicPath -> ServerPartE Response
+    resetBuildFails dpath = do
+      pkgid <- packageInPath dpath
+      guardValidPackageId pkgid
+      guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
+      success <- updateState reportsState $ ResetFailCount pkgid
+      if success
+          then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
+          else errNotFound "Report not found" [MText "Build report does not exist"]
+
+
+    putAllReports :: DynamicPath -> ServerPartE Response
+    putAllReports dpath = do
+      pkgid <- packageInPath dpath
+      guardValidPackageId pkgid
+      guardAuthorised_ [AnyKnownUser] -- allow any logged-in user
+      buildFiles <- expectAesonContent::ServerPartE BuildReport.BuildFiles
+      let reportBody  = BuildReport.reportContent buildFiles
+          logBody     = BuildReport.logContent buildFiles
+          covgBody    = BuildReport.coverageContent buildFiles
+          failStatus  = BuildReport.buildFail buildFiles
+      
+      updateState reportsState $ SetFailStatus pkgid failStatus
+        
+      -- Upload BuildReport
+      case BuildReport.parse $ toStrict $ fromString $ fromMaybe "" reportBody of
+          Left err -> errBadRequest "Error submitting report" [MText err]
+          Right report -> do
+              when (BuildReport.docBuilder report) $
+                  -- Check that the submitter can actually upload docs
+                  guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
+              report'   <- liftIO $ BuildReport.affixTimestamp report
+              logBlob   <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) logBody
+              reportId  <- updateState reportsState $ 
+                                  AddRptLogCovg pkgid (report', (fmap BuildLog logBlob), (fmap BuildReport.parseCovg covgBody))
+              -- redirect to new reports page
+              seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
     ---------------------------------------------------------------------------
 

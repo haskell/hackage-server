@@ -37,6 +37,7 @@ import qualified Data.Text as T
 
 import Distribution.Text (display, simpleParse)
 
+import Happstack.Server.Cookie (addCookie, mkCookie, CookieLife(Session))
 
 -- | A feature to allow manipulation of the database of users.
 --
@@ -61,8 +62,11 @@ data UserFeature = UserFeature {
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
     -- | Require any of a set of privileges, giving the id of the current user.
     guardAuthorised    :: [PrivilegeCondition] -> ServerPartE UserId,
+    guardAuthorised'    :: [PrivilegeCondition] -> ServerPartE Bool,
     -- | Require being logged in, giving the id of the current user.
     guardAuthenticated :: ServerPartE UserId,
+    -- | Gets the authentication if it exists.
+    checkAuthenticated :: ServerPartE (Maybe (UserId, UserInfo)),
     -- | A hook to override the default authentication error in particular
     -- circumstances.
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
@@ -157,6 +161,8 @@ data UserResource = UserResource {
     adminResource :: GroupResource,
     -- | Manage a user
     manageUserResource :: Resource,
+    -- | Redirect users to their management page
+    redirectUserResource :: Resource,
 
     -- | URI for `userList` given a format.
     userListUri :: String -> String,
@@ -289,6 +295,7 @@ userFeature templates usersState adminsState
             , passwordResource
             , enabledResource
             , manageUserResource
+            , redirectUserResource
             ]
           ++ [
               groupResource adminResource
@@ -327,6 +334,13 @@ userFeature templates usersState adminsState
                       ]
               , resourceGet  = [ ("", serveUserManagementGet) ]
               , resourcePost = [ ("", serveUserManagementPost) ]
+              }
+      , redirectUserResource =
+              (resourceAt "/users/account-management.:format")
+              { resourceDesc =
+                      [ (GET, "user's personal account management page")
+                      ]
+              , resourceGet  = [ ("", const (redirectUserManagement r)) ]
               }
       , passwordResource = resourceAt "/user/:username/password.:format"
                            --TODO: PUT
@@ -389,19 +403,60 @@ userFeature templates usersState adminsState
         Auth.guardPriviledged users uid privconds
         return uid
 
+    guardAuthorised' :: [PrivilegeCondition] -> ServerPartE Bool
+    guardAuthorised' privconds = do
+        users <- queryGetUserDb
+        uid   <- guardAuthenticatedWithErrHook users
+        valid <- Auth.checkPriviledged users uid privconds
+        return valid
+
     -- Simply check if the user is authenticated as some user, without any
-    -- check that they have any particular priveledges. Only useful as a
+    -- check that they have any particular privileges. Only useful as a
     -- building block.
     guardAuthenticated :: ServerPartE UserId
     guardAuthenticated = do
         users   <- queryGetUserDb
         guardAuthenticatedWithErrHook users
 
+    -- [Note about authentication & `authn` hint cookie]
+    --
+    -- HTTP clients usually don't perform http authentication eagerly
+    -- (especially w/ digest auth). However, 'checkAuthenticated'
+    -- needs to a way to detect whether the browser has cached
+    -- credentials, and validate them if available.
+    --
+    -- In order to workaround this HTTP property, we keep a
+    -- client-side boolean state /hint/ in the transient `authn`
+    -- session cookie, which is supposed to have more or less the same
+    -- lifetime as the browser's cached http authentication:
+    --
+    --  - authn="1"  when the user session is /assumed/ to be authenticated
+    --               (i.e. the browser will supply credentials when asked)
+    --  - authn="0"  when the user session is /assumed/ to be anonymous
+    --
+    -- Any other state (and when the `authn` cookie isn't present) is
+    -- handled like the authn="0" case
+    --
+    -- The authn="0" state is the default state.
+    --
+    -- The authn="1" state will be entered automatically whenever HTTP
+    -- authentication succeeds; whenever an authentication error
+    -- occurs, the authn="0" state is set.
+    --
+    -- IMPORTANT: We use the client-side `authn` cookie only as a hint;
+    --            it cannot be used to bypass authentication
+    --            validation.  If the `authn` cookie gets out of sync it
+    --            will be re-synced on the next authentication
+    --            attempt.
+
     -- As above but using the given userdb snapshot
+    -- See note about "authn" cookie above
     guardAuthenticatedWithErrHook :: Users.Users -> ServerPartE UserId
     guardAuthenticatedWithErrHook users = do
         (uid,_) <- Auth.checkAuthenticated realm users
                    >>= either handleAuthError return
+        addCookie Session (mkCookie "authn" "1")
+        -- Set-Cookie:authn="1";Path=/;Version="1"
         return uid
       where
         realm = Auth.hackageRealm --TODO: should be configurable
@@ -410,8 +465,22 @@ userFeature templates usersState adminsState
         handleAuthError err = do
           defaultResponse  <- Auth.authErrorResponse realm err
           overrideResponse <- msum <$> runHook authFailHook err
-          throwError (fromMaybe defaultResponse overrideResponse)
+          let resp' = fromMaybe defaultResponse overrideResponse
+              -- reset authn to "0" on auth failures
+              resp'' = resp' { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders resp' }
+          throwError resp''
 
+    -- Check if there is an authenticated userid, and return info, if so.
+    -- See note about "authn" cookie above
+    checkAuthenticated :: ServerPartE (Maybe (UserId, UserInfo))
+    checkAuthenticated = do
+        authn <- optional (lookCookieValue "authn")
+        case authn of
+          Just "1" -> void guardAuthenticated
+          _        -> pure ()
+
+        users <- queryGetUserDb
+        either (const Nothing) Just `fmap` Auth.checkAuthenticated Auth.hackageRealm users
 
     -- | Resources representing the collection of known users.
     --
@@ -492,15 +561,22 @@ userFeature templates usersState adminsState
           errBadRequest "User deleted"
             [MText "Cannot disable account, it has already been deleted"]
 
+    redirectUserManagement :: UserResource -> ServerPartE Response
+    redirectUserManagement r = do
+      uid <- guardAuthenticated
+      uinfo <- lookupUserInfo uid
+      tempRedirect (manageUserUri r "" (userName uinfo)) (toResponse ())
+
     serveUserManagementGet :: DynamicPath -> ServerPartE Response
     serveUserManagementGet dpath = do
       (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
       template <- getTemplate templates "manage.html"
+      cacheControlWithoutETag [Private]
       ok $ toResponse $
         template
           [ "username" $= display (userName uinfo)
-          , "tokens"   $= 
+          , "tokens"   $=
               [ templateDict
                   [ templateVal "hash" (display authtok)
                   , templateVal "description" desc
@@ -512,6 +588,7 @@ userFeature templates usersState adminsState
     serveUserManagementPost dpath = do
       (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      cacheControlWithoutETag [Private]
       action <- look "action"
       case action of
         "new-auth-token" -> do

@@ -1,4 +1,4 @@
-{-# LANGUAGE RecursiveDo, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RecursiveDo, RankNTypes, NamedFieldPuns, RecordWildCards, FlexibleContexts #-}
 module Distribution.Server.Features.RecentPackages (
     RecentPackagesFeature(..),
     RecentPackagesResource(..),
@@ -93,13 +93,13 @@ recentPackagesFeature env
         recentPackages = (extendResourcePath "/recent.:format" (corePackagesPage coreResource)) {
             resourceGet = [
                 ("html", const $ liftM (\(x,_,_,_) -> x) $ readAsyncCache cacheRecent)
-              , ("rss",  const $ liftM (\(_,x,_,_) -> x) $ readAsyncCache cacheRecent)
+              , ("rss",  const $ addAllowOriginHeader >> (liftM (\(_,x,_,_) -> x) $ readAsyncCache cacheRecent))
               ]
           },
         recentRevisions = (extendResourcePath "/recent/revisions.:format" (corePackagesPage coreResource)) {
             resourceGet = [
                 ("html", const $ liftM (\(_,_,x,_) -> x) $ readAsyncCache cacheRecent)
-              , ("rss",  const $ liftM (\(_,_,_,x) -> x) $ readAsyncCache cacheRecent)
+              , ("rss",  const $ addAllowOriginHeader >> (liftM (\(_,_,_,x) -> x) $ readAsyncCache cacheRecent))
               ]
           }
       }
@@ -123,6 +123,9 @@ recentPackagesFeature env
 
         return (xmlRepresentation, rssRepresentation, xmlRevisions, rssRevisions)
 
+
+addAllowOriginHeader :: (FilterMonad Response m) => m ()
+addAllowOriginHeader = addHeaderM "Access-Control-Allow-Origin" "*"
 
 {-
 data SimpleCondTree = SimpleCondNode [Dependency] [(Condition ConfVar, SimpleCondTree, SimpleCondTree)]

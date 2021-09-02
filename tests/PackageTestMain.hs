@@ -13,29 +13,26 @@ import qualified Test.HUnit as HUnit
 import Distribution.Server.Packages.Unpack
 import Distribution.Server.Packages.UnpackTest
 
-import Test.Framework
-import Test.Framework.Providers.HUnit
-import Test.HUnit (Test(..))
+import Test.Tasty (defaultMain, TestTree, testGroup)
+import Test.Tasty.HUnit (testCase, Assertion)
 
 main :: IO ()
-main = defaultMain $ hUnitTestToTests allTests
+main = defaultMain allTests
 
-allTests :: HUnit.Test
-allTests =
-  TestList
-    [ TestLabel "Tar file permissions" tarPermissions
-    , TestLabel "Cabal package integrity tests" cabalPackageCheckTests]
+allTests :: TestTree
+allTests = testGroup "PackageTests"
+    [ testGroup "Tar file permissions" tarPermissions
+    , testGroup "Cabal package integrity tests" cabalPackageCheckTests]
 
-tarPermissions :: HUnit.Test
+tarPermissions :: [TestTree]
 tarPermissions =
-  TestList
-    [ TestLabel
+    [ testCase
         "Good Permissions"
         (testPermissions "tests/permissions-tarballs/good-perms.tar.gz" goodMangler)
-    , TestLabel
+    , testCase
         "Bad File Permissions"
         (testPermissions "tests/permissions-tarballs/bad-file-perms.tar.gz" badFileMangler)
-    , TestLabel
+    , testCase
         "Bad Dir Permissions"
         (testPermissions "tests/permissions-tarballs/bad-dir-perms.tar.gz" badDirMangler)]
 
@@ -54,15 +51,15 @@ badDirMangler entry =
     Tar.Directory -> Just $ PermissionsError (Tar.entryPath entry) 0o700
     _ -> Nothing
 
-cabalPackageCheckTests :: HUnit.Test
+cabalPackageCheckTests :: [TestTree]
 cabalPackageCheckTests =
-  TestList
-    [ TestLabel "Missing ./configure script" missingConfigureScriptTest
-    , TestLabel "Missing directories in tar file" missingDirsInTarFileTest]
+    [ testCase "Missing ./configure script" missingConfigureScriptTest
+    , testCase "Missing directories in tar file" missingDirsInTarFileTest
+    , testCase "Bad spec-version" badSpecVer
+    ]
 
-missingConfigureScriptTest :: HUnit.Test
+missingConfigureScriptTest :: Assertion
 missingConfigureScriptTest =
-  TestCase $
   do tar <- tarGzFile "missing-configure-0.1.0.0"
      now <- getCurrentTime
      case unpackPackage now "missing-configure-0.1.0.0.tar.gz" tar of
@@ -72,11 +69,21 @@ missingConfigureScriptTest =
            ("Error found, but not about missing ./configure: " ++ err)
            ("The 'build-type' is 'Configure'" `isInfixOf` err)
 
+badSpecVer :: Assertion
+badSpecVer =
+  do tar <- tarGzFile "bad-specver-package-0"
+     now <- getCurrentTime
+     case unpackPackage now "bad-specver-package-0.tar.gz" tar of
+       Right _ -> HUnit.assertFailure "expected error"
+       Left err ->
+         HUnit.assertBool
+           ("Error found, but not about invalid spec version: " ++ err)
+           ("cabal-version" `isInfixOf` err)
+
 -- | Some tar files in hackage are missing directory entries.
 -- Ensure that they can be verified even without the directory entries.
-missingDirsInTarFileTest :: HUnit.Test
+missingDirsInTarFileTest :: Assertion
 missingDirsInTarFileTest =
-  TestCase $
   do tar <- fmap keepOnlyFiles (tarGzFile "correct-package-0.1.0.0")
      now <- getCurrentTime
      case unpackPackage now "correct-package-0.1.0.0.tar.gz" tar of

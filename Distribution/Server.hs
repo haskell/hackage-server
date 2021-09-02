@@ -93,17 +93,17 @@ defaultServerConfig = do
   return ServerConfig {
     confVerbosity = Verbosity.normal,
     confHostUri   = nullURI {
-                      uriScheme    = "http:",
+                      uriScheme    = "https:",
                       uriAuthority = Just (URIAuth "" hostName (':' : show portnum))
                     },
     confListenOn  = ListenOn {
                         loPortNum = 8080,
-                        loIP = "0.0.0.0"
+                        loIP = "127.0.0.1"
                     },
     confStateDir  = "state",
     confStaticDir = dataDir,
     confTmpDir    = "state" </> "tmp",
-    confCacheDelay= 0,
+    confCacheDelay= 60,
     confLiveTemplates = False
   }
 
@@ -326,7 +326,7 @@ impl server = logExceptions $
 
     logExceptions :: ServerPart Response -> ServerPart Response
     logExceptions act = Lifted.catch act $ \e -> do
-                          liftIO . lognotice verbosity $ "WARNING: Received exception: " ++ show e
+                          lognotice verbosity $ "WARNING: Received exception: " ++ show e
                           Lifted.throwIO (e :: SomeException)
 
     verbosity = serverVerbosity (serverEnv server)
@@ -356,7 +356,7 @@ html503 =
     "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">" ++
     "<html><head><title>503 Service Unavailable</title></head><body><h1>" ++
     "503 Service Unavailable</h1><p>The server is undergoing maintenance" ++
-    "<br>It'll be back soon</p></body></html>"
+    "<br>It'll be back soon. <a href=\"https://status.haskell.org\">Check status.haskell.org</a></p></body></html>"
 
 tearDownTemp :: TempServer -> IO ()
 tearDownTemp (TempServer tid) = do

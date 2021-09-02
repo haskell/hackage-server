@@ -31,20 +31,19 @@ import Network.HTTP
 import Network.Browser
 import Network.URI (URI(..), URIAuth(..), parseURI)
 
+import Distribution.Server.Prelude
 import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
 import Distribution.Client.Index as PackageIndex (read)
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Package
-import Distribution.Version
 import Distribution.Verbosity
 import Distribution.Simple.Utils
 import Distribution.Text
 
+import Data.Version
 import Data.List
-import Data.Maybe
-import Control.Applicative
 import Control.Exception
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -54,7 +53,6 @@ import qualified Distribution.Server.Util.GZip as GZip
 import qualified Codec.Archive.Tar             as Tar
 import qualified Codec.Archive.Tar.Entry       as Tar
 
-import Control.Monad.Trans
 import System.IO
 import System.IO.Error
 import System.FilePath
@@ -123,14 +121,14 @@ downloadOldIndex uri cacheDir = do
         case PackageIndex.read (\pkgid _ -> pkgid) (const True) (GZip.decompressNamed indexFile content) of
           Right pkgs     -> return pkgs
           Left  theError ->
-              die $ "Error parsing index at " ++ show uri ++ ": " ++ theError
+              dieNoVerbosity $ "Error parsing index at " ++ show uri ++ ": " ++ theError
 
       theLog <- withFile logFile ReadMode $ \hnd -> do
         content <- hGetContents hnd
         case UploadLog.read content of
           Right theLog   -> return theLog
           Left  theError ->
-              die $ "Error parsing log at " ++ show uri ++ ": " ++ theError
+              dieNoVerbosity $ "Error parsing log at " ++ show uri ++ ": " ++ theError
 
       return (mergeLogInfo pkgids theLog)
 
@@ -237,8 +235,8 @@ type HttpSession a = BrowserAction (HandleStream ByteString) a
 httpSession :: Verbosity -> String -> Version -> HttpSession a -> IO a
 httpSession verbosity agent version action =
     browse $ do
-      setUserAgent (agent ++ "/" ++ display version)
-      setErrHandler die
+      setUserAgent (agent ++ "/" ++ showVersion version)
+      setErrHandler dieNoVerbosity
       setOutHandler (debug verbosity)
       setAllowBasicAuth True
       setCheckForProxy True

@@ -6,10 +6,14 @@ module Distribution.Server.Users.UserIdSet (
     delete,
     member,
     size,
+    null,
     toList,
     fromList,
     unions,
   ) where
+
+import Distribution.Server.Prelude hiding (null, empty)
+import Prelude ()
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Framework.MemSize
@@ -28,7 +32,7 @@ import Data.Aeson (ToJSON)
 -- anywhere a set of users identified by 'UserId' is needed.
 --
 newtype UserIdSet = UserIdSet IntSet.IntSet
-  deriving (Eq, Monoid, Typeable, Show, NFData, MemSize, ToJSON)
+  deriving (Eq, Semigroup, Monoid, Typeable, Show, NFData, MemSize, ToJSON)
 
 empty :: UserIdSet
 empty = UserIdSet IntSet.empty
@@ -44,6 +48,9 @@ member (UserId uid) (UserIdSet uidset) = IntSet.member uid uidset
 
 size :: UserIdSet -> Int
 size (UserIdSet uidset) = IntSet.size uidset
+
+null :: UserIdSet -> Bool
+null (UserIdSet uidset) = IntSet.null uidset
 
 toList :: UserIdSet -> [UserId]
 toList (UserIdSet uidset) = map UserId (IntSet.toList uidset)

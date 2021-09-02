@@ -1,0 +1,59 @@
+-- This project config requires cabal 2.4 or later
+
+-- If in doubt, use GHC 8.2.2 to build hackage-server; see
+-- 'tested-with' in 'hackage-server.cabal' for a list of currently
+-- CI-validated GHC versions
+--
+-- with-compiler: ghc-8.2.2
+
+packages: .
+
+
+allow-newer: rss:time, rss:base
+
+-----------------------------------------------------------------------------
+-- Anti-constraints
+
+-- make sure we don't accidentally pick up blacklisted packages
+constraints: foundation -none, cryptonite -none, cryptohash -none
+
+-----------------------------------------------------------------------------
+-- Modded lib:Cabal
+--
+-- sometimes we need unreleased fixes
+--
+-- HACK: avoid `setup`-components picking up the local unreleased
+-- Cabal snapshot in future we'll have a way to constraint to
+-- local/non-local
+--
+-- Set this to the bound to the last known released lib:Cabal version
+-- and make sure the local Git version is above the limit
+
+-- constraints: setup.Cabal (< 3.0.2.99 || > 3.0.2.99)
+
+-- source-repository-package
+--   type: git
+--   location: https://github.com/hvr/cabal.git
+--   tag: 53ab5eb8be63fe6209abb6744f99d34fbabcdcba
+--   subdir: Cabal
+
+----------------------------------------------------------------------------
+-- Stricter compatibility checking with legacy versions of cabal parsers
+--
+-- Use of `cabal-parsers` currently limits the GHC version to 8.2.2 or older
+--
+-- NB: In order for `cabal-parsers` to have any effect, enable the
+--     cabal flag setting `+cabal-parsers` below!
+
+-- source-repository-package
+--  type: git
+--  location: https://github.com/hvr/cabal-parsers.git
+--  tag: d625e7a1a43f1c4017d0919d5197904d4f9e63f7
+
+package hackage-server
+--   tests: True
+--
+-- Optional features
+--
+--   flags: +build-hackage-import
+--   flags: +cabal-parsers

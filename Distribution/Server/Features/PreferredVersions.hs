@@ -27,6 +27,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text
+import Distribution.Types.LibraryName (LibraryName(LMainLibName))
 
 import Data.Function (fix)
 import Data.List (intercalate, find)
@@ -35,6 +36,7 @@ import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
 import Control.Applicative (optional)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS (pack) -- Only used for ASCII data
 import Data.Aeson (Value(..))
 import qualified Data.HashMap.Strict as HashMap
@@ -264,8 +266,8 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     withPackagePreferred pkgid func = do
       pkgIndex <- queryGetPackageIndex
       case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
-            []   ->  packageError [MText "No such package in package index"]
-            pkgs  | pkgVersion pkgid == Version [] [] -> queryState preferredState (GetPreferredInfo $ packageName pkgid) >>= \info -> do
+            []   ->  packageError [MText $ "No such package in package index. ", MLink "Search for related terms instead?" $ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
+            pkgs  | pkgVersion pkgid == nullVersion -> queryState preferredState (GetPreferredInfo $ packageName pkgid) >>= \info -> do
                 let rangeToCheck = sumRange info
                 case maybe id (\r -> filter (flip withinRange r . packageVersion)) rangeToCheck pkgs of
                     -- no preferred version available, choose latest from list ordered by version
@@ -378,7 +380,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     formatSinglePreferredVersions :: PackageName -> PreferredInfo -> Maybe String
     formatSinglePreferredVersions pkgname pref =
-      display . Dependency pkgname <$> sumRange pref
+      display . (\vr -> Dependency pkgname vr (Set.singleton LMainLibName)) <$> sumRange pref
 
     formatGlobalPreferredVersions :: [(PackageName, PreferredInfo)] -> String
     formatGlobalPreferredVersions =

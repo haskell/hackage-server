@@ -15,6 +15,8 @@ $hackagePageHeader()$
 In particular you need an account to be able to upload or help maintain packages.
 
 <p>Using the form below you can register an account.
+The FirstnameLastname format of usernames is encouraged but not required.
+Organizational, rather than individual, accounts are also permitted.
 
 <form action="/users/register-request" method="post" enctype="multipart/form-data">
 
@@ -48,10 +50,18 @@ such people choose a name (and username) that looks at home among a collection
 of real names; we will be unwilling to add Kittenlover97 to the package
 uploader group.
 
+<p class="registration-email">
+After your account is created, you cannot upload until you
+<b>contact the hackage trustees</b> at hackage-trustees@haskell.org and
+<b>send an email</b> (including your login username) requesting to be added to the uploader group.
+(This measure is unfortunately necessary to prevent spam accounts).
+</p>
+
 <p><input type="submit" value="Request account">
 
 <p>You will be sent an email containing a link to a page where you
 can set your password and activate your account.
+
 </form>
 
 <h3>Open source licenses</h3>

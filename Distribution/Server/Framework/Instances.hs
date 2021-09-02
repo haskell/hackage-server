@@ -1,9 +1,9 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, CPP,
-             TypeFamilies, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, BangPatterns,
+             TypeFamilies #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
--- | 'Typeable', 'Binary', 'Serialize', 'Text', and 'NFData' instances for various
+-- | 'Typeable', 'Binary', 'Serialize', and 'NFData' instances for various
 -- types from Cabal, and other standard libraries.
 --
 -- Major version changes may break this module.
@@ -15,18 +15,25 @@ module Distribution.Server.Framework.Instances (
     compatAesonOptionsDropPrefix,
   ) where
 
+import Distribution.Server.Prelude
+
 import Distribution.Text
 import Distribution.Server.Framework.MemSize
 
-import Distribution.Package  (PackageIdentifier(..), PackageName(..))
+import Distribution.Package  (PackageIdentifier(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 import Distribution.System   (OS(..), Arch(..))
-import Distribution.PackageDescription (FlagName(..))
+import Distribution.Types.Flag (FlagName, mkFlagName, unFlagName)
+import Distribution.Types.PackageName
 import Distribution.Version
+import Distribution.Pretty (Pretty(pretty), prettyShow)
+import Distribution.Parsec (Parsec(..), simpleParsec)
+import qualified Distribution.Compat.CharParsing as P
 
-import Data.Time (Day(..), DiffTime, UTCTime(..))
-import Control.Applicative
+import Data.Time (Day(..), DiffTime, UTCTime(..), fromGregorianValid)
 import Control.DeepSeq
+import qualified Data.Char as Char
+import Text.Read (readMaybe)
 
 import Data.Serialize as Serialize
 import Data.SafeCopy hiding (Version)
@@ -36,44 +43,65 @@ import Data.Aeson.Types as Aeson
 
 import Happstack.Server
 
-import Data.Maybe (fromJust)
 import Data.List (stripPrefix)
 
 import qualified Text.PrettyPrint as PP (text)
-import Distribution.Compat.ReadP (readS_to_P)
-#if !(MIN_VERSION_bytestring(0,10,0))
-import qualified Data.ByteString as SBS
-import qualified Data.ByteString.Lazy as LBS
-#endif
-
-
-deriveSafeCopy 2 'extension ''PackageName
-deriveSafeCopy 2 'extension ''PackageIdentifier
 
 -- These types are not defined in this package, so we cannot easily control
 -- changing these instances when the types change. So it's not safe to derive
 -- them (except for the really stable ones).
 
+-- deriveSafeCopy 2 'extension ''PackageName
+instance SafeCopy PackageName where
+    version   = 2
+    errorTypeName _ = "PackageName"
+    kind      = extension
+    putCopy v = contain $ safePut (unPackageName v)
+    getCopy   = contain $ mkPackageName <$> safeGet
+
+-- deriveSafeCopy 2 'extension ''PackageIdentifier
+instance SafeCopy PackageIdentifier where
+    version = 2
+    errorTypeName _ = "PackageIdentifier"
+    kind = extension
+
+    putCopy (PackageIdentifier pn v) = contain $ do
+        put_pn <- getSafePut
+        put_v  <- getSafePut
+        put_pn (pn :: PackageName)
+        put_v  (v  :: Version)
+
+    getCopy   = contain $ do
+        get_pn <- getSafeGet
+        get_v  <- getSafeGet
+        !pn <- get_pn
+        !v  <- get_v
+        return (PackageIdentifier pn v)
+
 instance SafeCopy Version where
     version = 2
+    errorTypeName _ = "Version"
     kind    = extension
-    putCopy (Version ns _) = contain $ safePut ns
-    getCopy = contain $ (\ns -> Version ns []) <$> safeGet
+    putCopy v = contain $ safePut (versionNumbers v)
+    getCopy = contain $ mkVersion <$> safeGet
 
 instance SafeCopy VersionRange where
     version = 2
+    errorTypeName _ = "VersionRange"
     kind    = extension
-    putCopy = contain . foldVersionRange'
-                          (putWord8 0)
-                          (\v     -> putWord8 1 >> safePut v)
-                          (\v     -> putWord8 2 >> safePut v)
-                          (\v     -> putWord8 3 >> safePut v)
-                          (\v     -> putWord8 4 >> safePut v)
-                          (\v     -> putWord8 5 >> safePut v)
-                          (\v _   -> putWord8 6 >> safePut v)
-                          (\r1 r2 -> putWord8 7 >> r1 >> r2)
-                          (\r1 r2 -> putWord8 8 >> r1 >> r2)
-                          (\r     -> putWord8 9 >> r)
+    putCopy = contain . cataVersionRange f
+      where
+        f AnyVersionF = putWord8 0
+        f (ThisVersionF v) = putWord8 1 >> safePut v
+        f (LaterVersionF v) = putWord8 2 >> safePut v
+        f (EarlierVersionF v) = putWord8 3 >> safePut v
+        f (OrLaterVersionF v) = putWord8 4 >> safePut v
+        f (OrEarlierVersionF v) = putWord8 5 >> safePut v
+        f (WildcardVersionF v) = putWord8 6 >> safePut v
+        f (MajorBoundVersionF v) = putWord8 10 >> safePut v -- since Cabal-2.0
+        f (UnionVersionRangesF u v) = putWord8 7 >> u >> v
+        f (IntersectVersionRangesF u v) = putWord8 8 >> u >> v
+        f (VersionRangeParensF v) = putWord8 9 >> v
     getCopy = contain getVR
       where
         getVR = do
@@ -88,10 +116,13 @@ instance SafeCopy VersionRange where
             6 -> withinVersion    <$> safeGet
             7 -> unionVersionRanges     <$> getVR <*> getVR
             8 -> intersectVersionRanges <$> getVR <*> getVR
-            9 -> VersionRangeParens     <$> getVR
+            9 -> stripParensVersionRange <$> getVR -- XXX: correct?
+            10 -> majorBoundVersion     <$> safeGet  -- since Cabal-2.0
             _ -> fail "VersionRange.getCopy: bad tag"
 
 instance SafeCopy OS where
+    errorTypeName _ = "OS"
+
     putCopy (OtherOS s) = contain $ putWord8 0 >> safePut s
     putCopy Linux       = contain $ putWord8 1
     putCopy Windows     = contain $ putWord8 2
@@ -133,6 +164,8 @@ instance SafeCopy OS where
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
+    errorTypeName _ = "Arch"
+
     putCopy (OtherArch s) = contain $ putWord8 0 >> safePut s
     putCopy I386          = contain $ putWord8 1
     putCopy X86_64        = contain $ putWord8 2
@@ -150,6 +183,7 @@ instance SafeCopy  Arch where
     putCopy M68k          = contain $ putWord8 14
     putCopy Vax           = contain $ putWord8 15
     putCopy JavaScript    = contain $ putWord8 16
+    putCopy AArch64       = contain $ putWord8 17
 
     getCopy = contain $ do
       tag <- getWord8
@@ -171,9 +205,12 @@ instance SafeCopy  Arch where
         14 -> return M68k
         15 -> return Vax
         16 -> return JavaScript
+        17 -> return AArch64
         _  -> fail "SafeCopy Arch getCopy: unexpected tag"
 
 instance SafeCopy CompilerFlavor where
+    errorTypeName _ = "CompilerFlavor"
+
     putCopy (OtherCompiler s) = contain $ putWord8 0 >> safePut s
     putCopy GHC               = contain $ putWord8 1
     putCopy NHC               = contain $ putWord8 2
@@ -186,6 +223,7 @@ instance SafeCopy CompilerFlavor where
     putCopy UHC               = contain $ putWord8 9
     putCopy (HaskellSuite s)  = contain $ putWord8 10 >> safePut s
     putCopy GHCJS             = contain $ putWord8 11
+    putCopy Eta               = contain $ putWord8 12
 
     getCopy = contain $ do
       tag <- getWord8
@@ -202,12 +240,34 @@ instance SafeCopy CompilerFlavor where
         9  -> return UHC
         10 -> return HaskellSuite <*> safeGet
         11 -> return GHCJS
+        12 -> return Eta
         _  -> fail "SafeCopy CompilerFlavor getCopy: unexpected tag"
 
 
-deriveSafeCopy 0 'base ''CompilerId
-deriveSafeCopy 0 'base ''FlagName
+-- deriveSafeCopy 0 'base ''CompilerId
+instance SafeCopy CompilerId where
+    errorTypeName _ = "CompilerId"
 
+    putCopy (CompilerId cf v) = contain $ do
+        put_cf <- getSafePut
+        put_v  <- getSafePut
+        put_cf (cf :: CompilerFlavor)
+        put_v  (v  :: Version)
+
+    getCopy   = contain $ do
+        get_cf <- getSafeGet
+        get_v  <- getSafeGet
+        !cf <- get_cf
+        !v  <- get_v
+        return (CompilerId cf v)
+
+-- deriveSafeCopy 0 'base ''FlagName
+instance SafeCopy FlagName where
+    version = 0
+    errorTypeName _ = "FlagName"
+    kind = base
+    putCopy v = contain $ safePut (unFlagName v)
+    getCopy = contain $ mkFlagName <$> safeGet
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
@@ -218,32 +278,12 @@ instance FromReqURI PackageName where
 instance FromReqURI Version where
   fromReqURI = simpleParse
 
-
--- rough versions of RNF for these
-#if !(MIN_VERSION_bytestring(0,10,0))
-instance NFData LBS.ByteString where
-    rnf bs = LBS.length bs `seq` ()
-
-instance NFData SBS.ByteString where
-    rnf bs = bs `seq` ()
-#endif
-
 instance NFData Response where
     rnf res@(Response{}) = rnf (rsBody res) `seq` rnf (rsHeaders res)
     rnf _ = ()
 
 instance NFData HeaderPair where
     rnf (HeaderPair a b) = rnf a `seq` rnf b
-
-#if !(MIN_VERSION_deepseq(1,3,0))
-instance NFData Version where
-    rnf (Version branch tags) = rnf branch `seq` rnf tags
-#endif
-
-#if !(MIN_VERSION_time(1,4,0))
-instance NFData Day where
-    rnf (ModifiedJulianDay a) = rnf a
-#endif
 
 instance MemSize Response where
     memSize (Response a b c d e) = memSize5 a b c d e
@@ -258,25 +298,66 @@ instance MemSize RsFlags where
 instance MemSize Length where
     memSize _ = memSize0
 
-instance Text Day where
-  disp  = PP.text . show
-  parse = readS_to_P (reads :: ReadS Day)
+instance Pretty Day where
+  pretty = PP.text . show
 
-instance Text UTCTime where
-  disp  = PP.text . show
-  parse = readS_to_P (reads :: ReadS UTCTime)
+instance Parsec Day where
+  parsec = do
+    -- imitate grammar of Read instance of 'Day' (i.e. "%Y-%m-%d")
+    yyyy <- P.integral
+    P.char '-'
+    mm <- replicateM 2 P.digit
+    P.char '-'
+    dd <- replicateM 2 P.digit
+    case fromGregorianValid yyyy (read mm) (read dd) of
+      Nothing -> fail "invalid Day"
+      Just day -> return day
 
+instance Pretty UTCTime where
+  pretty  = PP.text . show
+
+
+instance Parsec UTCTime where
+  parsec = do
+      -- "%Y-%m-%d %H:%M:%S%Q%Z"
+      yyyy <- P.munch1 Char.isDigit
+      P.char '-'
+      mm <- digit2
+      P.char '-'
+      dd <- digit2
+
+      P.skipSpaces1
+
+      h <- digit2
+      P.char ':'
+      m <- digit2
+      P.char ':'
+      s <- digit2
+
+      mq <- optional (liftM2 (:) (P.char '.') (P.munch Char.isDigit))
+
+      P.spaces
+
+      -- TODO: more accurate timezone grammar
+      mtz <- optional (liftM2 (:) (P.satisfy (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || c == '+' || c == '-'))
+                                  (P.munch (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || Char.isDigit c)))
+
+      let tstr = concat [ yyyy, "-", mm, "-", dd, " ", h, ":", m, ":", s, maybe "" id mq, maybe "" (' ':) mtz ]
+
+      case readMaybe tstr of
+        Nothing -> fail "invalid UTCTime"
+        Just t  -> return t
+    where
+      digit2 = replicateM 2 P.digit
 -------------------
 -- Arbitrary instances
 --
 
 instance Arbitrary PackageName where
-  arbitrary = PackageName <$> vectorOf 4 (choose ('a', 'z'))
+  arbitrary = mkPackageName <$> vectorOf 4 (choose ('a', 'z'))
 
-#if !(MIN_VERSION_QuickCheck(2,9,0))
 instance Arbitrary Version where
-  arbitrary = Version <$> listOf1 (choose (1, 15)) <*> pure []
-#endif
+  arbitrary = mkVersion <$> listOf1 (choose (1, 15))
 
 instance Arbitrary PackageIdentifier where
   arbitrary = PackageIdentifier <$> arbitrary <*> arbitrary
@@ -302,7 +383,7 @@ instance Arbitrary OS where
                     , pure HPUX, pure IRIX, pure HaLVM, pure IOS ]
 
 instance Arbitrary FlagName where
-  arbitrary = FlagName <$> vectorOf 4 (choose ('a', 'z'))
+  arbitrary = mkFlagName <$> vectorOf 4 (choose ('a', 'z'))
 
 -- Below instances copied from
 -- <http://hackage.haskell.org/package/quickcheck-instances-0.2.0/docs/src/Test-QuickCheck-Instances.html>
@@ -313,11 +394,7 @@ instance Arbitrary Day where
 
 instance Arbitrary DiffTime where
     arbitrary = arbitrarySizedFractional
-#if MIN_VERSION_time(1,3,0)
     shrink    = shrinkRealFrac
-#else
-    shrink    = (fromRational <$>) . shrink . toRational
-#endif
 
 instance Arbitrary UTCTime where
     arbitrary =
@@ -335,7 +412,13 @@ instance Arbitrary UTCTime where
 newtype PackageIdentifier_v0 = PackageIdentifier_v0 PackageIdentifier
     deriving (Eq, Ord)
 
-instance SafeCopy PackageIdentifier_v0
+instance SafeCopy PackageIdentifier_v0 where
+    errorTypeName _ = "PackageIdentifier_v0"
+    getCopy = contain get
+    putCopy = contain . put
+     -- use default Serialize instance
+
+
 instance Serialize PackageIdentifier_v0 where
     put (PackageIdentifier_v0 pkgid) = Serialize.put (show pkgid)
     get = PackageIdentifier_v0 . read <$> Serialize.get
@@ -344,10 +427,12 @@ instance Migrate PackageIdentifier where
     type MigrateFrom PackageIdentifier = PackageIdentifier_v0
     migrate (PackageIdentifier_v0 pkgid) = pkgid
 
+----
 
 newtype PackageName_v0 = PackageName_v0 PackageName
 
 instance SafeCopy PackageName_v0 where
+    errorTypeName _ = "PackageName_v0"
     putCopy (PackageName_v0 nm) = contain $ textPut_v0 nm
     getCopy = contain $ PackageName_v0 <$> textGet_v0
 
@@ -355,10 +440,12 @@ instance Migrate PackageName where
     type MigrateFrom PackageName = PackageName_v0
     migrate (PackageName_v0 pn) = pn
 
+----
 
 newtype Version_v0 = Version_v0 Version
 
 instance SafeCopy Version_v0 where
+    errorTypeName _ = "Version_v0"
     putCopy (Version_v0 v) = contain $ textPut_v0 v
     getCopy = contain $ Version_v0 <$> textGet_v0
 
@@ -366,10 +453,12 @@ instance Migrate Version where
     type MigrateFrom Version = Version_v0
     migrate (Version_v0 v) = v
 
+----
 
 newtype VersionRange_v0 = VersionRange_v0 VersionRange
 
 instance SafeCopy VersionRange_v0 where
+    errorTypeName _ = "VersionRange_v0"
     putCopy (VersionRange_v0 v) = contain $ textPut_v0 v
     getCopy = contain $ VersionRange_v0 <$> textGet_v0
 
@@ -378,11 +467,11 @@ instance Migrate VersionRange where
     migrate (VersionRange_v0 v) = v
 
 
-textGet_v0 :: Text a => Serialize.Get a
-textGet_v0 = (fromJust . simpleParse) <$> Serialize.get
+textGet_v0 :: Parsec a => Serialize.Get a
+textGet_v0 = (fromJust . simpleParsec) <$> Serialize.get
 
-textPut_v0 :: Text a => a -> Serialize.Put
-textPut_v0 = Serialize.put . display
+textPut_v0 :: Pretty a => a -> Serialize.Put
+textPut_v0 = Serialize.put . prettyShow
 
 ---------------------------------------------------------------------
 

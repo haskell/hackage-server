@@ -9,6 +9,8 @@ module Distribution.Server.Features.Security.Migration (
   , migrateCandidatePkgTarball_v1_to_v2
   ) where
 
+import Distribution.Server.Prelude
+
 -- stdlib
 import Control.DeepSeq
 import Control.Exception
@@ -194,7 +196,10 @@ prettyMigrationStats MigrationStats{..} = unwords [
 
 instance Monoid MigrationStats where
   mempty = MigrationStats 0 0
-  (MigrationStats a b) `mappend` (MigrationStats a' b') =
+  mappend = (<>)
+
+instance Semigroup MigrationStats where
+  (MigrationStats a b) <> (MigrationStats a' b') =
     MigrationStats (a + a') (b + b')
 
 data Migrated a = Migrated MigrationStats a | AlreadyMigrated a
@@ -210,7 +215,7 @@ instance Monad Migrated where
   Migrated stats  a >>= f =
     case f a of
       AlreadyMigrated b -> Migrated stats b
-      Migrated stats' b -> Migrated (stats `mappend` stats') b
+      Migrated stats' b -> Migrated (stats <> stats') b
 
 {-------------------------------------------------------------------------------
   Additional auxiliary

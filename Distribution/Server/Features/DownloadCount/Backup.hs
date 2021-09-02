@@ -10,7 +10,7 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Features.DownloadCount.State
 import Distribution.Server.Util.CountingMap
 import Distribution.Text (display, simpleParse)
-import Distribution.Version
+import Data.Version
 import Text.CSV (CSV)
 
 onDiskBackup :: OnDiskStats -> [BackupEntry]
@@ -22,7 +22,7 @@ onDiskRestore = importOne "ondisk.csv" cmFromCSV
 inMemBackup :: InMemStats -> [BackupEntry]
 inMemBackup (InMemStats day inMemStats) =
   [csvToBackup ["inmem.csv"] $
-      [display versionCSV]
+      [showVersion versionCSV]
     : [display day]
     : cmToCSV inMemStats
   ]
@@ -32,7 +32,7 @@ inMemBackup (InMemStats day inMemStats) =
 inMemRestore :: RestoreBackup InMemStats
 inMemRestore = importOne "inmem.csv" importInMemStats
 
-importInMemStats :: Monad m => CSV -> m InMemStats
+importInMemStats :: (Monad m, MonadFail m) => CSV -> m InMemStats
 importInMemStats (_version : [dayStr] : inMemStatsCSV) = do
   day <- case simpleParse dayStr of
            Just day -> return day

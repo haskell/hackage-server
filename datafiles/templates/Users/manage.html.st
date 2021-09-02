@@ -6,7 +6,7 @@ $hackageCssTheme()$
 </head>
 
 <body>
-$hackagePageHeader()$
+$hackagePageHeader(deauthUser="1")$
 
 <div id="content">
 <h2>Manage user account $username$</h2>
@@ -14,7 +14,7 @@ $hackagePageHeader()$
 
 <h3>Authentication Tokens</h3>
 <p>
-  You can register API authentication token to use them to for example have services like continouos integration upload packages on your behalf without providing them your username and/or password.
+  You can register API authentication token to use them to for example have services like continuous integration upload packages on your behalf without providing them your username and/or password.
 </p>
 
 <p>

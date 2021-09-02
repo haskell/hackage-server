@@ -18,7 +18,7 @@ module HttpUtils (
   , execRequest'
   , responseHeader
   , execPostFile
-  -- * Interface to html5.validator.nu
+  -- * Interface to validator.w3.org
   , validate
 ) where
 
@@ -27,7 +27,12 @@ import Control.Monad
 import Data.Maybe
 import Network.HTTP hiding (user)
 import Network.HTTP.Auth
-import Data.Aeson (Value(..), FromJSON(..), (.:))
+import Data.Aeson (Result(..), Value(..), FromJSON(..), (.:), fromJSON, json')
+
+import qualified Network.Http.Client as HC
+import qualified System.IO.Streams as Streams
+import qualified System.IO.Streams.Attoparsec as Streams
+import qualified Data.ByteString.Builder as BB
 
 import qualified Data.ByteString.Char8  as BS
 import qualified Data.ByteString.Base64 as Base64
@@ -151,9 +156,9 @@ badResponse rsp =
         ++ rspBody rsp
 
 {------------------------------------------------------------------------------
-  Interface to html5.validator.nu
+  Interface to validator.w3.org
 
-  NOTE: We only parse bits of the information returned by html5.validator.nu
+  NOTE: We only parse bits of the information returned by validator.w3.org
 ------------------------------------------------------------------------------}
 
 data ValidateResult = ValidateResult {
@@ -195,18 +200,10 @@ getValidateResult :: Authorization -> String
                   -> IO (String, Maybe ValidateResult)
 getValidateResult auth url = do
           body <- execRequest auth (getRequest url)
-          result <-
-            catch
-            (do
-                json <- execRequest NoAuth
-                        (postRequestWithBody validatorURL "text/html" body)
-                result <- decodeJSON json
-                return $ Just result)
-            handler
+          result <- (Just `fmap` invokeHtml5Validate body) `catch` handler
           return (body, result)
   where handler :: IOException -> IO (Maybe ValidateResult)
         handler _ = return Nothing
-        validatorURL = "http://html5.validator.nu?out=json&charset=UTF-8"
 
 validationErrors :: ValidateResult -> [String]
 validationErrors = aux [] . validateMessages
@@ -223,3 +220,27 @@ validate auth url = do
   case mres of
     Just result -> return (body, validationErrors result)
     Nothing -> return (body, ["Couldn't connect to validation service"])
+
+
+invokeHtml5Validate :: String -> IO ValidateResult
+invokeHtml5Validate htmlToValidate = do
+    HC.withConnection (HC.establishConnection "https://validator.w3.org") $ \c -> do
+        let q = HC.buildRequest1 $ do
+                  HC.http HC.POST "/nu/?out=json"
+                  HC.setContentType "text/html; charset=utf-8"
+                  HC.setHeader "User-Agent" "hackage-server-testsuite/0.1"
+
+        HC.sendRequest c q bodyStreamer
+        HC.receiveResponse c jsonHandler
+  where
+    bodyStreamer = Streams.write (Just $ BB.stringUtf8 htmlToValidate)
+
+jsonHandler :: FromJSON a
+            => HC.Response
+            -> Streams.InputStream BS.ByteString
+            -> IO a
+jsonHandler _ i = do
+    v <- Streams.parseFromStream json' i
+    case fromJSON v of
+      (Success a) -> return a
+      (Error str) -> fail str

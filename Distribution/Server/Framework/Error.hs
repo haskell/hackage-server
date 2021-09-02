@@ -34,9 +34,11 @@ module Distribution.Server.Framework.Error (
     (?!)
   ) where
 
+import Prelude ()
+import Distribution.Server.Prelude
+
 import Happstack.Server
 import Control.Monad.Except
-import Data.Monoid
 import qualified Happstack.Server.Internal.Monads as Happstack.Internal
 
 import qualified Data.Text.Lazy          as Text
@@ -76,8 +78,11 @@ data ErrorResponse = ErrorResponse {
 -- seems that's rather tricky with the way Happstack is set up.
 instance Monoid ErrorResponse where
   mempty = ErrorResponse 500 [] "Internal server error" []
-  GenericErrorResponse `mappend` b = b
-  a                    `mappend` _ = a
+  mappend = (<>)
+
+instance Semigroup ErrorResponse where
+  GenericErrorResponse <> b = b
+  a                    <> _ = a
 
 instance ToMessage ErrorResponse where
   toResponse (ErrorResponse code hdrs title detail) =

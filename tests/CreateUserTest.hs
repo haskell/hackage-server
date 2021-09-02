@@ -9,7 +9,7 @@
   1. Port `testPort` (currently 8392) must be available on localhost
   2. You must have sendmail configured so that it can send emails to external
      domains (for user registration) -- currently we use mailinator.com accounts
-  3. You must allow for outgoing HTTP traffic, as we POST to html5.validator.nu
+  3. You must allow for outgoing HTTP traffic, as we POST to validator.w3.org
      for HTML validation.
 -}
 

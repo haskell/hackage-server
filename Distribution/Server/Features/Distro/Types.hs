@@ -21,10 +21,11 @@ import Distribution.Package
 
 import Control.Applicative ((<$>))
 
-import Distribution.Text (Text(..))
+import Distribution.Pretty (Pretty(..))
+import Distribution.Parsec (Parsec(..))
+import qualified Distribution.Compat.CharParsing as P
 
-import qualified Distribution.Compat.ReadP as Parse
-import qualified Text.PrettyPrint          as Disp
+import qualified Text.PrettyPrint as Disp
 import qualified Data.Char as Char
 
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -35,10 +36,11 @@ import Data.Typeable
 newtype DistroName = DistroName String
  deriving (Eq, Ord, Read, Show, Typeable, MemSize)
 
-instance Text DistroName where
-  disp (DistroName name) = Disp.text name
-  parse = DistroName <$> Parse.munch1 (\c -> Char.isAlphaNum c || c `elem` "-_()[]{}=$,;")
+instance Pretty DistroName where
+  pretty (DistroName name) = Disp.text name
 
+instance Parsec DistroName where
+  parsec = DistroName <$> P.munch1 (\c -> Char.isAlphaNum c || c `elem` "-_()[]{}=$,;")
 
 -- | Listing of known distirbutions and their maintainers
 data Distributions = Distributions {

@@ -7,19 +7,21 @@ module Distribution.Server.Packages.Render (
   , DependencyTree
   , IsBuildable (..)
   , doPackageRender
+  , ModSigIndex(..)
 
     -- * Utils
   , categorySplit,
   ) where
 
-import Data.Maybe (catMaybes, isJust, maybeToList)
-import Control.Monad (guard)
-import Control.Arrow (second, (&&&))
+import Prelude ()
+import Distribution.Server.Prelude hiding (All)
+
+import Control.Arrow ((&&&), (***))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Vector as Vec
-import Data.Ord (comparing)
-import Data.List (sortBy, intercalate)
+import Data.List (intercalate)
 import Data.Time.Clock (UTCTime)
 import System.FilePath.Posix ((</>), (<.>))
 
@@ -28,8 +30,11 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.Package
 import Distribution.Text
+import Distribution.Pretty (prettyShow)
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
+import Distribution.Types.CondTree
+import Distribution.Types.UnqualComponentName
 
 -- hackage-server
 import Distribution.Server.Framework.CacheControl (ETag)
@@ -37,8 +42,14 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ModuleForest
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
+import Distribution.Utils.ShortText (fromShortText)
 import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex, TarEntryOffset)
+
+data ModSigIndex = ModSigIndex {
+        modIndex :: ModuleForest,
+        sigIndex :: ModuleForest
+    }
 
 -- This should provide the caller enough information to encode the package information
 -- in its particular format (text, html, json) with minimal effort on its part.
@@ -48,13 +59,18 @@ data PackageRender = PackageRender {
     rendDepends      :: [Dependency],
     rendExecNames    :: [String],
     rendLibraryDeps  :: Maybe DependencyTree,
+    rendSublibraryDeps :: [(String, DependencyTree)],
     rendExecutableDeps :: [(String, DependencyTree)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
     rendMaintainer   :: Maybe String,
     rendCategory     :: [String],
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
-    rendModules      :: Maybe TarIndex -> Maybe ModuleForest,
+    -- | The optional 'TarIndex' is of the documentation tarball; we use this
+    -- to test if a module actually has a corresponding documentation HTML
+    -- file we can link to.  If no 'TarIndex' is provided, it is assumed
+    -- all links are dead.
+    rendModules      :: Maybe TarIndex -> Maybe ModSigIndex,
     rendHasTarball   :: Bool,
     rendChangeLog    :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
     rendReadme       :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
@@ -73,25 +89,24 @@ doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
-    , rendExecNames    = map exeName (executables flatDesc)
+    , rendExecNames    = map (unUnqualComponentName . exeName) (executables flatDesc)
     , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
-    , rendExecutableDeps = second (depTree buildInfo) `map` condExecutables genDesc
-    , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
+    , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
+                                `map` condExecutables genDesc
+    , rendSublibraryDeps = (unUnqualComponentName *** depTree libBuildInfo)
+                                `map` condSubLibraries genDesc
+    , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
-    , rendMaintainer   = case maintainer desc of
+    , rendMaintainer   = case fromShortText $ maintainer desc of
                            "None" -> Nothing
                            "none" -> Nothing
                            ""     -> Nothing
                            person -> Just person
-    , rendCategory     = case category desc of
+    , rendCategory     = case fromShortText $ category desc of
                            []  -> []
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
-    , rendModules      = \docindex ->
-                             fmap (moduleForest
-                           . map (\m -> (m, moduleHasDocs docindex m))
-                           . exposedModules)
-                          (library flatDesc)
+    , rendModules      = renderModules
     , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
     , rendChangeLog    = Nothing -- populated later
     , rendReadme       = Nothing -- populated later
@@ -120,7 +135,18 @@ doPackageRender users info = PackageRender
         isBuildable ctData = if buildable $ getBuildInfo ctData
                                then Buildable
                                else NotBuildable
-    
+
+    renderModules docindex
+      | Just lib <- library flatDesc
+      = let mod_ix = mkForest $ exposedModules lib
+                           -- Assumes that there is an HTML per reexport
+                           ++ map moduleReexportName (reexportedModules lib)
+            sig_ix = mkForest $ signatures lib
+            mkForest = moduleForest . map (\m -> (m, moduleHasDocs docindex m))
+        in Just (ModSigIndex { modIndex = mod_ix, sigIndex = sig_ix })
+      | otherwise
+      = Nothing
+
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
     moduleHasDocs (Just doctar) = isJust . TarIndex.lookup doctar
@@ -149,8 +175,9 @@ data IsBuildable = Buildable
 
 categorySplit :: String -> [String]
 categorySplit xs | all isSpace xs = []
-categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
+categorySplit xs = if last res == "" then init res else res
   where
+    res = map (dropWhile isSpace) $ splitOn ',' xs
     splitOn x ys = front : case back of
                            [] -> []
                            (_:ys') -> splitOn x ys'
@@ -166,18 +193,22 @@ categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
 --
 flatDependencies :: GenericPackageDescription -> [Dependency]
 flatDependencies pkg =
-      sortOn (\(Dependency pkgname _) -> map toLower (display pkgname)) pkgDeps
+      sortOn (\(Dependency pkgname _ _) -> map toLower (display pkgname)) pkgDeps
   where
     pkgDeps :: [Dependency]
-    pkgDeps = fromMap $ Map.unionsWith intersectVersions $
+    pkgDeps = fromMap $ Map.filterWithKey notSubLib $ Map.unionsWith intersectVersions $
                   map condTreeDeps (maybeToList $ condLibrary pkg)
+               ++ map (condTreeDeps . snd) (condSubLibraries pkg)
                ++ map (condTreeDeps . snd) (condExecutables pkg)
       where
         fromMap = map fromPair . Map.toList
         fromPair (pkgname, Versions _ ver) =
-            Dependency pkgname $ fromVersionIntervals ver
+            Dependency pkgname (fromVersionIntervals ver) Set.empty -- XXX: ok?
 
-    manualFlags :: FlagAssignment
+        notSubLib pn _ = packageNameToUnqualComponentName pn `Set.notMember` sublibs
+        sublibs = Set.fromList $ map fst (condSubLibraries pkg)
+
+    manualFlags :: [(FlagName,Bool)] -- FlagAssignment
     manualFlags = map assignment . filter flagManual $ genPackageFlags pkg
         where assignment = flagName &&& flagDefault
 
@@ -186,7 +217,7 @@ flatDependencies pkg =
         Map.unionsWith intersectVersions $
           toMap ds : map fromComponent comps
       where
-        fromComponent (cond, then_part, else_part) =
+        fromComponent (CondBranch cond then_part else_part) =
             let thenDeps = condTreeDeps then_part
                 elseDeps = maybe Map.empty condTreeDeps else_part
             in case evalCondition manualFlags cond of
@@ -195,7 +226,7 @@ flatDependencies pkg =
                  Nothing -> unionPackageVersions thenDeps elseDeps
 
         toMap = Map.fromListWith intersectVersions . map toPair
-        toPair (Dependency pkgname ver) =
+        toPair (Dependency pkgname ver _) =
             (pkgname, Versions All $ toVersionIntervals ver)
 
 -- Note that 'unionPackageVersions Map.empty' is not identity.
@@ -240,19 +271,19 @@ intersectVersions (Versions All v1) (Versions All v2) =
     Versions All $ intersectVersionIntervals v1 v2
 
 sortDeps :: [Dependency] -> [Dependency]
-sortDeps = sortOn $ \(Dependency pkgname _) -> map toLower (display pkgname)
+sortDeps = sortOn $ \(Dependency pkgname _ _) -> map toLower (display pkgname)
 
 combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
               -> [Dependency] -> [Dependency]
 combineDepsBy f =
-    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
+    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver) Set.empty) -- XXX: ok?
   . Map.toList
   . Map.fromListWith f
-  . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
+  . map (\(Dependency pkgname ver _) -> (pkgname, toVersionIntervals ver))
 
 -- | Evaluate a 'Condition' with a partial 'FlagAssignment', returning
 -- | 'Nothing' if the result depends on additional variables.
-evalCondition :: FlagAssignment -> Condition ConfVar -> Maybe Bool
+evalCondition :: [(FlagName,Bool)] -> Condition ConfVar -> Maybe Bool
 evalCondition flags cond =
     let eval = evalCondition flags
     in case cond of
@@ -266,8 +297,3 @@ evalCondition flags cond =
                          (_, Just False) -> Just False
                          (Just True, Just True) -> Just True
                          _ -> Nothing
-
--- Same as @sortBy (comparing f)@, but without recomputing @f@.
-sortOn :: Ord b => (a -> b) -> [a] -> [a]
-sortOn f xs = map snd (sortBy (comparing fst) [(f x, x) | x <- xs])
-

@@ -8,13 +8,13 @@ module Distribution.Server.Features.BuildReports.Backup (
 
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
 import qualified Distribution.Server.Features.BuildReports.BuildReport as Report
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReports(..), PkgBuildReports(..), BuildReportId(..), BuildLog(..))
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReports(..), BuildCovg(..), PkgBuildReports(..), BuildReportId(..), BuildLog(..))
 import qualified Distribution.Server.Features.BuildReports.BuildReports as Reports
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
-import Distribution.Server.Util.Parse (unpackUTF8, packUTF8)
+import Distribution.Server.Util.Parse (packUTF8)
 
 import Distribution.Package
 import Distribution.Text (display, simpleParse)
@@ -24,7 +24,7 @@ import Control.Monad (foldM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import System.FilePath (splitExtension)
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy (ByteString, toStrict)
 
 dumpBackup  :: BuildReports -> [BackupEntry]
 dumpBackup = buildReportsToExport
@@ -64,15 +64,16 @@ insertLog buildReps ((pkgId, reportId), buildLog) =
     Nothing -> fail $ "Build log #" ++ display reportId ++ " exists for " ++ display pkgId ++ " but report itself does not"
 
 checkPackageVersion :: String -> PackageIdentifier -> Restore ()
-checkPackageVersion pkgStr pkgId =
-  case packageVersion pkgId of
-    Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
-    _             -> return ()
+checkPackageVersion pkgStr pkgId
+  | packageVersion pkgId == nullVersion
+  = fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
+  | otherwise
+  = return ()
 
 importReport :: PackageId -> String -> ByteString -> BuildReports -> PartialLogs -> Restore (BuildReports, PartialLogs)
 importReport pkgId repIdStr contents buildReps partialLogs = do
   reportId <- parseText "report id" repIdStr
-  report   <- either fail return $ Report.parse (unpackUTF8 contents)
+  report   <- either fail return $ Report.parse (toStrict contents)
   let (mlog, partialLogs') = Map.updateLookupWithKey (\_ _ -> Nothing) (pkgId, reportId) partialLogs
       buildReps' = Reports.unsafeSetReport pkgId reportId (report, mlog) buildReps --doesn't check for duplicates
   return (buildReps', partialLogs')
@@ -93,8 +94,8 @@ packageReportsToExport :: PackageId -> PkgBuildReports -> [BackupEntry]
 packageReportsToExport pkgId pkgReports = concatMap (uncurry $ reportToExport prefix) (Map.toList $ Reports.reports pkgReports)
     where prefix = ["package", display pkgId]
 
-reportToExport :: [FilePath] -> BuildReportId -> (BuildReport, Maybe BuildLog) -> [BackupEntry]
-reportToExport prefix reportId (report, mlog) = BackupByteString (getPath ".txt") (packUTF8 $ Report.show report) :
+reportToExport :: [FilePath] -> BuildReportId -> (BuildReport, Maybe BuildLog, Maybe BuildCovg ) -> [BackupEntry]
+reportToExport prefix reportId (report, mlog, _) = BackupByteString (getPath ".txt") (packUTF8 $ Report.show report) :
     case mlog of Nothing -> []; Just (BuildLog blobId) -> [blobToBackup (getPath ".log") blobId]
   where
     getPath ext = prefix ++ [display reportId ++ ext]

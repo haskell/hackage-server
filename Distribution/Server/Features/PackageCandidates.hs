@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, LambdaCase #-}
 module Distribution.Server.Features.PackageCandidates (
     PackageCandidatesFeature(..),
     PackageCandidatesResource(..),
@@ -24,6 +24,7 @@ import Distribution.Server.Packages.Render
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Readme
 import qualified Distribution.Server.Users.Types as Users
+import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -32,15 +33,26 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Features.Security.Migration
 
 import Distribution.Server.Util.ServeTarball
+import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
+import Distribution.Server.Pages.Template (hackagePage)
 
 import Distribution.Text
 import Distribution.Package
+import Distribution.Version
 
-import Data.Version
+import qualified Data.Text                as T
+import qualified Data.Text.Encoding       as T
+import qualified Data.Text.Encoding.Error as T
+import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
+import qualified Text.XHtml.Strict as XHtml
+import           Text.XHtml.Strict ((<<), (!))
+import Data.Aeson (Value (..), object, toJSON, (.=))
+
 import Data.Function (fix)
-import Data.List (find)
+import Data.List (find, intersperse)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.Vector as Vec
+
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
     candidatesFeatureInterface :: HackageFeature,
@@ -54,9 +66,10 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
     postPackageCandidate  :: DynamicPath -> ServerPartE Response,
     putPackageCandidate   :: DynamicPath -> ServerPartE Response,
     doDeleteCandidate     :: DynamicPath -> ServerPartE Response,
+    doDeleteCandidates    :: DynamicPath -> ServerPartE Response,
     uploadCandidate       :: (PackageId -> Bool) -> ServerPartE CandPkgInfo,
     publishCandidate      :: DynamicPath -> Bool -> ServerPartE UploadResult,
-    checkPublish          :: PackageIndex PkgInfo -> CandPkgInfo -> Maybe ErrorResponse,
+    checkPublish          :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse),
     candidateRender       :: CandPkgInfo -> IO CandidateRender,
 
     lookupCandidateName :: PackageName -> ServerPartE [CandPkgInfo],
@@ -94,9 +107,11 @@ data PackageCandidatesResource = PackageCandidatesResource {
     packageCandidatesPage :: Resource,
     publishPage           :: Resource,
     deletePage            :: Resource,
+    deleteCandidatesPage  :: Resource,
     packageCandidatesUri  :: String -> PackageName -> String,
     publishUri            :: String -> PackageId -> String,
     deleteUri             :: String -> PackageId -> String,
+    deleteCandidatesUri   :: String -> PackageName -> String,
 
     -- TODO: Why don't the following entries have a corresponding entry
     -- in CoreResource?
@@ -180,7 +195,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             , corePackageTarball
             ] ++
           map ($ candidatesResource) [
-              publishPage
+              packageCandidatesPage
+            , publishPage
             , candidateContents
             , candidateChangeLog
             ]
@@ -193,7 +209,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidatesCoreResource = fix $ \r -> CoreResource {
 -- TODO: There is significant overlap between this definition and the one in Core
         corePackagesPage = (resourceAt "/packages/candidates/.:format") {
-            resourcePost = [("txt", \_ -> postCandidatePlain)]
+            resourceDesc = [(GET, "List all available package candidates")]
+          , resourceGet  = [("json", serveCandidatesJson)]
+          , resourcePost = [("txt", \_ -> postCandidatePlain)]
           }
       , corePackagePage = resourceAt "/package/:package/candidate.:format"
       , coreCabalFile = (resourceAt "/package/:package/candidate/:cabal.cabal") {
@@ -223,14 +241,19 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       }
 
     candidatesResource = fix $ \r -> PackageCandidatesResource {
-        packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
+        packageCandidatesPage = (resourceAt "/package/:package/candidates/.:format") {
+            resourceDesc = [(GET, "List available candidates for a single package")]
+          , resourceGet  = [("json", servePackageCandidatesJson)]
+          }
       , publishPage = resourceAt "/package/:package/candidate/publish.:format"
       , deletePage = resourceAt "/package/:package/candidate/delete.:format"
+      , deleteCandidatesPage = resourceAt "/package/:package/candidates/delete.:format"
       , candidateContents = (resourceAt "/package/:package/candidate/src/..") {
             resourceGet = [("", serveContents)]
           }
-      , candidateChangeLog = (resourceAt "/package/:package/candidate/changelog") {
-            resourceGet = [("changelog", serveChangeLog)]
+      , candidateChangeLog = (resourceAt "/package/:package/candidate/changelog.:format") {
+            resourceGet = [("txt",  serveChangeLogText)
+                          ,("html", serveChangeLogHtml)]
           }
       , packageCandidatesUri = \format pkgname ->
           renderResource (packageCandidatesPage r) [display pkgname, format]
@@ -238,9 +261,53 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           renderResource (publishPage r) [display pkgid, format]
       , deleteUri = \format pkgid ->
           renderResource (deletePage r) [display pkgid, format]
+      , deleteCandidatesUri = \format pkgname ->
+          renderResource (deleteCandidatesPage r) [display pkgname, format]
       , candidateChangeLogUri = \pkgid ->
           renderResource (candidateChangeLog candidatesResource) [display pkgid, display (packageName pkgid)]
       }
+
+    -- GET /package/:package/candidates/
+    servePackageCandidatesJson :: DynamicPath -> ServerPartE Response
+    servePackageCandidatesJson dpath = do
+        pkgname <- packageInPath dpath
+        pkgs <- lookupCandidateName pkgname
+
+        users  <- queryGetUserDb
+        let lupUserName uid = (uid, fmap Users.userName (Users.lookupUserId uid users))
+
+        let pvs = [ object [ T.pack "version"  .= (T.pack . display . packageVersion . candInfoId) p
+                           , T.pack "sha256"   .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
+                           , T.pack "time"     .= (fst . snd) tarball
+                           , T.pack "uploader" .= (lupUserName . snd . snd) tarball
+                           ]
+                  | p <- pkgs
+                  , let tarball = Vec.last . pkgTarballRevisions . candPkgInfo $ p
+                  ]
+
+        return . toResponse . toJSON $ pvs
+
+    -- GET /packages/candidates/
+    serveCandidatesJson :: DynamicPath -> ServerPartE Response
+    serveCandidatesJson _ = do
+        cands <- queryGetCandidateIndex
+
+        let pkgss :: [[CandPkgInfo]]
+            pkgss = PackageIndex.allPackagesByName cands
+
+        return . toResponse $ toJSON (map cpiToJSON pkgss)
+      where
+        cpiToJSON :: [CandPkgInfo] -> Value
+        cpiToJSON [] = Null -- should never happen
+        cpiToJSON pkgs = object [ T.pack "name" .= pn, T.pack "candidates" .= pvs ]
+          where
+            pn = T.pack . display . pkgName . candInfoId . head $ pkgs
+            pvs = [ object [ T.pack "version" .= (T.pack . display . packageVersion . candInfoId) p
+                           , T.pack "sha256"  .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
+                           ]
+                  | p <- pkgs
+                  , let tarball = Vec.last . pkgTarballRevisions . candPkgInfo $ p
+                  ]
 
     postCandidate :: ServerPartE Response
     postCandidate = do
@@ -264,7 +331,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     putPackageCandidate :: DynamicPath -> ServerPartE Response
     putPackageCandidate dpath = do
       pkgid <- packageInPath dpath
-      guard (packageVersion pkgid /= Version [] [])
+      guard (packageVersion pkgid /= nullVersion)
       pkgInfo <- uploadCandidate (==pkgid)
       seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
@@ -272,14 +339,21 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      guardAuthorisedAsMaintainerOrTrustee (packageName candidate)
       void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
+
+    doDeleteCandidates :: DynamicPath -> ServerPartE Response
+    doDeleteCandidates dpath = do
+      pkgname <- packageInPath dpath
+      guardAuthorisedAsMaintainerOrTrustee pkgname
+      void $ updateState candidatesState $ DeleteCandidates pkgname
+      seeOther (packageCandidatesUri candidatesResource "" $ pkgname) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPartE Response
     serveCandidateTarball dpath = do
       pkgid <- packageTarballInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
+      guard (pkgVersion pkgid /= nullVersion)
       pkg   <- lookupCandidateId pkgid
       case pkgLatestTarball (candPkgInfo pkg) of
         Nothing -> errNotFound "Tarball not found"
@@ -332,22 +406,37 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     processCandidate isRight state uid res = do
         let pkg = packageId (uploadDesc res)
         if not (isRight pkg)
-          then uploadFailed "Name of package or package version does not match"
+          then uploadFailed [MText "Name of package or package version does not match"]
           else do
             pkgGroup <- Group.queryUserGroup (maintainersGroup (packageName pkg))
-            if packageExists state pkg && not (uid `Group.member` pkgGroup)
-              then uploadFailed "Not authorized to upload a candidate for this package"
+            if (not (Group.null pkgGroup) || packageExists state pkg)
+                && not (uid `Group.member` pkgGroup)
+              then uploadFailed (notMaintainer pkg)
               else return Nothing
-      where uploadFailed = return . Just . ErrorResponse 403 [] "Upload failed" . return . MText
+      where
+        -- TODO: try to share more code with "Upload" module
+        uploadFailed = return . Just . ErrorResponse 403 [] "Upload failed"
+
+        notMaintainer pkg = [ MText $
+                        "You are not authorised to upload candidates of this package. The "
+                     ++ "package '" ++ display (packageName pkg) ++ "' exists already and you "
+                     ++ "are not a member of the maintainer group for this package.\n\n"
+                     ++ "If you believe you should be a member of the "
+                     , MLink "maintainer group for this package"
+                            ("/package/" ++ display (packageName pkg) ++ "/maintainers")
+                     , MText $  ", then ask an existing maintainer to add you to the group. If "
+                     ++ "this is a package name clash, please pick another name or talk to the "
+                     ++ "maintainers of the existing package."
+                     ]
 
     publishCandidate :: DynamicPath -> Bool -> ServerPartE UploadResult
     publishCandidate dpath doDelete = do
       packages <- queryGetPackageIndex
       candidate <- packageInPath dpath >>= lookupCandidateId
       -- check authorization to upload - must already be a maintainer
-      uid <- guardAuthorised [InGroup (maintainersGroup (packageName candidate))]
+      uid <- guardAuthorisedAsMaintainer (packageName candidate)
       -- check if package or later already exists
-      case checkPublish packages candidate of
+      checkPublish uid packages candidate >>= \case
         Just failed -> throwError failed
         Nothing -> do
           -- run filters
@@ -374,13 +463,47 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
 
     -- | Helper function for publishCandidate that ensures it's safe to insert into the main index.
-    checkPublish :: PackageIndex PkgInfo -> CandPkgInfo -> Maybe ErrorResponse
-    checkPublish packages candidate = do
-        let pkgs = PackageIndex.lookupPackageName packages (packageName candidate)
-            candVersion = packageVersion candidate
-        case find ((== candVersion) . packageVersion) pkgs of
-            Just {} -> Just $ ErrorResponse 403 [] "Publish failed" [MText "Package name and version already exist in the database"]
-            Nothing  -> Nothing
+    --
+    -- TODO: share code w/ 'Distribution.Server.Features.Upload.processUpload'
+    checkPublish :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse)
+    checkPublish uid packages candidate
+      | Just _ <- find ((== candVersion) . packageVersion) pkgs
+        = return $ Just $ ErrorResponse 403 [] "Publish failed" [MText "Package name and version already exist in the database"]
+
+      | packageExists packages candidate = return Nothing
+
+        -- check for case-clashes with already published packages
+      | otherwise = case PackageIndex.searchByName packages (unPackageName candName) of
+          PackageIndex.Unambiguous (mp:_) -> do
+            group <- liftIO $ (Group.queryUserGroup . maintainersGroup . packageName) mp
+            if not $ uid `Group.member` group
+              then return $ Just $ ErrorResponse 403 [] "Publish failed" (caseClash [mp])
+              else return Nothing
+
+          PackageIndex.Unambiguous [] -> return Nothing -- can this ever occur?
+
+          PackageIndex.Ambiguous mps -> do
+            let matchingPackages = concat . map (take 1) $ mps
+            groups <- mapM (liftIO . Group.queryUserGroup . maintainersGroup . packageName) matchingPackages
+            if not . any (uid `Group.member`) $ groups
+              then return $ Just $ ErrorResponse 403 [] "Publish failed" (caseClash matchingPackages)
+              else return Nothing
+
+          -- no case-neighbors
+          PackageIndex.None -> return Nothing
+      where
+        pkgs = PackageIndex.lookupPackageName packages candName
+        candVersion = packageVersion candidate
+        candName    = packageName candidate
+
+        caseClash pkgs' = [MText $
+                         "Package(s) with the same name as this package, modulo case, already exist: "
+                         ]
+                      ++ intersperse (MText ", ") [ MLink pn ("/package/" ++ pn)
+                                                  | pn <- map (display . packageName) pkgs' ]
+                      ++ [MText $
+                         ".\n\nYou may only upload new packages which case-clash with existing packages "
+                      ++ "if you are a maintainer of one of the existing packages. Please pick another name."]
 
     ------------------------------------------------------------------------------
 
@@ -419,7 +542,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     -- (If we change that, we should move the 'guard' to 'guardValidPackageId')
     lookupCandidateId :: PackageId -> ServerPartE CandPkgInfo
     lookupCandidateId pkgid = do
-      guard (pkgVersion pkgid /= Version [] [])
+      guard (pkgVersion pkgid /= nullVersion)
       state <- queryState candidatesState GetCandidatePackages
       case PackageIndex.lookupPackageId (candidateList state) pkgid of
         Just pkg -> return pkg
@@ -432,16 +555,41 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 -------------------------------------------------------------------------------}
 
     -- result: changelog or not-found error
-    serveChangeLog :: DynamicPath -> ServerPartE Response
-    serveChangeLog dpath = do
+    serveChangeLogText :: DynamicPath -> ServerPartE Response
+    serveChangeLogText dpath = do
       pkg        <- packageInPath dpath >>= lookupCandidateId
       mChangeLog <- liftIO $ findToplevelFile (candPkgInfo pkg) isChangeLogFile
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) -> do
+        Right (tarfile, etag, offset, filename) -> do
           cacheControl [Public, maxAgeMinutes 5] etag
-          liftIO $ serveTarEntry fp offset name -- TODO: We've already loaded the contents; refactor
+          liftIO $ serveTarEntry tarfile offset filename
+          -- TODO: We've already loaded the contents; refactor
+
+    serveChangeLogHtml :: DynamicPath -> ServerPartE Response
+    serveChangeLogHtml dpath = do
+      pkg     <- packageInPath dpath >>= lookupCandidateId
+      mReadme <- liftIO $ findToplevelFile (candPkgInfo pkg) isChangeLogFile
+      case mReadme of
+        Left err ->
+          errNotFound "Changelog not found" [MText err]
+        Right (tarfile, etag, offset, filename) -> do
+          contents <- either (\err -> errInternalError [MText err])
+                             (return . snd)
+                  =<< liftIO (loadTarEntry tarfile offset)
+          cacheControl [Public, maxAgeDays 30] etag
+          return $ toResponse $ Resource.XHtml $
+            let title = "Changelog for " ++ display (packageId pkg) in
+            hackagePage title
+              [ XHtml.h2 << title
+              , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
+                            << if supposedToBeMarkdown filename
+                                 then renderMarkdown filename contents
+                                 else XHtml.thediv ! [XHtml.theclass "preformatted"]
+                                                  << unpackUtf8 contents
+              ]
+
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
@@ -455,3 +603,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           serveTarball (display (packageId pkg) ++ " candidate source tarball")
                        ["index.html"] (display (packageId pkg)) fp index
                        [Public, maxAgeMinutes 5] etag
+
+unpackUtf8 :: BS.ByteString -> String
+unpackUtf8 = T.unpack
+           . T.decodeUtf8With T.lenientDecode
+           . BS.toStrict

@@ -1,6 +1,6 @@
 -- Generate an HTML page listing all available packages
 
-module Distribution.Server.Pages.Index (packageIndex) where
+module Distribution.Server.Pages.Index (packageIndex, toPackageNames) where
 
 import Distribution.Server.Pages.Template       ( hackagePage )
 import Distribution.Server.Pages.Util           ( packageType )
@@ -14,6 +14,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Simple.Utils (comparing, equating)
 import Distribution.ModuleName (toFilePath)
 import Distribution.Text (display)
+import Distribution.Utils.ShortText (fromShortText)
 
 import Text.XHtml.Strict hiding ( p, name )
 import qualified Text.XHtml.Strict as XHtml ( name )
@@ -29,6 +30,15 @@ packageIndex = formatPkgGroups
                       . pkgDesc
                       . maximumBy (comparing packageVersion))
                  . PackageIndex.allPackagesByName
+
+toPackageNames :: PackageIndex.PackageIndex PkgInfo -> [PackageName]
+toPackageNames = map (pii_pkgName
+                      . mkPackageIndexInfo
+                      . flattenPackageDescription
+                      . pkgDesc
+                      . maximumBy (comparing packageVersion))
+                 . PackageIndex.allPackagesByName
+
 
 data PackageIndexInfo = PackageIndexInfo {
                             pii_pkgName :: !PackageName,
@@ -48,7 +58,7 @@ mkPackageIndexInfo pd = PackageIndexInfo {
                             pii_numExecutables = length (executables pd),
                             pii_numTests = length (testSuites pd),
                             pii_numBenchmarks = length (benchmarks pd),
-                            pii_synopsis = synopsis pd
+                            pii_synopsis = fromShortText $ synopsis pd
                         }
 
 data Category = Category String | NoCategory
@@ -110,7 +120,7 @@ categories pkg
         all (`elem` allocatedTopLevelNodes) top_level_nodes =
         map Category top_level_nodes
   | otherwise = [NoCategory]
-  where cats = trim (category pkg)
+  where cats = trim (fromShortText $ category pkg)
         -- trim will not be necessary with future releases of cabal
         trim = reverse . dropWhile isSpace . reverse
         split cs = case break (== ',') cs of
