@@ -248,15 +248,17 @@ maintainerSection pkgid isCandidate =
 -- indicating how to enable/disable flags with Cabal.
 renderPackageFlags :: PackageRender -> URL -> [Html]
 renderPackageFlags render docURL =
-  case rendFlags render of
-    [] -> mempty
-    flags ->
-      let (manualFlags, autoFlags) = partition flagManual flags
-      in  [h2 << "Manual Flags"
-          ,flagsTable ["manual-flags"] manualFlags
-          ,collapsible "Automatic Flags" (flagsTable ["automatic-flags"] autoFlags)
-          ,tip]
-  where tip =
+      let (manualFlags, autoFlags) = partition flagManual $ rendFlags render
+          manualSection = whenNotNull manualFlags
+                          [h3 << "Manual Flags", flagsTable ["manual-flags"] manualFlags]
+          autoSection = whenNotNull autoFlags 
+                        [collapsible "Automatic Flags" (flagsTable ["automatic-flags"] autoFlags)]
+          combined = manualSection ++ autoSection
+          flagsSection = whenNotNull combined
+                         $ [h2 << "Flags"] ++ combined ++  [tip]
+      in  flagsSection
+  where 
+        tip =
           paragraph ! [theclass "tip"] <<
           [thespan << "Use "
           ,code "-f <flag>"
@@ -281,6 +283,7 @@ renderPackageFlags render docURL =
                 ,td ! [theclass (if flagDefault flag then "flag-enabled" else "flag-disabled")] <<
                  if flagDefault flag then "Enabled" else "Disabled"]
         code = (thespan ! [theclass "code"] <<)
+        whenNotNull xs a = if null xs then [] else a
 
 moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Bool -> [Html]
 moduleSection render mdocIndex docURL quickNav =
