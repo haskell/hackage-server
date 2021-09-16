@@ -174,7 +174,6 @@ and a separate blob store).
 ### Creating users & uploading packages
 
 * Admin front-end: <http://localhost:8080/admin>
-* List of users: <http://localhost:8080/users/>
 * Register new users: <http://localhost:8080/users/register>
 
 Currently there is no restriction on registering, but only an admin

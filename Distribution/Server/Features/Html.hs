@@ -801,12 +801,9 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
 
     htmlUsersResources = [
-        -- list of users with user links; if admin, a link to add user page
-        (extendResource $ userList users) {
-            resourceDesc = [ (GET,  "list of users")
-                           , (POST, "create a new user")
-                           ]
-          , resourceGet  = [ ("html", serveUserList) ]
+        -- if admin, a link to add user page
+        (resourceAt "/users") {
+            resourceDesc = [ (POST, "create a new user") ]
           , resourcePost = [ ("html", \_ -> adminAddUser) ]
           }
         -- form to post to /users/
@@ -829,13 +826,13 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
           }
       ]
 
-    serveUserList :: DynamicPath -> ServerPartE Response
-    serveUserList _ = do
-        userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
-        let hlist = unordList
-                      [ anchor ! [href $ userPageUri users "" uname] << display uname
-                      | (_, uinfo) <- userlist, let uname = userName uinfo ]
-        ok $ toResponse $ Resource.XHtml $ hackagePage "Hackage users" [h2 << "Hackage users", hlist]
+    -- serveUserList :: DynamicPath -> ServerPartE Response
+    -- serveUserList _ = do
+    --     userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
+    --     let hlist = unordList
+    --                   [ anchor ! [href $ userPageUri users "" uname] << display uname
+    --                   | (_, uinfo) <- userlist, let uname = userName uinfo ]
+    --     ok $ toResponse $ Resource.XHtml $ hackagePage "Hackage users" [h2 << "Hackage users", hlist]
 
     serveUserPage :: DynamicPath -> ServerPartE Response
     serveUserPage dpath = do
@@ -864,7 +861,7 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
     addUserForm _ =
         return $ toResponse $ Resource.XHtml $ hackagePage "Register account"
           [ paragraph << "Administrators can register new user accounts here."
-          , form ! [theclass "box", XHtml.method "post", action $ userListUri users ""] <<
+          , form ! [theclass "box", XHtml.method "post", action "/users" ] <<
                 [ simpleTable [] []
                     [ makeInput [thetype "text"] "username" "User name"
                     , makeInput [thetype "password"] "password" "Password"

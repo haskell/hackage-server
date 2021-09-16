@@ -149,8 +149,6 @@ instance IsHackageFeature UserFeature where
   getFeatureInterface = userFeatureInterface
 
 data UserResource = UserResource {
-    -- | The list of all users.
-    userList :: Resource,
     -- | The main page for a given user.
     userPage :: Resource,
     -- | A user's password.
@@ -164,8 +162,6 @@ data UserResource = UserResource {
     -- | Redirect users to their management page
     redirectUserResource :: Resource,
 
-    -- | URI for `userList` given a format.
-    userListUri :: String -> String,
     -- | URI for `userPage` given a format and name.
     userPageUri :: String -> UserName -> String,
     -- | URI for `passwordResource` given a format and name.
@@ -290,8 +286,7 @@ userFeature templates usersState adminsState
         featureDesc = "Manipulate the user database."
       , featureResources =
           map ($ userResource)
-            [ userList
-            , userPage
+            [ userPage
             , passwordResource
             , enabledResource
             , manageUserResource
@@ -314,11 +309,7 @@ userFeature templates usersState adminsState
       }
 
     userResource = fix $ \r -> UserResource {
-        userList = (resourceAt "/users/.:format") {
-            resourceDesc   = [ (GET, "list of users") ]
-          , resourceGet    = [ ("json", serveUsersGet) ]
-          }
-      , userPage = (resourceAt "/user/:username.:format") {
+      userPage = (resourceAt "/user/:username.:format") {
             resourceDesc   = [ (GET,    "user id info")
                              , (PUT,    "create user")
                              , (DELETE, "delete user")
@@ -354,8 +345,6 @@ userFeature templates usersState adminsState
 
       , adminResource = adminResource
 
-      , userListUri = \format ->
-          renderResource (userList r) [format]
       , userPageUri = \format uname ->
           renderResource (userPage r) [display uname, format]
       , userPasswordUri = \format uname ->
