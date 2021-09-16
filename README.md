@@ -7,7 +7,7 @@ This is the `hackage-server` code. This is what powers <http://hackage.haskell.o
 
 ## Installing dependencies
 
-`hackage-server` depends on `icu` and `zlib`.
+`hackage-server` depends on `icu` and `zlib`. You'll also need `libbrotli-dev` for enabling tests.
 
 ICU stands for "International Components for Unicode". The `icu4c` is a set
 of libraries that provide Unicode and Globalization support.
@@ -20,6 +20,8 @@ If you have the Nix package manager installed, the easiest way to obtain
 `hackage-server`'s dependencies is using the Nix shell:
 
     nix-shell
+    
+Note: `libbrotli-dev` has to be installed manually.
 
 ### Manually
 
@@ -55,6 +57,13 @@ package text-icu
 ##### Nix/NixOS
 
     nix-shell --packages icu
+    
+#### libbrotli
+
+#### Ubuntu/Debian
+
+    sudo apt update
+    sudo apt install libbrotli-dev
 
 #### zlib
 
@@ -129,7 +138,7 @@ something like
 
 ## Running
 
-    cabal install -j --enable-tests
+    cabal install
 
     hackage-server init
     hackage-server run
