@@ -13,7 +13,7 @@ and a package that you'd like to upload. (This measure is
 unfortunately necessary to prevent spam accounts.)
 
 For storage and bandwidth reasons, we ask uploaders to only upload
-packages they believe will be useful and that they intend to maintain.
+packages they believe will be useful to others and that they intend to maintain.
 
 If you were not expecting this email, our apologies,
 please ignore it.
