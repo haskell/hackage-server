@@ -22,9 +22,7 @@ called <a href="http://hackage.haskell.org/trac/hackage/">Hackage</a>.)
 These pages are a basic web interface to the Hackage package database.
 </p>
 
-<p>This isn't the <em>official</em> Hackage. It's an in-progress
-rewrite of the server using the <a href="/package/happstack">happstack</a> web
-framework. <!-- links to places to comment -->
+<p>This isn't the <em>official</em> Hackage. It's a local version run either as a private or development instance.
 </p>
 
 <h3>Finding packages</h3>
