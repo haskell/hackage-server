@@ -28,6 +28,7 @@ import Util
 import HttpUtils ( isOk
                  , isNoContent
                  , isForbidden
+                 , execRequest'
                  , Authorization(..)
                  )
 import HackageClientUtils
@@ -200,8 +201,11 @@ runPackageTests = do
        cabalFile <- getUrl NoAuth "/package/testpackage-1.0.0.0/testpackage.cabal"
        unless (cabalFile == testpackageCabalFile) $
            die "Bad Cabal file"
+    do info "Testing tar redirect"
+       _ <- execRequest' NoAuth  (mkGetReq "/package/testpackage/testpackage-1.0.0.0.tar.gz") (==(3,0,3))
+       return ()
     do info "Getting testpackage tar file"
-       tarFile <- getUrl NoAuth "/package/testpackage/testpackage-1.0.0.0.tar.gz"
+       tarFile <- getUrl NoAuth "/package/testpackage/testpackage-1.0.0.0.tar.gz?real=1"
        unless (tarFile == testpackageTarFileContent) $
            die "Bad tar file"
     do info "Getting testpackage source"
@@ -222,4 +226,3 @@ runPackageTests = do
 
 testpackage :: (FilePath, String, FilePath, String, FilePath, String)
 testpackage = mkPackage "testpackage"
-

@@ -693,21 +693,28 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       return . toResponse $ Array (Vec.fromList json)
 
     -- result: tarball or not-found error
+    -- note: this has a redirect gimmick so that we can cache the real
+    -- tarball in the CDN and also hit the redirect to trigger the download hook
     servePackageTarball :: DynamicPath -> ServerPartE Response
     servePackageTarball dpath = do
       pkgid <- packageTarballInPath dpath
       guard (pkgVersion pkgid /= nullVersion)
       pkg <- lookupPackageId pkgid
+      rq <- askRq
       case pkgLatestTarball pkg of
-        Nothing -> errNotFound "Tarball not found"
-                     [MText "No tarball exists for this package version."]
-        Just (tarball, (uploadtime, _uid), _revNo) -> do
-          let blobId = blobInfoId $ pkgTarballGz tarball
-          cacheControl [Public, NoTransform, maxAgeDays 30]
-                       (BlobStorage.blobETag blobId)
-          file <- liftIO $ BlobStorage.fetch store blobId
-          runHook_ packageDownloadHook pkgid
-          return $ toResponse $ Resource.PackageTarball file blobId uploadtime
+         Nothing -> errNotFound "Tarball not found"
+                    [MText "No tarball exists for this package version."]
+         Just (tarball, (uploadtime, _uid), _revNo) ->
+           if not (isJust . lookup "real" . rqInputsQuery $ rq)
+             then do
+               runHook_ packageDownloadHook pkgid
+               seeOther (rqUri rq ++ "?real=true")  $ toResponse ()
+             else do
+               let blobId = blobInfoId $ pkgTarballGz tarball
+               cacheControl [Public, NoTransform, maxAgeDays 30]
+                            (BlobStorage.blobETag blobId)
+               file <- liftIO $ BlobStorage.fetch store blobId
+               return $ toResponse $ Resource.PackageTarball file blobId uploadtime
 
     -- result: cabal file or not-found error
     serveCabalFile :: DynamicPath -> ServerPartE Response
