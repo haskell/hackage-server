@@ -347,6 +347,8 @@ library lib-server
       Distribution.Server.Features.Tags
       Distribution.Server.Features.Tags.Backup
       Distribution.Server.Features.Tags.State
+      Distribution.Server.Features.AnalyticsPixels
+      Distribution.Server.Features.AnalyticsPixels.State
       Distribution.Server.Features.UserDetails
       Distribution.Server.Features.UserSignup
       Distribution.Server.Features.StaticFiles
