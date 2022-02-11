@@ -50,8 +50,6 @@ import Data.Version
          ( showVersion )
 import Control.Monad
          ( void, unless, when, filterM )
-import Control.Applicative
-         ( (<$>) )
 import Control.Arrow
          ( second )
 import qualified Data.ByteString.Lazy as BS
