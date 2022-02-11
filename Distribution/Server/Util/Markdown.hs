@@ -1,10 +1,16 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE UndecidableInstances       #-}
-module Distribution.Server.Util.Markdown where
+
+module Distribution.Server.Util.Markdown
+  ( renderMarkdown
+  , renderMarkdownRel
+  , supposedToBeMarkdown
+  ) where
 
 import Commonmark
 import Commonmark.Extensions
@@ -14,6 +20,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T (lenientDecode)
 import qualified Data.Text.Lazy as TL
+import Data.Typeable (Typeable)
 import Network.URI (isRelativeReference)
 import Control.Monad.Identity
 import Text.HTML.SanitizeXSS as XSS
@@ -83,12 +90,12 @@ instance HasMath (HHtml a) where
   inlineMath t = HHtml $ inlineMath t
   displayMath t = HHtml $ displayMath t
 
-
 instance Rangeable (Html a) => HasFootnote (HHtml a) (HHtml a) where
   footnote x y (HHtml t) = HHtml (footnote x y t)
   footnoteList xs = HHtml $ footnoteList (map unHHtml xs)
   footnoteRef x y (HHtml t) = HHtml (footnoteRef x y t)
 
+-- | Prefix relative links with @src/@.
 adjustRelativeLink :: T.Text -> T.Text
 adjustRelativeLink url
   | isRelativeReference (T.unpack url) &&
@@ -96,25 +103,48 @@ adjustRelativeLink url
               = "src/" <> url
   | otherwise = url
 
+-- | Render markdown to HTML.
+renderMarkdown
+  :: String         -- ^ Name or path of input.
+  -> BS.ByteString  -- ^ Commonmark text input.
+  -> XHtml.Html     -- ^ Rendered HTML.
+renderMarkdown = renderMarkdown' (renderHtml :: Html () -> TL.Text)
 
-renderHHtml :: HHtml () -> TL.Text
-renderHHtml (HHtml x) = renderHtml x
+-- | Render markdown to HTML, prefixing relative links with @src/@.
+renderMarkdownRel
+  :: String         -- ^ Name or path of input.
+  -> BS.ByteString  -- ^ Commonmark text input.
+  -> XHtml.Html     -- ^ Rendered HTML.
+renderMarkdownRel = renderMarkdown' (renderHtml . unHHtml :: HHtml () -> TL.Text)
 
-renderMarkdown :: String -> BS.ByteString -> XHtml.Html
-renderMarkdown name md =
-     either (const $ XHtml.pre XHtml.<< T.unpack txt) (XHtml.primHtml . T.unpack . sanitizeBalance . TL.toStrict . (renderHtml :: Html () -> TL.Text)) $
-         runIdentity (commonmarkWith (mathSpec <> footnoteSpec <> defaultSyntaxSpec <> gfmExtensions)
+-- | Prerequisites for 'commonmarkWith' with 'gfmExtensions' and 'mathSpec'.
+type MarkdownRenderable a =
+  ( Typeable a
+  , HasEmoji a
+  , HasFootnote a a
+  , HasMath a
+  , HasPipeTable a a
+  , HasStrikethrough a
+  , HasTaskList a a
+  , IsBlock a a
+  , IsInline a
+  , ToPlainText a
+  )
+
+-- | Generic gfm markdown rendering.
+renderMarkdown'
+  :: MarkdownRenderable a
+  => (a -> TL.Text)  -- ^ HTML rendering function.
+  -> String          -- ^ Name or path of input.
+  -> BS.ByteString   -- ^ Commonmark text input.
+  -> XHtml.Html      -- ^ Rendered HTML.
+renderMarkdown' render name md =
+     either (const $ XHtml.pre XHtml.<< T.unpack txt) (XHtml.primHtml . T.unpack . sanitizeBalance . TL.toStrict . render) $
+         runIdentity (commonmarkWith (mathSpec <> gfmExtensions <> defaultSyntaxSpec)
                      name
                      txt)
   where txt = T.decodeUtf8With T.lenientDecode . BS.toStrict $ md
 
-renderMarkdownRel :: String -> BS.ByteString -> XHtml.Html
-renderMarkdownRel name md =
-     either (const $ XHtml.pre XHtml.<< T.unpack txt) (XHtml.primHtml . T.unpack . sanitizeBalance . TL.toStrict . renderHHtml) $
-         runIdentity (commonmarkWith (mathSpec <> footnoteSpec <> defaultSyntaxSpec <> gfmExtensions)
-                     name
-                     txt)
-  where txt = T.decodeUtf8With T.lenientDecode . BS.toStrict $ md
-
+-- | Does the file extension suggest that the file is in markdown syntax?
 supposedToBeMarkdown :: FilePath -> Bool
 supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]

@@ -363,8 +363,10 @@ library lib-server
     , blaze-builder         ^>= 0.4
     , blaze-html            ^>= 0.9
     , cereal                ^>= 0.5
-    , commonmark	    ^>= 0.1
-    , commonmark-extensions ^>= 0.2
+    , commonmark            ^>= 0.2
+        -- commonmark-0.2 needed by commonmark-extensions-0.2.2
+    , commonmark-extensions ^>= 0.2.2
+        -- Note: 0.2.2 added footnoteSpec to gfmExtensions
     , cryptohash-md5        ^>= 0.11.100
     , cryptohash-sha256     ^>= 0.11.100
     , csv                   ^>= 0.1
