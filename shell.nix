@@ -1,22 +1,22 @@
+{ sources ? import ./nix/sources.nix }:
 let
-  nixpkgs = builtins.fetchTarball {
-    # master on 2021-08-02
-    url = "https://github.com/NixOS/nixpkgs/archive/70e001f35cc363eb789ea0a04eff11b86c440ba3.tar.gz";
-    sha256 = "1mrhbcfa8kkx1qnax8xh41grinqiycl56wlws5vvrli8w0pzgl1r";
-  };
-
-  pkgs = import nixpkgs { config = { }; };
+  pkgs = import sources.nixpkgs
+    { overlays = []; config = {}; };
 
 in
 pkgs.mkShell {
-  buildInputs = [
+  buildInputs = with pkgs; [
     # Haskell development
-    pkgs.cabal-install
-    pkgs.ghc
+    cabal-install
+    ghc
 
     # Dependencies
-    pkgs.icu
-    pkgs.zlib
-    pkgs.brotli
+    glibc
+    icu67
+    zlib
+    openssl
+    cryptodev
+    pkg-config
+    brotli
   ];
 }

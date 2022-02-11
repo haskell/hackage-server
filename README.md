@@ -2,6 +2,7 @@
 
 [![Build Status](https://travis-ci.org/haskell/hackage-server.png?branch=master)](https://travis-ci.org/haskell/hackage-server)
 [![Build status](https://github.com/haskell/hackage-server/actions/workflows/ci.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/ci.yml)
+[![Build status](https://github.com/haskell/hackage-server/actions/workflows/nix-shell.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/nix-shell.yml)
 
 This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances. The `master` branch is suitable for general usage. Specific policy and documentation for the central hackage instance exists in the `central-server` branch.
 
