@@ -269,6 +269,29 @@ mkPostReq url vals =
   setRequestBody (postRequest (mkUrl url))
                  ("application/x-www-form-urlencoded", urlEncodeVars vals)
 
+mkPutReq :: RelativeURL -> [(String, String)] -> Request_String
+mkPutReq url vals =
+  setRequestBody (putRequest (mkUrl url))
+                 ("application/x-www-form-urlencoded", urlEncodeVars vals)
+
+-- Like mkPutReq, but posts the given body text directly as text/plain
+mkPutTextReq :: RelativeURL -> String -> Request_String
+mkPutTextReq url body =
+    setRequestBody (putRequest (mkUrl url))
+             ("text/plain", body)
+
+-- | A convenience constructor for a PUT 'Request'.
+--
+-- If the URL isn\'t syntactically valid, the function raises an error.
+putRequest
+    :: String                   -- ^URL to POST to
+    -> Request_String           -- ^The constructed request
+putRequest urlString =
+  case parseURI urlString of
+    Nothing -> error ("putRequest: Not a valid URL - " ++ urlString)
+    Just u  -> mkRequest PUT u
+
+
 getUrl :: Authorization -> RelativeURL -> IO String
 getUrl auth url = Http.execRequest auth (mkGetReq url)
 
@@ -310,6 +333,18 @@ delete expectedCode auth url = void $
 post :: Authorization -> RelativeURL -> [(String, String)] -> IO ()
 post auth url vals = void $
     Http.execRequest' auth (mkPostReq url vals) expectedCode
+  where
+    expectedCode code = isOk code || isSeeOther code || isAccepted code
+
+put :: Authorization -> RelativeURL -> [(String, String)] -> IO ()
+put auth url vals = void $
+    Http.execRequest' auth (mkPutReq url vals) expectedCode
+  where
+    expectedCode code = isOk code || isSeeOther code || isAccepted code
+
+putText :: Authorization -> RelativeURL -> String -> IO ()
+putText auth url body = void $
+    Http.execRequest' auth (mkPutTextReq url body) expectedCode
   where
     expectedCode code = isOk code || isSeeOther code || isAccepted code
 

@@ -221,11 +221,15 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/upload-time
     uploadTimePut :: DynamicPath -> ServerPartE Response
     uploadTimePut dpath = do
+        let altParseTimeMaybe timeStr = (
+                parseTimeMaybe "%c" timeStr
+                <|>  parseTimeMaybe "%Y-%m-%dT%H:%M:%SZ" timeStr
+                )
         guardAuthorised_ [InGroup mirrorGroup]
         pkgid <- packageInPath dpath
         timeContent <- expectTextPlain
-        case parseTimeMaybe "%c" (unpackUTF8 timeContent) of
-          Nothing -> errBadRequest "Could not parse upload time" []
+        case altParseTimeMaybe (unpackUTF8 timeContent) of
+          Nothing -> errBadRequest "Could not parse upload time" [MText $ show timeContent]
           Just t  -> do
             existed <- updateSetPackageUploadTime pkgid t
             if existed

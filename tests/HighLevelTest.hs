@@ -162,9 +162,34 @@ runPackageUploadTests = do
                 (Auth "HackageTestUser1" "testpass1")
                 "/packages/" "package"
                 (testpackageTarFilename, testpackageTarFileContent)
+    do info "Adding HackageTestUser1 to mirrorers"
+       post (Auth "admin" "admin") "/packages/mirrorers/" [
+           ("user", "HackageTestUser1")
+         ]
+    do info "Checking Package Exists"
+       xs <- validate NoAuth "/package/testpackage-1.0.0.0"
+       unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
+           die ("Bad package info: " ++ show xs)
+    do info "Setting upload time"
+       putText (Auth "HackageTestUser1" "testpass1")
+           "/package/testpackage-1.0.0.0/upload-time"
+           uploadTime
+       xs <- getUrl NoAuth "/package/testpackage-1.0.0.0/upload-time"
+       unless (xs == uploadTimeISO) $
+            die ("Bad upload time: " ++ show xs)
+    do info "Setting upload time (ISO)"
+       putText (Auth "HackageTestUser1" "testpass1")
+           "/package/testpackage-1.0.0.0/upload-time"
+           uploadTimeISO2
+       xs <- getUrl NoAuth "/package/testpackage-1.0.0.0/upload-time"
+       unless (xs == uploadTimeISO2) $
+            die ("Bad upload time: " ++ show xs)
   where
     (testpackageTarFilename, testpackageTarFileContent, _, _, _, _) =
       testpackage
+    uploadTime = "Tue Oct 18 20:54:28 UTC 2010"
+    uploadTimeISO = "2010-10-18T20:54:28Z"
+    uploadTimeISO2 = "2020-10-18T20:54:28Z"
 
 runPackageTests :: IO ()
 runPackageTests = do
