@@ -192,7 +192,7 @@
         </tr>
         <tr>
           <th>Status</th>
-	  <td><a href="https://matrix.hackage.haskell.org/package/$package.name$"><img src="https://matrix.hackage.haskell.org/api/v2/packages/$package.name$/badge" alt="Hackage Matrix CI" style="max-width:100%;" /></a><br/>$buildStatus$</td>
+	  <td><a href="https://matrix.haskell.org/package/$package.name$"><img src="https://matrix.haskell.org/api/v2/packages/$package.name$/badge" alt="Hackage Matrix CI" style="max-width:100%;" /></a><br/>$buildStatus$</td>
         </tr>
       </tbody>
     </table>
