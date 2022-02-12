@@ -62,7 +62,6 @@ data QopInfo = QopNone
                  digestNonceCount  :: String,
                  digestClientNonce :: String
                }
-          -- | QopAuthInt
   deriving Show
 
 -- See RFC 2617 http://www.ietf.org/rfc/rfc2617

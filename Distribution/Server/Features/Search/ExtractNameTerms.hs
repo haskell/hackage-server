@@ -134,7 +134,7 @@ stripPrefix_h :: String -> [String]
 stripPrefix_h "http"         = []
 stripPrefix_h "html"         = []
 stripPrefix_h ('h':'s':frag) = ['s':frag, frag]
-stripPrefix_h ('h':frag) {- | Set.notMember (T.pack w) ws -} = [frag]
+stripPrefix_h ('h':frag)     = [frag]
 stripPrefix_h _              = []
 
 stripSuffix :: String -> String -> Maybe String

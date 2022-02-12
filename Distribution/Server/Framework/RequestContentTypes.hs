@@ -2,7 +2,6 @@
 -- |
 --
 -----------------------------------------------------------------------------
--- |
 -- Module      :  Distribution.Server.Framework.RequestContentTypes
 -- Copyright   :  (c) Duncan Coutts 2012-2013
 -- License     :  BSD-like

@@ -299,10 +299,10 @@ documentationFeature name
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
       -- The order of operations:
-      -- * Insert new documentation into blob store
-      -- * Generate the new index
-      -- * Drop the index for the old tar-file
-      -- * Link the new documentation to the package
+      -- \* Insert new documentation into blob store
+      -- \* Generate the new index
+      -- \* Drop the index for the old tar-file
+      -- \* Link the new documentation to the package
       fileContents <- expectUncompressedTarball
       mres <- liftIO $ BlobStorage.addWith store fileContents
                          (\content -> return (checkDocTarball pkgid content))

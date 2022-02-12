@@ -278,9 +278,9 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
       --
       -- As part of the support for TUF we made two changes to the state:
       --
-      -- * We made the index append-only, and added a package update log
+      -- \* We made the index append-only, and added a package update log
       --   to support this.
-      -- * We changed the PkgTarball data structure to contain BlobInfo rather
+      -- \* We changed the PkgTarball data structure to contain BlobInfo rather
       --   rather than BlobId; that is, we additionally record the length and
       --   SHA256 hash for all blobs.
       --
@@ -484,9 +484,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
         Nothing -> mzero
         Just pkgid@(PackageIdentifier name' version') -> do
           -- rules:
-          -- * the package name and tarball name must be the same
-          -- * the tarball must specify a version
-          -- * the package must either have no version or the same version as the tarball
+          -- \* the package name and tarball name must be the same
+          -- \* the tarball must specify a version
+          -- \* the package must either have no version or the same version as the tarball
           guard $ name == name' && version' /= nullVersion && (version == version' || version == nullVersion)
           return pkgid
 

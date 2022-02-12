@@ -170,8 +170,8 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
         , tagsUri = \format -> renderResource (tagsListing r) [format]
         , packageTagsUri = \format pkgname -> renderResource (packageTagsListing r) [display pkgname, format]
       -- for more fine-tuned tag manipulation, could also define:
-      -- * DELETE /package/:package/tag/:tag (remove single tag)
-      -- * POST /package/:package\/tags (add single tag)
+      -- \* DELETE /package/:package/tag/:tag (remove single tag)
+      -- \* POST /package/:package\/tags (add single tag)
       -- renaming tags and deleting them are also supported as happstack-state
       -- operations, but make sure this wouldn't circumvent calculated tags.
         }

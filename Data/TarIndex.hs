@@ -54,11 +54,8 @@ data TarIndex = TarIndex
   --  { [PathComponentId 0, PathComponentId 1] -> offset 0
   --  , [PathComponentId 0, PathComponentId 2] -> offset 1024 }
 
-  -- | The mapping of filepath components as strings to ids.
-  !(StringTable PathComponentId)
-
-  -- Mapping of sequences of filepath component ids to tar entry offsets.
-  !(IntTrie PathComponentId TarEntryOffset)
+  !(StringTable PathComponentId)            -- ^ The mapping of filepath components as strings to ids.
+  !(IntTrie PathComponentId TarEntryOffset) -- ^ Mapping of sequences of filepath component ids to tar entry offsets.
   deriving (Show, Typeable)
 
 
