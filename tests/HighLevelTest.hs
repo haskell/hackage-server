@@ -19,7 +19,7 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.List (isInfixOf)
 import Data.String ()
 import System.Directory
-import System.Exit (ExitCode(..))
+import System.Exit (ExitCode(..), die)
 import System.FilePath
 import System.IO
 
@@ -222,4 +222,3 @@ runPackageTests = do
 
 testpackage :: (FilePath, String, FilePath, String, FilePath, String)
 testpackage = mkPackage "testpackage"
-

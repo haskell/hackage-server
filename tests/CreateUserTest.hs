@@ -20,6 +20,7 @@ import Control.Monad
 import Data.List (isInfixOf)
 import Data.String ()
 import System.Directory
+import System.Exit (die)
 import System.FilePath
 import System.IO
 import System.Random
@@ -94,8 +95,7 @@ runUserTests = do
            die ("Bad user account kind: " ++ show (accountKind uainf))
        unless ("self-registration" `isInfixOf` accountNotes uainf) $
            die ("Bad user notes: " ++ accountNotes uainf)
-       
+
   where
     mkTestEmail :: Int -> String
     mkTestEmail n = "HackageTestUser" ++ show n
-
