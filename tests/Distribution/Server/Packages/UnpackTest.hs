@@ -18,9 +18,9 @@ deriving instance Eq Tar.FileNameError
 deriving instance Eq CombinedTarErrs
 
 -- | Test that check permissions does the right thing
-testPermissions :: FilePath ->  -- ^ .tar.gz file to test
-  (Tar.Entry -> Maybe CombinedTarErrs) ->  -- ^ Converter to create errors if necessary
-  Assertion
+testPermissions :: FilePath                              -- ^ .tar.gz file to test
+                -> (Tar.Entry -> Maybe CombinedTarErrs)  -- ^ Converter to create errors if necessary
+                -> Assertion
 testPermissions tarPath mangler = do
     entries <- return . Tar.read . GZip.decompress =<< BL.readFile tarPath
     let mappedEntries = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . FormatError) entries

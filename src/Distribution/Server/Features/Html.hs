@@ -133,6 +133,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "tag-edit.html"
                    , "candidate-page.html"
                    , "candidate-index.html"
+                   , "new-browse.html"
                    ]
 
 
@@ -552,6 +553,10 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             resourceDesc = [(GET, "Show browsable list of all packages")]
           , resourceGet  = [("html", serveBrowsePage)]
           }
+      , (resourceAt "/packages/new_browse" ) {
+            resourceDesc = [(GET, "Show browsable list of all packages")]
+          , resourceGet  = [("html", serveNewBrowsePage)]
+          }
       , (extendResource $ corePackagesPage cores) {
             resourceDesc = [(GET, "Show package index")]
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
@@ -574,6 +579,11 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           [ "heading"   $= "All packages"
           , templateUnescaped "tabledata" tabledata]
 
+    serveNewBrowsePage :: DynamicPath -> ServerPartE Response
+    serveNewBrowsePage _dpath = do
+      template <- getTemplate templates "new-browse.html"
+      return $ toResponse $ template
+          [ "heading" $= "Browse and search packages" ]
 
     -- Currently the main package page is thrown together by querying a bunch
     -- of features about their attributes for the given package. It'll need

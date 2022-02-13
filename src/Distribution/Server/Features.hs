@@ -21,6 +21,7 @@ import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
 #ifndef MINIMAL
+import Distribution.Server.Features.Browse (initNewBrowseFeature)
 import Distribution.Server.Features.TarIndexCache       (initTarIndexCacheFeature)
 import Distribution.Server.Features.Html                (initHtmlFeature)
 import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature, candidatesCoreResource, queryGetCandidateIndex)
@@ -151,6 +152,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initSitemapFeature env
     mkPackageFeedFeature    <- logStartup "package feed" $
                                initPackageFeedFeature env
+    mkNewBrowseFeature      <- logStartup "new browse" $
+                               initNewBrowseFeature env
 #endif
 
     loginfo verbosity "Initialising features, part 2"
@@ -324,6 +327,13 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                             usersFeature
                             tarIndexCacheFeature
 
+    browseFeature <- mkNewBrowseFeature
+                       coreFeature
+                       usersFeature
+                       tagsFeature
+                       listFeature
+                       searchFeature
+
 #endif
 
     -- The order of initialization above should be the same as
@@ -370,6 +380,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 #ifdef DEBUG
          , serverCrashFeature
 #endif
+         , browseFeature
          ]
 
     -- Run all post init hooks, now that everyone's gotten a chance to register
@@ -387,6 +398,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     logStartup feature action = do
       loginfo verbosity ("Initialising " ++ feature ++ " feature")
       logTiming verbosity ("Initialising " ++ feature ++ " feature done") action
+
 
 -- | Checkpoint a feature's persistent state to disk.
 featureCheckpoint :: HackageFeature -> IO ()
