@@ -15,7 +15,7 @@ import Data.Version (showVersion)
 import Network.HTTP hiding (user)
 import Network.URI
 import System.Directory
-import System.Exit (ExitCode(..))
+import System.Exit (ExitCode(..), die)
 import System.FilePath
 import System.IO
 import System.IO.Error
@@ -330,4 +330,3 @@ validate auth url = do
             forM_ (zip [1..] errs) $ \(i, err) ->
               putStrLn $ show (i :: Int) ++ ".\t" ++ err
   return body
-

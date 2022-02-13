@@ -22,6 +22,8 @@ import Network.HTTP hiding (user)
 
 import qualified Text.XML.Light as XML
 
+import System.Exit (die)
+
 import HttpUtils
 import Util
 
