@@ -1,0 +1,10 @@
+--- haskell-ci.yml.orig	2022-02-13 11:28:52.000000000 +0100
++++ haskell-ci.yml	2022-02-13 11:29:22.000000000 +0100
+@@ -43,6 +43,7 @@
+       - name: apt
+         run: |
+           apt-get update
++          apt-get install -y --no-install-recommends libbrotli-dev
+           apt-get install -y --no-install-recommends gnupg ca-certificates dirmngr curl git software-properties-common libtinfo5
+           if [ "${{ matrix.setup-method }}" = ghcup ]; then
+             mkdir -p "$HOME/.ghcup/bin"

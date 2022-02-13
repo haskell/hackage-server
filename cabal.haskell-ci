@@ -1,3 +1,5 @@
+installed: +all -Cabal
+
 -- -- irc-channels works with GHA, but why send to a channel 
 -- -- when one can subscribe to github notifications?
 -- irc-channels: irc.libera.chat#hackage
@@ -8,3 +10,6 @@
 
 -- Use Ubuntu 20.04
 distribution: focal
+
+-- No effect (haskell-ci 1.14.1):
+-- haddock: True
