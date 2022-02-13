@@ -199,6 +199,9 @@ jobs:
         run: |
           cd ${PKGDIR_hackage_server} || false
           ${CABAL} -vnormal check
+      - name: haddock
+        run: |
+          $CABAL v2-haddock $ARG_COMPILER --with-haddock $HADDOCK $ARG_TESTS $ARG_BENCH all
       - name: unconstrained build
         run: |
           rm -f cabal.project.local

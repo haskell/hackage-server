@@ -1,5 +1,5 @@
 --- haskell-ci.yml.orig	2022-02-13 11:28:52.000000000 +0100
-+++ haskell-ci.yml	2022-02-13 11:29:22.000000000 +0100
++++ haskell-ci.yml	2022-02-13 11:37:48.000000000 +0100
 @@ -43,6 +43,7 @@
        - name: apt
          run: |
@@ -8,3 +8,13 @@
            apt-get install -y --no-install-recommends gnupg ca-certificates dirmngr curl git software-properties-common libtinfo5
            if [ "${{ matrix.setup-method }}" = ghcup ]; then
              mkdir -p "$HOME/.ghcup/bin"
+@@ -198,6 +199,9 @@
+         run: |
+           cd ${PKGDIR_hackage_server} || false
+           ${CABAL} -vnormal check
++      - name: haddock
++        run: |
++          $CABAL v2-haddock $ARG_COMPILER --with-haddock $HADDOCK $ARG_TESTS $ARG_BENCH all
+       - name: unconstrained build
+         run: |
+           rm -f cabal.project.local
