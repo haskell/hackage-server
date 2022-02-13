@@ -9,9 +9,26 @@ html {
   height: 100%;
 }
 
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #333;
+    color: #fefefe;
+  }
+  pre {
+      background-color: black;
+  }
+}
+@media (prefers-color-scheme: light) {
+  body {
+    background: #fefefe;
+    color: #333;
+  }
+  pre {
+      background-color: white;
+  }
+}
+
 body {
-  background: #fefefe;
-  color: #333;
   text-align: left;
   min-height: 100vh;
   position: relative;
@@ -197,7 +214,6 @@ ul.links li a, ul.links li form {
 pre {
   padding: 0.5rem 1rem;
   margin: 1em 0;
-  background-color: #f7f7f7;
   overflow: auto;
 }
 
