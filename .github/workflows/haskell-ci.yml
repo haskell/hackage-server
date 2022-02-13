@@ -17,40 +17,13 @@ on:
   - push
   - pull_request
 jobs:
-  irc:
-    name: Haskell-CI (IRC notification)
-    runs-on: ubuntu-18.04
-    needs:
-      - linux
-    if: ${{ always() }}
-    timeout-minutes:
-      10
-    strategy:
-      fail-fast: false
-    steps:
-      - name: IRC success notification (irc.libera.chat#hackage)
-        uses: Gottox/irc-message-action@v1.1
-        if: needs.linux.result == 'success'
-        with:
-          channel: "#hackage"
-          message: "\x0313hackage-server\x03/\x0306${{ github.ref }}\x03 \x0314${{ github.sha }}\x03 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} The build succeeded."
-          nickname: github-actions
-          server: irc.libera.chat
-      - name: IRC failure notification (irc.libera.chat#hackage)
-        uses: Gottox/irc-message-action@v1.1
-        if: needs.linux.result != 'success'
-        with:
-          channel: "#hackage"
-          message: "\x0313hackage-server\x03/\x0306${{ github.ref }}\x03 \x0314${{ github.sha }}\x03 https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} The build failed."
-          nickname: github-actions
-          server: irc.libera.chat
   linux:
     name: Haskell-CI - Linux - ${{ matrix.compiler }}
     runs-on: ubuntu-18.04
     timeout-minutes:
       60
     container:
-      image: buildpack-deps:bionic
+      image: buildpack-deps:focal
     continue-on-error: ${{ matrix.allow-failure }}
     strategy:
       matrix:
@@ -70,6 +43,7 @@ jobs:
       - name: apt
         run: |
           apt-get update
+          apt-get install -y --no-install-recommends libbrotli-dev
           apt-get install -y --no-install-recommends gnupg ca-certificates dirmngr curl git software-properties-common libtinfo5
           if [ "${{ matrix.setup-method }}" = ghcup ]; then
             mkdir -p "$HOME/.ghcup/bin"
