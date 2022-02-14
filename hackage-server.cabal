@@ -130,6 +130,9 @@ common defaults
   if impl(ghc >= 8.2)
     ghc-options: -Werror=incomplete-patterns -Werror=missing-methods
 
+  if impl(ghc >= 8.10)
+    ghc-options: -Wno-unused-record-wildcards
+
   other-extensions: CPP, TemplateHaskell
 
 
