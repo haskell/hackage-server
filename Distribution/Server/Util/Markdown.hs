@@ -28,6 +28,13 @@ import System.FilePath.Posix  (takeExtension)
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 import qualified Text.XHtml.Strict as XHtml
 
+-- Set up doctest to deal with bytestring literals.
+-- Need to import a suitable @instance IsString@ for @ByteString@.
+
+-- $setup
+-- >>> :set -XOverloadedStrings
+-- >>> import Data.ByteString.Lazy.Char8 ()
+
 -- HHtml wraps Html, and mostly behaves the same, except that
 -- relative links in images and urls have "src/" prepended.
 newtype HHtml a = HHtml { unHHtml :: Html a }
@@ -104,6 +111,15 @@ adjustRelativeLink url
   | otherwise = url
 
 -- | Render markdown to HTML.
+--
+-- >>> renderMarkdown "test" "Please send bug reports to hackage-server@gmail.com."
+-- <p>Please send bug reports to <a href="mailto:hackage-server@gmail.com">hackage-server@gmail.com</a>.</p>
+-- <BLANKLINE>
+--
+-- >>> renderMarkdown "test" "Published to http://hackage.haskell.org/foo3/bar."
+-- <p>Published to <a href="http://hackage.haskell.org/foo3/bar">http://hackage.haskell.org/foo3/bar</a>.</p>
+-- <BLANKLINE>
+--
 renderMarkdown
   :: String         -- ^ Name or path of input.
   -> BS.ByteString  -- ^ Commonmark text input.
@@ -111,6 +127,11 @@ renderMarkdown
 renderMarkdown = renderMarkdown' (renderHtml :: Html () -> TL.Text)
 
 -- | Render markdown to HTML, prefixing relative links with @src/@.
+--
+-- >>> renderMarkdownRel "test" "See [world file](world.txt)."
+-- <p>See <a href="src/world.txt">world file</a>.</p>
+-- <BLANKLINE>
+--
 renderMarkdownRel
   :: String         -- ^ Name or path of input.
   -> BS.ByteString  -- ^ Commonmark text input.
