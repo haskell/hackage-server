@@ -561,3 +561,15 @@ test-suite HashTests
       -- component-specific dependencies
     , tasty       ^>= 1.4
     , tasty-hunit ^>= 0.10
+
+test-suite DocTests
+  import:         test-defaults
+
+  type:           exitcode-stdio-1.0
+  main-is:        DocTestMain.hs
+
+  build-depends:  doctest ^>= 0.20
+  build-tool-depends:
+    doctest-driver-gen:doctest-driver-gen
+
+  ghc-options:    -with-rtsopts=-N
