@@ -19,9 +19,7 @@ import Text.XHtml
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Format
-         ( formatTime )
-import Data.Time.Locale.Compat
-         ( defaultTimeLocale )
+         ( defaultTimeLocale, formatTime )
 
 adminLogPage :: Users -> [(UTCTime, UserId, String, UserId, String, String)] -> Html
 adminLogPage users entries = hackagePage "adminstrator actions log" docBody

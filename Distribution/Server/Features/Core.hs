@@ -28,8 +28,7 @@ import qualified Data.Foldable                                      as Foldable
 import qualified Data.HashMap.Strict                                as HashMap
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
-import           Data.Time.Format                                   (formatTime)
-import           Data.Time.Locale.Compat                            (defaultTimeLocale)
+import           Data.Time.Format                                   (defaultTimeLocale, formatTime)
 import qualified Data.Vector                                        as Vec
 
 -- hackage

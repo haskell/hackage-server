@@ -35,8 +35,7 @@ import qualified Text.XHtml.Strict as XHtml
 import Data.Maybe               (maybeToList, fromMaybe, isJust)
 import Data.List                (intersperse)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
-import Data.Time.Locale.Compat  (defaultTimeLocale)
-import Data.Time.Format         (formatTime)
+import Data.Time.Format         (defaultTimeLocale, formatTime)
 
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T

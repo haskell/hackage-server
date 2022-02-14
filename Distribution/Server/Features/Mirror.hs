@@ -30,8 +30,7 @@ import Distribution.Parsec (showPError, showPWarning)
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.List.NonEmpty as NE
 import Data.Time.Clock (getCurrentTime)
-import Data.Time.Format (formatTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
+import Data.Time.Format (defaultTimeLocale, formatTime)
 import qualified Distribution.Server.Util.GZip as GZip
 
 import Distribution.Package

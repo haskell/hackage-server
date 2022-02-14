@@ -12,8 +12,7 @@ import Distribution.Server.Features.PackageCandidates
 import Distribution.Text (display)
 import Data.List (intersperse, intercalate)
 import Data.Set (Set)
-import Data.Time.Locale.Compat  (defaultTimeLocale)
-import Data.Time.Format         (formatTime)
+import Data.Time.Format  (defaultTimeLocale, formatTime)
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Pages.Util (packageType)
 import Distribution.Package

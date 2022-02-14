@@ -41,7 +41,7 @@ import qualified Distribution.Server.Util.GZip as GZip
 
 import System.Environment
          ( getArgs, getProgName )
-import Data.Time.Locale.Compat
+import Data.Time.Format
          ( defaultTimeLocale )
 import System.Exit
          ( exitWith, ExitCode(..) )
