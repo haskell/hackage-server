@@ -34,7 +34,6 @@ import Control.Monad (liftM, forM, unless)
 import System.FilePath
 import System.Directory
 import System.Posix.Files as Posix (createLink)
-import Data.Time.Format (defaultTimeLocale)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Time
