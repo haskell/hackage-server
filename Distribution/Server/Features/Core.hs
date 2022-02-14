@@ -745,12 +745,12 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
         Nothing -> errNotFound "Package revision not found"
                      [MText "Cannot parse revision, or revision out of range."]
-    
-    
+
+
     deauth :: DynamicPath -> ServerPartE Response
     deauth _ = do
-      return $ (toResponse ("<script>window.location='/'</script>"::String)) { 
-          rsCode = 401 
+      return $ (toResponse ("<script>window.location='/'</script>"::String)) {
+          rsCode = 401
         , rsHeaders   = mkHeaders ([("Content-Type",  "text/html")])
       }
 

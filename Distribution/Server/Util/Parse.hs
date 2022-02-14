@@ -21,12 +21,12 @@ int = do
     else do rest <- Parse.munch Char.isDigit
             return (read (first : rest))
 
--- | Ignore a Unicode byte order mark (BOM) at the beginning of the input        
---                                                                               
--- (Also in Distribution.Simple.Utils, but not exported)                         
-ignoreBOM :: String -> String                                                    
-ignoreBOM ('\xFEFF':string) = string   
-ignoreBOM string            = string                                             
+-- | Ignore a Unicode byte order mark (BOM) at the beginning of the input
+--
+-- (Also in Distribution.Simple.Utils, but not exported)
+ignoreBOM :: String -> String
+ignoreBOM ('\xFEFF':string) = string
+ignoreBOM string            = string
 
 unpackUTF8 :: ByteString -> String
 unpackUTF8 = ignoreBOM . Text.unpack . Text.decodeUtf8With Text.lenientDecode

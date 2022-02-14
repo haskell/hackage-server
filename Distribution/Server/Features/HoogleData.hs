@@ -227,7 +227,7 @@ hoogleDataFeature docsUpdatedState hoogleBundleUpdateJob
               | entry <- oldEntries
               , pkgid <- maybeToList (entryPkgId entry)
               , pkgid `Map.member` reusePkgs ]
-      
+
             -- Write out the new/changed ones
             sequence_
               [ withFile doctarfile ReadMode $ \hDocTar -> do
@@ -245,7 +245,7 @@ hoogleDataFeature docsUpdatedState hoogleBundleUpdateJob
            case lookupPkgDocHoogleFile pkgid doctarindex of
              Nothing     -> return Nothing
              Just offset -> return (Just (doctarblobid, offset))
-      | otherwise = return Nothing    
+      | otherwise = return Nothing
 
 fromSet :: Ord a => Set a -> Map a ()
 fromSet = Map.fromAscList . map (\x -> (x, ())) . Set.toAscList

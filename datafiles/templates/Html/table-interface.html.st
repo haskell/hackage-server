@@ -22,8 +22,8 @@
                         <th><div style="width:50px"><span title="(30 days)">DLs</span></div></th>
                         <th><div style="width:50px"><span title="(0-3)">Rating</span></div></th>
                         <th><div style="min-width:160px">Description</div></th>
-			<th><div style="width:140px">Tags</div></th>
-			<th><div style="width:80px">Last U/L</th>
+                        <th><div style="width:140px">Tags</div></th>
+                        <th><div style="width:80px">Last U/L</th>
                         <th><div style="width:100px">Maintainer</div></th>
                     </tr>
                 </thead>
@@ -59,12 +59,12 @@
                     "bProcessing": true,
                     "bDeferRender": true,
                     "autoWidth": false,
-		    "pageLength":50,
+                    "pageLength":50,
                     "language": {
                           "search": "Filter:"
                      },
                     "columnDefs": [
-			{ type: "package", "targets": [0] },
+                        { type: "package", "targets": [0] },
                         { className: "dt-body-right", "targets": [1, 2, 3 ] }
                      ]
                 });

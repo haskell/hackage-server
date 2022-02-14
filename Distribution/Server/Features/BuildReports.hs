@@ -133,7 +133,7 @@ buildReportsFeature name
               , resourcePost  = [ ("",      submitBuildReport) ]
               , resourcePut   = [ ("json",    putAllReports) ]
               }
-            
+
           , reportsReset = (extendResourcePath "/reports/reset/" corePackagePage) {
                 resourceDesc  = [ (GET, "Reset fail count and trigger rebuild")
                                  ]
@@ -195,7 +195,7 @@ buildReportsFeature name
         file <- liftIO $ BlobStorage.fetch store blobId
         return $ Resource.BuildLog file
 
-    
+
     pkgReportDetails :: MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails--(PackageIdentifier, Bool, Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
     pkgReportDetails (pkgid, docs) = do
       failCnt   <- queryState reportsState $ LookupFailCount pkgid
@@ -206,7 +206,7 @@ buildReportsFeature name
           let (CompilerId _ vrsn) = compiler brp
           return (time brp, Just vrsn)
       return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId)
-    
+
     queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe BuildReport, Maybe BuildCovg)
     queryLastReportStats pkgid = do
       rpt <- queryState reportsState $ LookupLatestReport pkgid
@@ -325,9 +325,9 @@ buildReportsFeature name
           logBody     = BuildReport.logContent buildFiles
           covgBody    = BuildReport.coverageContent buildFiles
           failStatus  = BuildReport.buildFail buildFiles
-      
+
       updateState reportsState $ SetFailStatus pkgid failStatus
-        
+
       -- Upload BuildReport
       case BuildReport.parse $ toStrict $ fromString $ fromMaybe "" reportBody of
           Left err -> errBadRequest "Error submitting report" [MText err]
@@ -337,7 +337,7 @@ buildReportsFeature name
                   guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
               report'   <- liftIO $ BuildReport.affixTimestamp report
               logBlob   <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) logBody
-              reportId  <- updateState reportsState $ 
+              reportId  <- updateState reportsState $
                                   AddRptLogCovg pkgid (report', (fmap BuildLog logBlob), (fmap BuildReport.parseCovg covgBody))
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()

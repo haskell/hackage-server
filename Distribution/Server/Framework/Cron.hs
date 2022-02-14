@@ -86,7 +86,7 @@ nextJobTime now WeeklyJobFrequency = now {
                                         utctDay     = sundayAfter (utctDay now),
                                         utctDayTime = 0
                                      }
-nextJobTime now (TestJobFrequency sec) = addUTCTime sec now 
+nextJobTime now (TestJobFrequency sec) = addUTCTime sec now
 
 disarmTimer :: CronState -> IO ()
 disarmTimer CronState{timerThread} =
@@ -123,7 +123,7 @@ runSingleJob verbosity job = do
     finished = "cron: finished job '" ++ cronJobName job ++ "'"
 
     failed :: SomeException -> IO ()
-    failed e = lognotice verbosity $ 
+    failed e = lognotice verbosity $
                  "cron: exception in job '" ++ cronJobName job
                   ++ "': " ++ show e
 

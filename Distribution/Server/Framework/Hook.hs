@@ -23,11 +23,11 @@ newHook = fmap Hook $ newIORef []
 -- nasty bugs.
 registerHook :: Hook a b -> (a -> IO b) -> IO ()
 registerHook (Hook ref) action =
-  atomicModifyIORef ref (\actions -> (action:actions, ())) 
+  atomicModifyIORef ref (\actions -> (action:actions, ()))
 
 registerHookJust :: Hook a () -> (a -> Maybe b) -> (b -> IO ()) -> IO ()
 registerHookJust (Hook ref) predicate action =
-    atomicModifyIORef ref (\actions -> (action':actions, ())) 
+    atomicModifyIORef ref (\actions -> (action':actions, ()))
   where
     action' x = maybe (return ()) action (predicate x)
 

@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.BuildReports.State where
 
-import Distribution.Server.Features.BuildReports.BuildReports 
+import Distribution.Server.Features.BuildReports.BuildReports
                 (BuildReportId, BuildLog, BuildReport, BuildReports,BuildCovg, BuildStatus)
 import qualified Distribution.Server.Features.BuildReports.BuildReports as BuildReports
 
@@ -56,7 +56,7 @@ addRptLogCovg pkgid report = do
     buildReports <- State.get
     let (reports, reportId) = BuildReports.addRptLogCovg pkgid report buildReports
     State.put reports
-    return reportId 
+    return reportId
 
 lookupReportCovg :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg))
 lookupReportCovg pkgid reportId = asks (BuildReports.lookupReportCovg pkgid reportId)

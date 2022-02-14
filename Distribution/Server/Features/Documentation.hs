@@ -201,7 +201,7 @@ documentationFeature name
       , packageDocsWholeUri = \format pkgid ->
           renderResource (packageDocsWhole r) [display pkgid, format]
       }
-      
+
     serveDocumentationStats :: DynamicPath -> ServerPartE Response
     serveDocumentationStats _dpath = do
         hasDoc        <- optional (look "doc")
@@ -209,13 +209,13 @@ documentationFeature name
         selectedPkgs' <- optional (look "pkgs")
         ghcid         <- optional (look "ghcid")
         pkgs          <- mapParaM queryHasDocumentation =<< liftIO getPackages
-        
-        pkgs' <- mapM pkgReportDetails 
-                  $ filter (matchDoc hasDoc) 
+
+        pkgs' <- mapM pkgReportDetails
+                  $ filter (matchDoc hasDoc)
                   $ filter (isSelected $ parsePkgs $ fromMaybe "" selectedPkgs') pkgs
 
-        return . toResponse . toJSON 
-                    $ filter (isGHCok $ parseVersion' ghcid)  
+        return . toResponse . toJSON
+                    $ filter (isGHCok $ parseVersion' ghcid)
                     $ filter (isfailCntOk $ fmap read failCnt') pkgs'
       where
         parseVersion' :: Maybe String -> Maybe Version
@@ -253,7 +253,7 @@ documentationFeature name
                               Nothing   -> True
                               Just ver' -> ver' < ver
 
-               
+
 
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =

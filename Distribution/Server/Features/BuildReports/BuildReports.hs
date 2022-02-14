@@ -109,7 +109,7 @@ lookupReport :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport
 lookupReport pkgid reportId buildReports = remCvg.Map.lookup reportId . reports =<< Map.lookup pkgid (reportsIndex buildReports)
     where
         remCvg Nothing = Nothing
-        remCvg (Just (brpt,blog,_)) = Just (brpt,blog) 
+        remCvg (Just (brpt,blog,_)) = Just (brpt,blog)
 
 lookupPackageReports :: PackageId -> BuildReports -> [(BuildReportId, (BuildReport, Maybe BuildLog))]
 lookupPackageReports pkgid buildReports = case Map.lookup pkgid (reportsIndex buildReports) of
@@ -125,7 +125,7 @@ addReport pkgid (brpt,blog) buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
-                                      , nextReportId = incrementReportId reportId 
+                                      , nextReportId = incrementReportId reportId
                                       , buildStatus = buildStatus pkgReports }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
@@ -133,7 +133,7 @@ unsafeSetReport :: PackageId -> BuildReportId -> (BuildReport, Maybe BuildLog) -
 unsafeSetReport pkgid reportId (brpt,blog) buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
-                                      , nextReportId = max (incrementReportId reportId) (nextReportId pkgReports) 
+                                      , nextReportId = max (incrementReportId reportId) (nextReportId pkgReports)
                                       , buildStatus = buildStatus pkgReports }
     in buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
@@ -166,7 +166,7 @@ lookupReportCovg :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildRe
 lookupReportCovg pkgid reportId buildReports = Map.lookup reportId . reports =<< Map.lookup pkgid (reportsIndex buildReports)
 
 setFailStatus :: PackageId -> Bool -> BuildReports -> BuildReports
-setFailStatus pkgid fStatus buildReports = 
+setFailStatus pkgid fStatus buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         pkgReports' = PkgBuildReports { reports = (reports pkgReports)
                                       , nextReportId = (nextReportId pkgReports)
@@ -196,7 +196,7 @@ lookupFailCount pkgid buildReports = do
 lookupLatestReport :: PackageId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg)
 lookupLatestReport pkgid buildReports = do
   rp <- Map.lookup pkgid (reportsIndex buildReports)
-  let rs = reports rp 
+  let rs = reports rp
   a  <- if Map.null rs
           then Nothing
           else Just $ fst $ Map.findMax rs
@@ -240,7 +240,7 @@ instance MemSize PkgBuildReports where
     memSize (PkgBuildReports a b c) = memSize3 a b c
 
 -------------------
--- Old V2 SafeCopy versions 
+-- Old V2 SafeCopy versions
 --
 data PkgBuildReports_v2 = PkgBuildReports_v2 {
     reports_v2      :: !(Map BuildReportId (BuildReport, Maybe BuildLog)),

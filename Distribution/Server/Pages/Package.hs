@@ -251,13 +251,13 @@ renderPackageFlags render docURL =
       let (manualFlags, autoFlags) = partition flagManual $ rendFlags render
           manualSection = whenNotNull manualFlags
                           [h3 << "Manual Flags", flagsTable ["manual-flags"] manualFlags]
-          autoSection = whenNotNull autoFlags 
+          autoSection = whenNotNull autoFlags
                         [collapsible "Automatic Flags" (flagsTable ["automatic-flags"] autoFlags)]
           combined = manualSection ++ autoSection
           flagsSection = whenNotNull combined
                          $ [h2 << "Flags"] ++ combined ++  [tip]
       in  flagsSection
-  where 
+  where
         tip =
           paragraph ! [theclass "tip"] <<
           [thespan << "Use "

@@ -172,18 +172,18 @@
 
         <tr>
           <th> Rating</th>
-	  <td>$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
-	  <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Bayesian_average">Bayesian average</a>]</span></td>
-	</tr>
+          <td>$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
+          <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Bayesian_average">Bayesian average</a>]</span></td>
+        </tr>
 
-	<tr>
-	  <th>Your&nbsp;Rating</th>
-	  <td>
+        <tr>
+          <th>Your&nbsp;Rating</th>
+          <td>
             <ul class="star-rating">
               <li class="star uncool" id="1">&lambda;</li>
               <li class="star uncool" id="2">&lambda;</li>
               <li class="star uncool" id="3">&lambda;</li>
-	    </ul>
+            </ul>
           $if(userRating)$
             <input type="hidden" id="userRating" value="$userRating$">
             [<a href="" class="clear-rating">clear rating</a>]

@@ -245,4 +245,3 @@ revSummary = do
 sortedRevSummary :: MonadIO m => ReverseFeature -> m [(PackageName, Int, Int)]
 sortedRevSummary revs = Cache.getCache $ reverseTopCache revs
 
-

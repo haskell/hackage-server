@@ -141,9 +141,9 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
         Left _ -> do
           let message = [MText "Package ", MLink pkgName url, MText " has no changelog file in source distribution. "]
           let home = homepage $ packageDescription $ pkgDesc pkg
-          if ST.null home then 
+          if ST.null home then
             errNotFound "Changelog not found" message
-          else 
+          else
             let homeUrl = ST.fromShortText home in
             errNotFound "Changelog not found" (message ++ [MText "You may find one at the package home page: ", MLink homeUrl homeUrl])
         Right (tarfile, etag, offset, filename) -> do
