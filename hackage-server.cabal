@@ -138,6 +138,7 @@ common defaults
 
 library lib-server
   import: defaults
+  hs-source-dirs:   src
 
   -- TODO: move this into a 'library lib-client';
   --       needs minor source-tree restructuring
