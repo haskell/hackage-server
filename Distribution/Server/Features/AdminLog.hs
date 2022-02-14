@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, BangPatterns,
              GeneralizedNewtypeDeriving, NamedFieldPuns, RecordWildCards,
-             PatternGuards #-}
+             PatternGuards, RankNTypes #-}
 
 module Distribution.Server.Features.AdminLog where
 
@@ -77,6 +77,7 @@ makeAcidic ''AdminLog ['getAdminLog
 
 data AdminLogFeature = AdminLogFeature {
       adminLogFeatureInterface :: HackageFeature
+    , queryGetAdminLog :: forall m. MonadIO m => m AdminLog
 }
 
 instance IsHackageFeature AdminLogFeature where
@@ -116,6 +117,9 @@ adminLogFeature UserFeature{..} adminLogState
         resourceDesc = [(GET, "Full list of group additions and removals")],
         resourceGet  = [("html", serveAdminLogGet)]
       }
+
+    queryGetAdminLog :: MonadIO m => m AdminLog
+    queryGetAdminLog = queryState adminLogState GetAdminLog
 
     serveAdminLogGet _ = do
       aLog  <- queryState adminLogState GetAdminLog

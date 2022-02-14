@@ -46,6 +46,7 @@ import Distribution.Server.Features.AdminLog            (initAdminLogFeature)
 import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
 import Distribution.Server.Features.Votes               (initVotesFeature)
 import Distribution.Server.Features.Sitemap             (initSitemapFeature)
+import Distribution.Server.Features.UserNotify          (initUserNotifyFeature)
 import Distribution.Server.Features.PackageFeed         (initPackageFeedFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
@@ -149,6 +150,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initAdminLogFeature env
     mkSitemapFeature        <- logStartup "sitemap" $
                                initSitemapFeature env
+    mkUserNotifyFeature     <- logStartup "user notify" $
+                               initUserNotifyFeature env
     mkPackageFeedFeature    <- logStartup "package feed" $
                                initPackageFeedFeature env
 #endif
@@ -319,6 +322,13 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                         documentationCoreFeature
                         tagsFeature
 
+    userNotifyFeature <- mkUserNotifyFeature
+                           usersFeature
+                           coreFeature
+                           uploadFeature
+                           adminLogFeature
+                           userDetailsFeature
+
     packageFeedFeature <- mkPackageFeedFeature
                             coreFeature
                             usersFeature
@@ -363,6 +373,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface votesFeature
          , getFeatureInterface adminLogFeature
          , getFeatureInterface siteMapFeature
+         , getFeatureInterface userNotifyFeature
          , getFeatureInterface packageFeedFeature
 #endif
          , staticFilesFeature
