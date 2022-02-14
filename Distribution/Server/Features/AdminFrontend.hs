@@ -211,7 +211,7 @@ adminFrontendFeature _env templates
     resetRequestToTemplate ResetInfo {nonceTimestamp, resetUserId} uinfo =
       templateDict
         [ templateVal "timestamp" nonceTimestamp
-        , templateVal "account" (accountBasicInfoToTemplate resetUserId uinfo)   
+        , templateVal "account" (accountBasicInfoToTemplate resetUserId uinfo)
         ]
     resetRequestToTemplate _ _ = templateDict []
 
@@ -225,7 +225,7 @@ adminFrontendFeature _env templates
         mudetails <- queryUserDetails uid
         resetInfo <- lookupPasswordReset uid <$> queryAllSignupResetInfo
         mlegacy   <- lookupUserLegacyPasswd uid <$> queryLegacyPasswds
-        
+
         ok $ toResponse $ template
           [ "account" $= accountBasicInfoToTemplate uid uinfo
           , "details" $= accountDetailsToTemplate uinfo mudetails
@@ -276,7 +276,7 @@ adminFrontendFeature _env templates
                                     (Nothing : map Just [minBound..maxBound])
                                      Nothing)
         ]
- 
+
     showAccountKind AccountKindRealUser = "RealUser"
     showAccountKind AccountKindSpecial  = "Special"
 

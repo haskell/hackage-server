@@ -182,7 +182,7 @@ updateHistory (InMemStats day perPkg) (OnDiskStats (NCM _ m)) =
       ]
 
     applyUpdates :: [(PackageId, Int)] -> OnDiskPerPkg
-    applyUpdates pkgs = foldr (.) id 
+    applyUpdates pkgs = foldr (.) id
                           [ cmInsert (day, packageVersion pkgId) count
                           | (pkgId, count) <- pkgs ]
                           cmEmpty

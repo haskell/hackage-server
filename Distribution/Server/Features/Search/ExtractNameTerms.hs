@@ -93,7 +93,7 @@ forEachPartAndWhole parts = do
   case parts t of
     []             -> return ()
     ts             -> forEach (t:ts) >>= put
-  
+
 
 splitDot :: String -> [String]
 splitDot = split (dropBlanks $ dropDelims $ whenElt (=='.'))

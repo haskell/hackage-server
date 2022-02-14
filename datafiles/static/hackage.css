@@ -24,11 +24,11 @@ body {
 }
 
 table, ul {
-	line-height: 1.35rem;
+  line-height: 1.35rem;
 }
 
 ul li + li {
-	margin-top: 0.2rem;
+  margin-top: 0.2rem;
 }
 
 ul + p {
@@ -76,12 +76,12 @@ body, button {
   font: 400 17px/1.43 'PT Sans',
     /* Fallback Font Stack */
     -apple-system,
-	  BlinkMacSystemFont,
+    BlinkMacSystemFont,
     'Segoe UI',
-	  Roboto,
-	  Oxygen-Sans,
-	  Cantarell,
-	  'Helvetica Neue',
+    Roboto,
+    Oxygen-Sans,
+    Cantarell,
+    'Helvetica Neue',
     sans-serif;
   *font-size: medium; /* for IE */
   *font:x-small; /* for IE in quirks mode */
@@ -101,13 +101,13 @@ select, input, button, textarea {
 }
 
 table {
-	margin: 0.8em 0;
-	font-size:inherit;
-	font:100%;
+  margin: 0.8em 0;
+  font-size:inherit;
+  font:100%;
 }
 
 pre, code, kbd, samp, .src {
-	font-family: monospace;
+  font-family: monospace;
 }
 
 .links, .link {
@@ -494,7 +494,7 @@ table.info {
 }
 
 .info th {
-	padding: 0 1em 0 0;
+  padding: 0 1em 0 0;
 }
 
 div#style-menu-holder {
@@ -516,16 +516,16 @@ div#style-menu-holder {
 }
 
 #style-menu li {
-	display: list-item;
-	border-style: none;
-	margin: 0;
-	padding: 0;
-	color: #000;
-	list-style-type: none;
+  display: list-item;
+  border-style: none;
+  margin: 0;
+  padding: 0;
+  color: #000;
+  list-style-type: none;
 }
 
 #style-menu li + li {
-	border-top: 1px solid #919191;
+  border-top: 1px solid #919191;
 }
 
 #style-menu a {
@@ -555,10 +555,10 @@ ul.links li form {
   display: inline-block;
 }
 ul.links li form input {
-	border:0px;
+  border:0px;
   padding:1px;
   margin: 0px;
-	width: 8em;
+  width: 8em;
   border-radius: 3px;
   background-color: rgba(255,255,255, 0.2);
   color: #fff;
@@ -658,7 +658,7 @@ ul.links li form button {
 #interface h3 + div.top,
 #interface h4 + div.top,
 #interface h5 + div.top {
- 	margin-top: 1em;
+   margin-top: 1em;
 }
 
 #interface .src .link {
@@ -798,19 +798,19 @@ ul.links li form button {
 }
 
 #alphabet ul {
-	list-style: none;
-	padding: 0;
-	margin: 0.5em 0 0;
-	text-align: center;
+  list-style: none;
+  padding: 0;
+  margin: 0.5em 0 0;
+  text-align: center;
 }
 
 #alphabet li {
-	display: inline;
-	margin: 0 0.25em;
+  display: inline;
+  margin: 0 0.25em;
 }
 
 #alphabet a {
-	font-weight: bold;
+  font-weight: bold;
 }
 
 #index .caption,

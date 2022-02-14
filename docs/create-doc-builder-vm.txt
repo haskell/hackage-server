@@ -4,7 +4,7 @@
   sudo apt-get install debootstrap qemu-kvm virtinst libvirt-bin
 
 (Notes:
-    On Debian 5.0 "lenny":  use kvm instead of qemu-kvm, install debootstrap 
+    On Debian 5.0 "lenny":  use kvm instead of qemu-kvm, install debootstrap
     from the latest Debian stable release)
 
 

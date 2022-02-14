@@ -32,12 +32,12 @@ addToForest hasdocs' ss [] = mkSubTree hasdocs' ss
 addToForest hasdocs' s1ss@(s1:ss) (t@(Node s2 isModule hasdocs subs) : ts) =
   case compare s1 s2 of
     GT -> t : addToForest hasdocs' s1ss ts
-    EQ -> Node s2 (isModule || null ss) (hasdocs || null ss && hasdocs') 
+    EQ -> Node s2 (isModule || null ss) (hasdocs || null ss && hasdocs')
                   (addToForest hasdocs' ss subs) : ts
     LT -> mkSubTree hasdocs' s1ss ++ t : ts
 
 mkSubTree :: Bool -> [String] -> ModuleForest
 mkSubTree _       []     = []
-mkSubTree hasdocs (s:ss) = [Node s (null ss) (null ss && hasdocs) 
+mkSubTree hasdocs (s:ss) = [Node s (null ss) (null ss && hasdocs)
                                    (mkSubTree hasdocs ss)]
 
