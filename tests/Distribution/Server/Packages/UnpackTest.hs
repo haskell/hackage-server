@@ -24,5 +24,5 @@ testPermissions :: FilePath ->  -- ^ .tar.gz file to test
 testPermissions tarPath mangler = do
     entries <- return . Tar.read . GZip.decompress =<< BL.readFile tarPath
     let mappedEntries = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . FormatError) entries
-    when ((checkEntries mangler mappedEntries) /= checkUselessPermissions mappedEntries) $
+    when (checkEntries mangler mappedEntries /= checkUselessPermissions mappedEntries) $
         assertFailure ("Permissions check did not match expected for: " ++ tarPath)
