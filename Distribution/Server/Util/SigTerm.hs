@@ -1,7 +1,4 @@
 {-# LANGUAGE CPP #-}
-#if !(MIN_VERSION_base(4,6,0))
-{-# LANGUAGE MagicHash, UnboxedTuples #-}
-#endif
 
 module Distribution.Server.Util.SigTerm (onSigTermCleanShutdown) where
 
@@ -14,21 +11,10 @@ import Control.Exception
          ( AsyncException(UserInterrupt), throwTo )
 import Control.Concurrent
          ( myThreadId )
-#if MIN_VERSION_base(4,6,0)
 import Control.Concurrent
          ( ThreadId, mkWeakThreadId )
 import System.Mem.Weak
          ( Weak )
-#else
-import GHC.Conc.Sync
-         ( ThreadId(..) )
-import GHC.Weak
-         ( Weak(..) )
-import GHC.IO
-         ( IO(IO) )
-import GHC.Exts
-         ( mkWeak#, unsafeCoerce# )
-#endif
 import System.Mem.Weak
          ( deRefWeak )
 
@@ -48,11 +34,3 @@ onSigTermCleanShutdown = do
       case mtid of
         Nothing  -> return ()
         Just tid -> throwTo tid UserInterrupt
-
-#if !(MIN_VERSION_base(4,6,0))
-mkWeakThreadId :: ThreadId -> IO (Weak ThreadId)
-mkWeakThreadId t@(ThreadId t#) = IO $ \s ->
-   case mkWeak# t# t (unsafeCoerce# 0#) s of
-      (# s1, w #) -> (# s1, Weak w #)
-#endif
-
