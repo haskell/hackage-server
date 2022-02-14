@@ -49,7 +49,7 @@ data ReverseFeature = ReverseFeature {
     reverseFeatureInterface :: HackageFeature,
 
     reverseResource :: ReverseResource,
-    reverseUpdateHook :: Hook (Map PackageName [Version] -> IO ()),
+    reverseUpdateHook :: Hook (Map PackageName [Version] -> IO ())
 }
 
 instance IsHackageFeature ReverseFeature where
