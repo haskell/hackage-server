@@ -63,8 +63,7 @@ import System.FilePath ((<.>), takeExtension)
 import qualified Data.Map as Map
 
 import Data.Time (UTCTime)
-import Data.Time.Format (formatTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
+import Data.Time.Format (defaultTimeLocale, formatTime)
 
 
 type RawTemplate = StringTemplate Builder

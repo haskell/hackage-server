@@ -50,8 +50,7 @@ import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
 import Data.List                (intersperse, intercalate, partition)
 import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
-import Data.Time.Locale.Compat  (defaultTimeLocale)
-import Data.Time.Format         (formatTime)
+import Data.Time.Format         (defaultTimeLocale, formatTime)
 
 import qualified Documentation.Haddock.Markup as Haddock
 

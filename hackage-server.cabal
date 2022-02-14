@@ -386,7 +386,6 @@ library lib-server
     , split                 ^>= 0.2
     , stm                   ^>= 2.5.0
     , tagged                ^>= 0.8.5
-    , time-locale-compat    ^>= 0.1.0.1
     , xhtml                 ^>= 3000.2
     , xmlgen                ^>= 0.6
     , xss-sanitize          ^>= 0.3.6
@@ -461,7 +460,6 @@ executable hackage-import
     , HTTP
     , async
     , csv
-    , time-locale-compat
 
 ----------------------------------------------------------------------------
 

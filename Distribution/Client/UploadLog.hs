@@ -43,9 +43,7 @@ import Data.Time.Clock
 import Data.Time.LocalTime
          ( ZonedTime, zonedTimeToUTC )
 import Data.Time.Format
-         ( formatTime )
-import Data.Time.Locale.Compat
-         ( defaultTimeLocale )
+         ( defaultTimeLocale, formatTime )
 import Data.List
          ( groupBy, nub )
 import qualified Data.Char as Char

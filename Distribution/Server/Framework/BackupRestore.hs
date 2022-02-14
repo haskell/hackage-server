@@ -55,7 +55,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
-import Data.Time.Locale.Compat (defaultTimeLocale)
+import Data.Time.Format (defaultTimeLocale)
 import Data.Typeable (typeOf)
 
 import Distribution.Parsec (Parsec(..))

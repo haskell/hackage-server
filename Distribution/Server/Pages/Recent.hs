@@ -33,9 +33,7 @@ import Network.URI
 import Data.Time.Clock
          ( UTCTime, addUTCTime )
 import Data.Time.Format
-         ( formatTime )
-import Data.Time.Locale.Compat
-         ( defaultTimeLocale )
+         ( defaultTimeLocale, formatTime )
 import Data.Maybe
          ( listToMaybe)
 
