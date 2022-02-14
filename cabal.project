@@ -50,9 +50,19 @@ constraints: foundation -none, cryptonite -none, cryptohash -none
 --   location: https://github.com/hvr/cabal-parsers.git
 --   tag: 893d128f7680bedafb472c4bd45b12a87ade9166
 
+----------------------------------------------------------------------------
+-- Tests
+
+-- Andreas, 2022-02-14, see https://github.com/haskell/cabal/issues/7889.
+-- For the doctest to work with `cabal v2-test` we need the environment file.
+-- This is produced by `cabal v2-build --write-ghc-environment-files=always`.
+-- ALT: start it with `cabal exec -- cabal v2-test` (but this is ugly).
+write-ghc-environment-files: always
+
 package hackage-server
 --   tests: True
---
+
+----------------------------------------------------------------------------
 -- Optional features
 --
 --   flags: +build-hackage-import

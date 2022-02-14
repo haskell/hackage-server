@@ -63,7 +63,7 @@ jobs:
 
     - name: Test
       run: |
-        cabal test --disable-optimization
+        cabal test --enable-tests --disable-optimization
 
     - name: Haddock
       run: |
