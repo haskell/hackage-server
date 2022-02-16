@@ -76,8 +76,22 @@ dd {
 }
 
 a { text-decoration: none; }
-a[href]:link { color: #9E358F; }
-a[href]:visited {color: #6F5F9C; }
+
+@media (prefers-color-scheme: dark) {
+  a[href]:link {
+    color: #9E358F;
+    filter: brightness(2.0);
+  }
+  a[href]:visited {
+    color: #6F5F9C;
+    filter: brightness(2.0);
+  }
+}
+@media (prefers-color-scheme: light) {
+  a[href]:link { color: #9E358F; }
+  a[href]:visited {color: #6F5F9C; }
+}
+
 a[href]:hover { text-decoration:underline; }
 
 /* @end */
@@ -159,9 +173,19 @@ pre, code, kbd, samp, .src {
 
 /* @group Common */
 
+@media (prefers-color-scheme: dark) {
+  .caption, h1, h2, h3, h4, h5, h6 {
+    color: #5E5184;
+    filter: brightness(2.0);
+  }
+}
+@media (prefers-color-scheme: light) {
+  .caption, h1, h2, h3, h4, h5, h6 {
+    color: #5E5184;
+  }
+}
 .caption, h1, h2, h3, h4, h5, h6 {
   font-weight: bold;
-  color: #5E5184;
   margin: 1.33em 0 0.7em 0;
   line-height: 1.05em;
 }
