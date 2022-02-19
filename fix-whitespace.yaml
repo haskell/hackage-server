@@ -40,6 +40,9 @@ included-files:
   - .dockerignore
   - .gitignore
   - LICENSE
+  - cabal.haskell-ci
+  - cabal.project
+  - cabal.project.local
   - "*.cabal"
   - "*.css"
   - "*.example"
