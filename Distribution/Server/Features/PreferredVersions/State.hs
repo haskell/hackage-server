@@ -64,10 +64,27 @@ partitionVersions info versions = if (not . isJust $ sumRange info) then (versio
             DeprecatedVersion -> (norm, v:depr, unpref)
             UnpreferredVersion -> (norm, depr, v:unpref)
         go [] = ([], [], [])
-------------------------------------------
-$(deriveSafeCopy 1 'extension ''PreferredVersions)
+
+
+data PreferredVersions_v0
+   = PreferredVersions_v0 (Map PackageName PreferredInfo)
+                          (Map PackageName [PackageName])
+
 $(deriveSafeCopy 0 'base ''PreferredInfo)
 $(deriveSafeCopy 0 'base ''VersionStatus)
+$(deriveSafeCopy 0 'base ''PreferredVersions_v0)
+
+instance Migrate PreferredVersions where
+    type MigrateFrom PreferredVersions = PreferredVersions_v0
+    migrate (PreferredVersions_v0 prefs deprs) =
+      PreferredVersions {
+        preferredMap  = prefs,
+        deprecatedMap = deprs,
+        migratedEphemeralPrefs = False
+      }
+
+------------------------------------------
+$(deriveSafeCopy 1 'extension ''PreferredVersions)
 
 instance MemSize PreferredVersions where
     memSize (PreferredVersions a b c) = memSize3 a b c
@@ -166,21 +183,6 @@ makeAcidic ''PreferredVersions ['setPreferredInfo
                                ,'setMigratedEphemeralPrefs
                                ]
 
-
-data PreferredVersions_v0
-   = PreferredVersions_v0 (Map PackageName PreferredInfo)
-                          (Map PackageName [PackageName])
-
-deriveSafeCopy 0 'base ''PreferredVersions_v0
-
-instance Migrate PreferredVersions where
-    type MigrateFrom PreferredVersions = PreferredVersions_v0
-    migrate (PreferredVersions_v0 prefs deprs) =
-      PreferredVersions {
-        preferredMap  = prefs,
-        deprecatedMap = deprs,
-        migratedEphemeralPrefs = False
-      }
 
 ---------------
 maybeBestVersion :: PreferredInfo -> [Version] -> Set Version -> Maybe (Version, Maybe VersionStatus)
