@@ -129,13 +129,19 @@ you can find these as the file names of the files created in
 `signed.roles.root.keyids`). An example `cabal` client configuration might look
 something like
 
-    remote-repo my-private-hackage
+    repository my-private-hackage
       url: http://example.com:8080/
       secure: True
       root-keys: 865cc6ce84231ccc990885b1addc92646b7377dd8bb920bdfe3be4d20c707796
                  dd86074061a8a6570348e489aae306b997ed3ccdf87d567260c4568f8ac2cbee
                  e4182227adac4f3d0f60c9e9392d720e07a8586e6f271ddcc1697e1eeab73390
       key-threshold: 2
+
+Note that if you elect to not use a secure client, the hackage server will not
+provide your client the most recent versions of packages from its index. The
+cabal-version:2.0 format packages are thus only available in the newer secure
+repository mode. See [Issue #4625](https://github.com/haskell/cabal/issues/4624)
+for further information.
 
 ## Running
 
