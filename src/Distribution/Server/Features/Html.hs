@@ -21,7 +21,6 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Votes
 import Distribution.Server.Features.Search
-import Distribution.Server.Features.Search as Search
 import Distribution.Server.Features.PreferredVersions
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.PackageContents (PackageContentsFeature(..))
@@ -68,9 +67,6 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import qualified Data.Text as T
-import Data.Array (Array, listArray)
-import qualified Data.Array as Array
-import qualified Data.Ix    as Ix
 import qualified Data.ByteString.Lazy.Char8 as BS (ByteString, pack)
 import qualified Network.URI as URI
 
@@ -301,7 +297,6 @@ htmlFeature env@ServerEnv{..}
                                       candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core upload user list tags templates
-    htmlSearch     = mkHtmlSearch     utilities core list names cacheBrowseTable templates
 
     htmlResources = concat [
         htmlCoreResources       htmlCore
@@ -313,7 +308,6 @@ htmlFeature env@ServerEnv{..}
       , htmlPreferredResources  htmlPreferred
       , htmlDownloadsResources  htmlDownloads
       , htmlTagsResources       htmlTags
-      , htmlSearchResources     htmlSearch
       -- and user groups. package maintainers, trustees, admins
       , htmlGroupResource user (maintainersGroupResource . uploadResource $ upload)
       , htmlGroupResource user (trusteesGroupResource    . uploadResource $ upload)
@@ -517,7 +511,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            HtmlPreferred{..}
            cachePackagesPage
            cacheNamesPage
-           cacheBrowseTable
+           _cacheBrowseTable
            templates
            SearchFeature{..}
            PackageCandidatesFeature{..}
@@ -553,10 +547,9 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             resourceDesc = [(GET, "Show browsable list of all packages")]
           , resourceGet  = [("html", serveBrowsePage)]
           }
-      , (resourceAt "/packages/new_browse" ) {
-            resourceDesc = [(GET, "Show browsable list of all packages")]
-          , resourceGet  = [("html", serveNewBrowsePage)]
-          }
+      , (extendResource searchPackagesResource) {
+                    resourceGet = [("html", serveBrowsePage)]
+                  }
       , (extendResource $ corePackagesPage cores) {
             resourceDesc = [(GET, "Show package index")]
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
@@ -573,14 +566,6 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _dpath = do
-      template <- getTemplate templates "table-interface.html"
-      tabledata <- readAsyncCache cacheBrowseTable
-      return $ toResponse $ template
-          [ "heading"   $= "All packages"
-          , templateUnescaped "tabledata" tabledata]
-
-    serveNewBrowsePage :: DynamicPath -> ServerPartE Response
-    serveNewBrowsePage _dpath = do
       template <- getTemplate templates "new-browse.html"
       return $ toResponse $ template
           [ "heading" $= "Browse and search packages" ]
@@ -1811,214 +1796,6 @@ mkHtmlTags HtmlUtilities{..}
 -- | Find a TagName inside a path.
 tagInPath :: forall m a. (MonadPlus m, FromReqURI a) => DynamicPath -> m a
 tagInPath dpath = maybe mzero return (lookup "tag" dpath >>= fromReqURI)
-
-
-{-------------------------------------------------------------------------------
-  Search
--------------------------------------------------------------------------------}
-
-data HtmlSearch = HtmlSearch {
-    htmlSearchResources :: [Resource]
-  }
-
-mkHtmlSearch :: HtmlUtilities
-             -> CoreFeature
-             -> ListFeature
-             -> SearchFeature
-             -> AsyncCache BS.ByteString
-             -> Templates
-             -> HtmlSearch
-mkHtmlSearch HtmlUtilities{..}
-             CoreFeature{..}
-             ListFeature{makeItemList}
-             SearchFeature{..}
-             cacheBrowseTable
-             templates =
-    HtmlSearch{..}
-  where
-    htmlSearchResources = [
-        (extendResource searchPackagesResource) {
-            resourceGet = [("html", servePackageFind)]
-          }
-      ]
-
-    servePackageFind :: DynamicPath -> ServerPartE Response
-    servePackageFind _ = do
-        (mtermsStr,  mexplain) <-
-          queryString $ (,) <$> optional (look "terms")
-                            <*> optional (look "explain")
-        let explain = isJust mexplain
-        case mtermsStr of
-          Just termsStr | explain
-                        , terms <- words termsStr, not (null terms) -> do
-            params  <- queryString getSearchRankParameters
-            results <- searchPackagesExplain params terms
-            return $ toResponse $ Resource.XHtml $
-              hackagePage "Package search" $
-                [ toHtml $ paramsForm params termsStr
-                ,          resetParamsForm termsStr
-                , toHtml $ explainResults results
-                ]
-
-          Just termsStr | terms <- words termsStr -> do
-            tabledata <- if null terms
-                         then readAsyncCache cacheBrowseTable
-                         else do
-                           names <- searchPackages terms
-                           pkgDetails <- liftIO $ makeItemList names
-                           let rowList = map makeRow pkgDetails
-                           return . BS.pack . showHtmlFragment $ "" +++ rowList
-            template <- getTemplate templates "table-interface.html"
-            return $ toResponse $ template
-              [ "heading"   $= toHtml (searchForm termsStr False)
-              , templateUnescaped "tabledata" tabledata
-              , "footer"    $= alternativeSearchTerms termsStr]
-
-          _ ->
-            return $ toResponse $ Resource.XHtml $
-              hackagePage "Text search" $
-                [ toHtml $ searchForm "" explain
-                , alternativeSearch
-                ]
-      where
-        searchForm termsStr explain =
-          [ h2 << "Package search"
-          , form ! [XHtml.method "GET", action "/packages/search"] <<
-              [ input ! [value termsStr, name "terms", identifier "terms"]
-              , toHtml " "
-              , input ! [thetype "submit", value "Search"]
-              , if explain then input ! [thetype "hidden", name "explain"]
-                           else noHtml
-              ]
-          ]
-
-        alternativeSearch =
-          paragraph <<
-            [ toHtml "Alternatively, if you are looking for a particular function then try "
-            , anchor ! [href hoogleBaseLink] << "Hoogle"
-            ]
-        alternativeSearchTerms termsStr =
-          paragraph <<
-            [ toHtml "Alternatively, if you are looking for a particular function then try "
-            , anchor ! [href (hoogleLink termsStr)] << "Hoogle"
-            ]
-        hoogleBaseLink = "http://www.haskell.org/hoogle/"
-        hoogleLink termsStr = "http://www.haskell.org/hoogle/?hoogle=" <> termsStr
-
-        explainResults :: (Maybe PackageName, [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]) -> [Html]
-        explainResults (exactMatch, results) =
-            [ h2 << "Results"
-            , h3 << "Exact Matches"
-            , maybe noHtml (toHtml . display) exactMatch
-            , case results of
-                []          -> noHtml
-                ((explanation1, _):_) ->
-                  table ! [ border 1 ] <<
-                    ( ( tr << tableHeader explanation1)
-                    : [ tr << tableRow explanation pkgname
-                      | (explanation, pkgname) <- results ])
-            ]
-          where
-            tableHeader Search.Explanation{..} =
-                [ th << "package", th << "overall score" ]
-             ++ [ th << (show term ++ " score")
-                | (term, _score) <- termScores ]
-             ++ [ th << (show term ++ " " ++ show field ++ " score")
-                | (term, fieldScores) <- termFieldScores
-                , (field, _score) <- fieldScores ]
-             ++ [ th << (show feature ++ " score")
-                | (feature, _score) <- nonTermScores ]
-
-            tableRow Search.Explanation{..} pkgname =
-                [ td << display pkgname, td << show overallScore ]
-             ++ [ td << show score
-                | (_term, score) <- termScores ]
-             ++ [ td << show score
-                | (_term, fieldScores) <- termFieldScores
-                , (_field, score) <- fieldScores ]
-             ++ [ td << show score
-                | (_feature, score) <- nonTermScores ]
-
-        getSearchRankParameters = do
-          let defaults = defaultSearchRankParameters
-          k1 <- lookRead "k1" `mplus` pure (paramK1 defaults)
-          bs <- sequence
-                  [ lookRead ("b" ++ show field)
-                      `mplus` pure (paramB defaults field)
-                  | field <- Ix.range (minBound, maxBound :: PkgDocField) ]
-          ws <- sequence
-                  [ lookRead ("w" ++ show field)
-                      `mplus` pure (paramFieldWeights defaults field)
-                  | field <- Ix.range (minBound, maxBound :: PkgDocField) ]
-          fs <- sequence
-                  [ lookRead ("w" ++ show feature)
-                      `mplus` pure (paramFeatureWeights defaults feature)
-                  | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures) ]
-          let barr, warr :: Array PkgDocField Float
-              barr = listArray (minBound, maxBound) bs
-              warr = listArray (minBound, maxBound) ws
-              farr = listArray (minBound, maxBound) fs
-          return defaults {
-            paramK1             = k1,
-            paramB              = (barr Array.!),
-            paramFieldWeights   = (warr Array.!),
-            paramFeatureWeights = (farr Array.!)
-          }
-
-        paramsForm SearchRankParameters{..} termsStr =
-          [ h2 << "Package search (tuning & explanation)"
-          , form ! [XHtml.method "GET", action "/packages/search"] <<
-              [ input ! [value termsStr, name "terms", identifier "terms"]
-              , toHtml " "
-              , input ! [thetype "submit", value "Search"]
-              , input ! [thetype "hidden", name "explain"]
-              , simpleTable [] [] $
-                    makeInput [thetype "text", value (show paramK1)] "k1" "K1 parameter"
-                  : [    makeInput [thetype "text", value (show (paramB field))]
-                                   ("b" ++ fieldname)
-                                   ("B param for " ++ fieldname)
-                      ++ makeInput [thetype "text", value (show (paramFieldWeights field)) ]
-                                   ("w" ++ fieldname)
-                                   ("Weight for " ++ fieldname)
-                    | field <- Ix.range (minBound, maxBound :: PkgDocField)
-                    , let fieldname = show field
-                    ]
-                 ++ [ makeInput [thetype "text", value (show (paramFeatureWeights feature)) ]
-                                   ("w" ++ featurename)
-                                   ("Weight for " ++ featurename)
-                    | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures)
-                    , let featurename = show feature ]
-              ]
-          ]
-        resetParamsForm termsStr =
-          let SearchRankParameters{..} = defaultSearchRankParameters in
-          form ! [XHtml.method "GET", action "/packages/search"] <<
-            (concat $
-              [ input ! [ thetype "submit", value "Reset parameters" ]
-              , input ! [ thetype "hidden", name "terms", value termsStr ]
-              , input ! [ thetype "hidden", name "explain" ]
-              , input ! [ thetype "hidden", name "k1", value (show paramK1) ] ]
-            : [ [ input ! [ thetype "hidden"
-                          , name ("b" ++ fieldname)
-                          , value (show (paramB field))
-                          ]
-                , input ! [ thetype "hidden"
-                          , name ("w" ++ fieldname)
-                          , value (show (paramFieldWeights field))
-                          ]
-                ]
-              | field <- Ix.range (minBound, maxBound :: PkgDocField)
-              , let fieldname = show field
-              ]
-           ++ [ [ input ! [ thetype "hidden"
-                          , name ("w" ++ featurename)
-                          , value (show (paramFeatureWeights feature))
-                          ]
-                ]
-              | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures)
-              , let featurename = show feature
-              ])
-
 
 {-------------------------------------------------------------------------------
   Groups

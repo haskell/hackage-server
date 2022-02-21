@@ -44,7 +44,7 @@ initNewBrowseFeature _env =
     pure $
       (emptyHackageFeature "json")
         { featureResources =
-          [ (resourceAt "/newpkglist")
+          [ (resourceAt "/packages/search")
             { resourceDesc =
               [ (POST, "Browse and search using a BrowseOptions structure in multipart/form-data encoding")
               ]

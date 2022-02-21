@@ -43,7 +43,7 @@ const get = () => new Promise((resolve,reject) => {
         , searchQuery: state.searchQuery
       };
     formData.append('browseOptions', JSON.stringify(obj));
-    fetch('/newpkglist', {method:'POST', body: formData}).then(async (response) => {
+    fetch('/packages/search', {method:'POST', body: formData}).then(async (response) => {
       if (!response.ok) {
         const el = d.querySelector("#fatalError");
         el.style.display = "block";
