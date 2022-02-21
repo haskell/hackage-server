@@ -1,8 +1,9 @@
 module Main where
 
 import Control.Monad (unless)
-import Distribution.Server.Features.Browse (StartIndex(..), NumElems(..), paginate, PaginationConfig(..))
 import System.Exit (die)
+
+import Distribution.Server.Features.Browse (NumElems(..), PaginationConfig(..), StartIndex(..), paginate)
 
 main :: IO ()
 main = do
@@ -20,18 +21,18 @@ main = do
   unless (res == Nothing) $
     die $ "Mismatch 3 " ++ show res
 
-  let res = paginate $ PaginationConfig 11 1
-  unless (res == Just (StartIndex 10, NumElems 1)) $
+  let res = paginate $ PaginationConfig 51 1
+  unless (res == Just (StartIndex 50, NumElems 1)) $
     die $ "Mismatch 4 " ++ show res
 
   let res = paginate $ PaginationConfig 9 0
   unless (res == Just (StartIndex 0, NumElems 9)) $
     die $ "Mismatch 5 " ++ show res
 
-  let res = paginate $ PaginationConfig 20 0
-  unless (res == Just (StartIndex 0, NumElems 10)) $
+  let res = paginate $ PaginationConfig 100 0
+  unless (res == Just (StartIndex 0, NumElems 50)) $
     die $ "Mismatch 6 " ++ show res
 
-  let res = paginate $ PaginationConfig 20 1
-  unless (res == Just (StartIndex 10, NumElems 10)) $
+  let res = paginate $ PaginationConfig 100 1
+  unless (res == Just (StartIndex 50, NumElems 50)) $
     die $ "Mismatch 7 " ++ show res
