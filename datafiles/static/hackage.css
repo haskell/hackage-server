@@ -312,6 +312,7 @@ table.properties td, table.properties th {
 
 @media only screen and (min-width: 1920px) {
   #content {
+    /* keep this in sync with #left-pane children */
     width: 60vw;
   }
 }
@@ -375,18 +376,28 @@ table.properties td, table.properties th {
       margin-bottom: 2em;
   }
 
-  #left-pane {
-      margin-right: 2em;
-      /* The margin is subtracted. Without this line, a narrow left-pane would
-       * leave a narrow properties pane with space on the right. So we make the
-       * left-pane take the space that the properties pane is not allotted.
-       * That leaves no space on the right. */
-      width: calc(60% - 2em);
+  #left-pane > * {
+      /*   (100% - (width of properties)) * (width of #content) - gap
+       * = (100% - 40%                  ) * 60vw                - 2em
+       * = 60%                            * 60vw                - 2em
+       * = 36vw - 2em
+       */
+      width: calc(36vw - 2em);
+  }
+
+  #left-pane > #modules {
+      /* This overrides the width in the previous block. We want a long module
+       * name to make the left-pane wide, so that it will push down
+       * #properties.
+       */
+      width: fit-content;
   }
 
   #flex-container {
       display: flex;
       flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 2em; /* keep this in sync with calculation above */
   }
 }
 
@@ -843,10 +854,6 @@ ul.links li form button {
 
 #index td + td {
   padding-left: 1em;
-}
-
-#module-list {
-  overflow-x: auto;
 }
 
 #module-list ul {
