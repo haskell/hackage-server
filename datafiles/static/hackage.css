@@ -381,7 +381,7 @@ table.properties td, table.properties th {
        * leave a narrow properties pane with space on the right. So we make the
        * left-pane take the space that the properties pane is not allotted.
        * That leaves no space on the right. */
-      max-width: calc(60% - 2em);
+      width: calc(60% - 2em);
   }
 
   #flex-container {
@@ -845,19 +845,13 @@ ul.links li form button {
   padding-left: 1em;
 }
 
+#module-list {
+  overflow-x: auto;
+}
+
 #module-list ul {
   list-style: none;
   margin: 0 0 0 20px;
-
-     /* Warning: Needed for oldIE support, but words are broken up letter-by-letter */
-    -ms-word-break: break-all;
-    word-break: break-all;
-    /* Non standard for webkit */
-    word-break: break-word;
-    -webkit-hyphens: auto;
-    -moz-hyphens: auto;
-    -ms-hyphens: auto;
-    hyphens: auto;
 }
 
 /* Disable identation for the top level modules */
