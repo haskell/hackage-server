@@ -370,11 +370,23 @@ table.properties td, table.properties th {
   }
 
   div #properties {
-      float:right;
       background: #fefefe;
       width: 40%;
-      margin-left: 2em;
       margin-bottom: 2em;
+  }
+
+  #left-pane {
+      margin-right: 2em;
+      /* The margin is subtracted. Without this line, a narrow left-pane would
+       * leave a narrow properties pane with space on the right. So we make the
+       * left-pane take the space that the properties pane is not allotted.
+       * That leaves no space on the right. */
+      min-width: calc(60% - 2em);
+  }
+
+  #flex-container {
+      display: flex;
+      flex-wrap: wrap;
   }
 }
 
