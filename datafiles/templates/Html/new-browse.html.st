@@ -7,6 +7,7 @@
     <style>
     #searchQuery {
       width: 50vw;
+      margin-left: 0;
     }
     #newBrowse th a {
       display:block;
@@ -30,6 +31,7 @@
     }
     #newBrowse {
       width: 100%;
+      margin-top: 3em;
     }
     #newBrowse th, #newBrowse td {
       padding: 4px 17px 4px 4px;
@@ -86,6 +88,9 @@
       align-items: center;
       margin-top: 1em;
     }
+    .filterSuggestion > input {
+      margin-left: 0;
+    }
     .filterSuggestion > div {
       display: flex;
       flex-wrap: wrap;
@@ -132,11 +137,15 @@
       display: none;
     }
     #toggleAdvanced {
+      margin: 0.7em 0 0.7em 0;
+    }
+    #toggleAdvanced a {
       text-decoration: inherit;
       color: inherit;
     }
     #advancedForm {
       display: none;
+      margin-left: 2em;
     }
     #advRatingSlider {
       vertical-align: middle;
@@ -161,7 +170,12 @@
       <input type=text id=searchQuery />
       <input type=submit value="Search" />
       </form>
-      <h3><a aria-expanded=false aria-controls=advancedForm id=toggleAdvanced href="javascript: toggleAdvanced();">Advanced options <span id=chevron>&#x25B8;</span></a></h3>
+      <h3 id=toggleAdvanced>
+        <a aria-expanded=false aria-controls=advancedForm href="javascript: toggleAdvanced();">
+          <span id=chevron>&#x25B8;</span>
+          Advanced options
+        </a>
+      </h3>
       <div id=advancedForm>
       <form class=filterSuggestion onsubmit="javascript:appendDeprecated(event);"><input type=submit value=Append> <div>Also show deprecated packages</div></form>
       <form class=filterSuggestion onsubmit="javascript:appendAgeOfLastUL(event);"><input type=submit value=Append><div><span>Last uploaded version younger than</span><input placeholder="e.g. 2y for 2 years" id=advAgeLastUL oninput="validateAgeOfLastUL();"></div></form>
