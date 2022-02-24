@@ -29,6 +29,7 @@ import Distribution.Server.Features.Distro              (initDistroFeature)
 import Distribution.Server.Features.PackageContents     (initPackageContentsFeature)
 import Distribution.Server.Features.Documentation       (initDocumentationFeature)
 import Distribution.Server.Features.BuildReports        (initBuildReportsFeature)
+import Distribution.Server.Features.PackageInfoJSON     (initPackageInfoJSONFeature)
 import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
 import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
@@ -151,6 +152,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initSitemapFeature env
     mkPackageFeedFeature    <- logStartup "package feed" $
                                initPackageFeedFeature env
+    mkPackageJSONFeature    <- logStartup "package info JSON" $
+                               initPackageInfoJSONFeature env
 #endif
 
     loginfo verbosity "Initialising features, part 2"
@@ -324,6 +327,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                             usersFeature
                             tarIndexCacheFeature
 
+    packageInfoJSONFeature <- mkPackageJSONFeature
+                                coreFeature
+                                versionsFeature
+
 #endif
 
     -- The order of initialization above should be the same as
@@ -364,6 +371,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface adminLogFeature
          , getFeatureInterface siteMapFeature
          , getFeatureInterface packageFeedFeature
+         , getFeatureInterface packageInfoJSONFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures
