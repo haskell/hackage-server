@@ -572,4 +572,5 @@ test-suite DocTests
 
   build-depends:
     , lib-server
-    , doctest-parallel ^>= 0.2.1
+    , doctest-parallel ^>= 0.2.2
+        -- doctest-parallel-0.2.2 is the first to filter out autogen-modules
