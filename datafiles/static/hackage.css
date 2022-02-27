@@ -1026,15 +1026,30 @@ table.fancy th {
   background: #f0f0f0;
 }
 
-table.fancy td, table.properties td,
-table.fancy th, table.properties th {
-  padding: 0.15em 0.45em;
-}
-
-table.dataTable.compact.fancy tbody th,
-table.dataTable.compact.fancy tbody td {
+@media (prefers-color-scheme: dark) {
+  table.fancy td, table.properties td,
+  table.fancy th, table.properties th {
+    padding: 0.15em 0.45em;
+    background: #333;
+  }
+  table.dataTable.compact.fancy tbody th,
+  table.dataTable.compact.fancy tbody td {
     padding: 6px 10px;
     line-height: normal;
+    background: #333;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  table.fancy td, table.properties td,
+  table.fancy th, table.properties th {
+    padding: 0.15em 0.45em;
+  }
+  table.dataTable.compact.fancy tbody th,
+  table.dataTable.compact.fancy tbody td {
+    padding: 6px 10px;
+    line-height: normal;
+  }
 }
 
 ul.searchresults li {
