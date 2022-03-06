@@ -1,5 +1,6 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Distribution.Server.Features.Search.ExtractNameTerms (
     extractPackageNameTerms,
@@ -14,14 +15,11 @@ import Data.Maybe (maybeToList)
 
 import Data.Functor.Identity
 import Control.Monad
-#if !MIN_VERSION_transformers(0,6,0)
-import Control.Monad.List
-#endif
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Applicative
 
-
+-- UNUSED:
 extractModuleNameTerms :: String -> [Text]
 extractModuleNameTerms modname =
   map T.toCaseFold $
@@ -207,7 +205,6 @@ main = do
 --
 -- Andreas Abel, 2022-03-06
 
-#if MIN_VERSION_transformers(0,6,0)
 newtype ListT m a = ListT { runListT :: m [a] }
 
 -- | Map between 'ListT' computations.
@@ -262,4 +259,3 @@ instance MonadTrans ListT where
         a <- m
         return [a]
     {-# INLINE lift #-}
-#endif
