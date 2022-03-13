@@ -203,7 +203,7 @@ flatDependencies pkg =
       where
         fromMap = map fromPair . Map.toList
         fromPair (pkgname, Versions _ ver) =
-            Dependency pkgname (fromVersionIntervals ver) Set.empty -- XXX: ok?
+            Dependency pkgname (fromVersionIntervals ver) mainLibSet -- XXX: ok?
 
         notSubLib pn _ = packageNameToUnqualComponentName pn `Set.notMember` sublibs
         sublibs = Set.fromList $ map fst (condSubLibraries pkg)
@@ -276,7 +276,7 @@ sortDeps = sortOn $ \(Dependency pkgname _ _) -> map toLower (display pkgname)
 combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
               -> [Dependency] -> [Dependency]
 combineDepsBy f =
-    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver) Set.empty) -- XXX: ok?
+    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver) mainLibSet) -- XXX: ok?
   . Map.toList
   . Map.fromListWith f
   . map (\(Dependency pkgname ver _) -> (pkgname, toVersionIntervals ver))
