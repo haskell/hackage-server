@@ -526,7 +526,7 @@ sourceRepositoryToHtml :: SourceRepo -> Html
 sourceRepositoryToHtml sr
     = toHtml (display (repoKind sr) ++ ": ")
   +++ case repoType sr of
-      Just Darcs
+      Just (KnownRepoType Darcs)
        | (Just url, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr) ->
           concatHtml [toHtml "darcs clone ",
@@ -540,7 +540,7 @@ sourceRepositoryToHtml sr
                                       << toHtml sd)
                                  +++ toHtml ")"
                           Nothing   -> noHtml]
-      Just Git
+      Just (KnownRepoType Git)
        | (Just url, Nothing) <-
          (repoLocation sr, repoModule sr) ->
           concatHtml [toHtml "git clone ",
@@ -554,7 +554,7 @@ sourceRepositoryToHtml sr
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing -> noHtml]
-      Just SVN
+      Just (KnownRepoType SVN)
        | (Just url, Nothing, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
           concatHtml [toHtml "svn checkout ",
@@ -562,7 +562,7 @@ sourceRepositoryToHtml sr
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
-      Just CVS
+      Just (KnownRepoType CVS)
        | (Just url, Just m, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
           concatHtml [toHtml "cvs -d ",
@@ -571,7 +571,7 @@ sourceRepositoryToHtml sr
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
-      Just Mercurial
+      Just (KnownRepoType Mercurial)
        | (Just url, Nothing) <-
          (repoLocation sr, repoModule sr) ->
           concatHtml [toHtml "hg clone ",
@@ -585,7 +585,7 @@ sourceRepositoryToHtml sr
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
-      Just Bazaar
+      Just (KnownRepoType Bazaar)
        | (Just url, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr) ->
           concatHtml [toHtml "bzr branch ",
