@@ -33,7 +33,7 @@ import Distribution.Text
 import Distribution.Pretty (prettyShow)
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
-import Distribution.Types.UnqualComponentName
+import Distribution.Types.ModuleReexport
 
 -- hackage-server
 import Distribution.Server.Framework.CacheControl (ETag)
