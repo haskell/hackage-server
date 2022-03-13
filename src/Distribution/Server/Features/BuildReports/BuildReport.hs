@@ -1,6 +1,12 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, RecordWildCards,
-             TemplateHaskell, TypeFamilies, FlexibleInstances, MultiParamTypeClasses,
-             OverloadedStrings #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Client.Reporting
@@ -52,14 +58,16 @@ import Distribution.CabalSpecVersion
 import Distribution.Pretty
          ( Pretty(..), pretty, prettyShow )
 import qualified Text.PrettyPrint as Disp
-import Distribution.Parsec.Newtypes
+
 import Distribution.Parsec
          ( Parsec(..), PError(..), parsec )
 import qualified Distribution.Parsec as P
 import qualified Distribution.Compat.CharParsing as P
 import Distribution.FieldGrammar
          ( FieldGrammar, parseFieldGrammar, prettyFieldGrammar, partitionFields
-         , uniqueField, uniqueFieldAla, booleanFieldDef, monoidalFieldAla )
+         , uniqueField, uniqueFieldAla, booleanFieldDef, monoidalFieldAla
+         , List, alaList
+         , VCat(..), FSep(..) )
 import Distribution.Fields.Parser
          ( readFields )
 import Distribution.Fields.Pretty
@@ -83,6 +91,7 @@ import Text.StringTemplate.Classes
 
 import Data.String (fromString)
 import Data.Aeson
+import Data.Functor.Identity (Identity)
 import Data.List
          ( unfoldr, isInfixOf )
 import Data.List.NonEmpty (toList)
@@ -308,7 +317,21 @@ show = showFields (const []) . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
 
-fieldDescrs :: (Applicative (g BuildReport), FieldGrammar g) => g BuildReport BuildReport
+
+fieldDescrs
+    :: ( Applicative (g BuildReport), FieldGrammar c g
+       , c (Identity Arch)
+       , c (Identity CompilerId)
+       , c (List FSep (Identity FlagAss1) FlagAss1)
+ --      , c (Identity FlagAssignment)
+       , c (Identity InstallOutcome)
+       , c (Identity OS)
+       , c (Identity Outcome)
+       , c (Identity PackageIdentifier)
+       , c (List VCat (Identity PackageIdentifier) PackageIdentifier)
+       , c Time
+       )
+    => g BuildReport BuildReport
 fieldDescrs =
   BuildReport
     <$> uniqueField       "package"            packageL
