@@ -40,7 +40,6 @@ import Distribution.ModuleName (ModuleName)
 import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Version
-import Distribution.Types.CondTree
 import Distribution.Text        (display)
 import Distribution.Utils.ShortText (fromShortText, ShortText)
 import Text.XHtml.Strict hiding (p, name, title, content)
@@ -412,7 +411,7 @@ renderDetailedDependencies pkgRender =
 
             displayConfVar (OS os) = "os(" ++ display os ++ ")"
             displayConfVar (Arch arch) = "arch(" ++ display arch ++ ")"
-            displayConfVar (Flag fn) = "flag(" ++ unFlagName fn ++ ")"
+            displayConfVar (PackageFlag fn) = "flag(" ++ unFlagName fn ++ ")"
             displayConfVar (Impl compilerFlavor versionRange) =
                 "impl(" ++ display compilerFlavor ++ ver ++ ")"
               where

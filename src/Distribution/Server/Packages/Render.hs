@@ -33,7 +33,6 @@ import Distribution.Text
 import Distribution.Pretty (prettyShow)
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
-import Distribution.Types.CondTree
 import Distribution.Types.UnqualComponentName
 
 -- hackage-server
@@ -77,7 +76,7 @@ data PackageRender = PackageRender {
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
-    rendFlags        :: [Flag],
+    rendFlags        :: [PackageFlag],
     -- rendOther contains other useful fields which are merely strings, possibly empty
     --     for example: description, home page, copyright, author, stability
     -- If PackageRender is the One True Resource Representation, should they
@@ -287,7 +286,7 @@ evalCondition :: [(FlagName,Bool)] -> Condition ConfVar -> Maybe Bool
 evalCondition flags cond =
     let eval = evalCondition flags
     in case cond of
-         Var (Flag f) -> lookup f flags
+         Var (PackageFlag f) -> lookup f flags
          Var _ -> Nothing
          Lit b -> Just b
          CNot c -> not `fmap` eval c
