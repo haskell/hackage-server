@@ -221,14 +221,6 @@ getPackageInfo = ask
 replacePackageInfo :: PackageInfoState -> Update PackageInfoState ()
 replacePackageInfo = State.put
 
-makeAcidic ''PackageInfoState ['getDescriptionFor
-                              ,'getVersionsFor
-                              ,'setDescriptionFor
-                              ,'setVersionsFor
-                              ,'getPackageInfo
-                              ,'replacePackageInfo
-                              ]
-
 deriveSafeCopy 0 'base ''PackageInfoState
 
 instance MemSize PackageBasicDescription where
@@ -250,3 +242,12 @@ initialPackageInfoState freshDB = PackageInfoState
   , versions              = mempty
   , migratedEphemeralData = freshDB
   }
+
+makeAcidic ''PackageInfoState
+  [ 'getDescriptionFor
+  , 'getVersionsFor
+  , 'setDescriptionFor
+  , 'setVersionsFor
+  , 'getPackageInfo
+  , 'replacePackageInfo
+  ]

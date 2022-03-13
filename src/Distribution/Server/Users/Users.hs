@@ -379,6 +379,8 @@ data Users_v0 = Users_v0 {
   }
   deriving (Eq, Typeable, Show)
 
+$(deriveSafeCopy 0 'base ''Users_v0)
+
 instance Migrate Users where
     type MigrateFrom Users = Users_v0
     migrate v0 =
@@ -389,5 +391,4 @@ instance Migrate Users where
         , authTokenMap = Map.empty
         }
 
-$(deriveSafeCopy 0 'base ''Users_v0)
 $(deriveSafeCopy 1 'extension ''Users)

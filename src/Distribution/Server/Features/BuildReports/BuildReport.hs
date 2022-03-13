@@ -473,17 +473,6 @@ instance Pretty BuildStatus where
   pretty (BuildFailCnt a)  = Disp.text "BuildFailCnt " Disp.<+> pretty a
   pretty BuildOK    = Disp.text "BuildOK"
 
--------------------
--- SafeCopy instances
---
-
-deriveSafeCopy 0 'base      ''Outcome
-deriveSafeCopy 1 'extension ''InstallOutcome
-deriveSafeCopy 3 'extension ''BuildReport
-deriveSafeCopy 1 'base      ''BuildStatus
-deriveSafeCopy 1 'base      ''BooleanCovg
-deriveSafeCopy 1 'base      ''BuildCovg
-
 
 -------------------
 -- Old SafeCopy versions
@@ -550,6 +539,8 @@ data InstallOutcome_v0
    | V0_BuildFailed
    | V0_InstallFailed
    | V0_InstallOk
+
+deriveSafeCopy 0 'base      ''Outcome
 
 deriveSafeCopy 0 'base      ''InstallOutcome_v0
 deriveSafeCopy 2 'extension ''BuildReport_v1
@@ -636,3 +627,13 @@ instance Data.Aeson.FromJSON PkgDetails where
       parseVersion :: Maybe String -> Maybe Version
       parseVersion Nothing = Nothing
       parseVersion (Just k) = P.simpleParsec k
+
+-------------------
+-- SafeCopy instances
+--
+
+deriveSafeCopy 1 'extension ''InstallOutcome
+deriveSafeCopy 3 'extension ''BuildReport
+deriveSafeCopy 1 'base      ''BuildStatus
+deriveSafeCopy 1 'base      ''BooleanCovg
+deriveSafeCopy 1 'base      ''BuildCovg

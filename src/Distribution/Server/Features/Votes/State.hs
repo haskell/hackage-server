@@ -32,9 +32,8 @@ newtype VotesState = VotesState (Map PackageName (Map UserId Score))
   deriving (Show, Eq, Typeable, MemSize)
 
 -- SafeCopy instances
-deriveSafeCopy 1 'extension ''VotesState
-
 deriveSafeCopy 0 'base      ''VotesState_v0
+deriveSafeCopy 1 'extension ''VotesState
 
 instance Migrate VotesState where
     type MigrateFrom VotesState = VotesState_v0

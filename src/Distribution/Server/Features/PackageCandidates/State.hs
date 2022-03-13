@@ -30,12 +30,13 @@ data CandidatePackages_v0 = CandidatePackages_v0 {
     candidateList_v0 :: !(PackageIndex.PackageIndex CandPkgInfo)
   } deriving (Typeable, Show, Eq)
 
-deriveSafeCopy 1 'extension ''CandidatePackages
 deriveSafeCopy 0 'base ''CandidatePackages_v0
 
 instance Migrate CandidatePackages where
   type MigrateFrom CandidatePackages = CandidatePackages_v0
   migrate (CandidatePackages_v0 cs) = CandidatePackages cs False
+
+deriveSafeCopy 1 'extension ''CandidatePackages
 
 instance MemSize CandidatePackages where
     memSize (CandidatePackages a b) = memSize2 a b

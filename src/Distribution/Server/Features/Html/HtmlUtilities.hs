@@ -91,7 +91,7 @@ htmlUtilities CoreFeature{coreResource}
         in
             [ big $ bold $ toHtml $ display pkgname
             , disp
-            , anchor ![href "tags/edit" ] << "Propose a tag?", toHtml " or "
+            , anchor ! [href "tags/edit" ] << "Propose a tag?", toHtml " or "
             , toHtml "return to ", packageNameLink pkgname, br
             ]
 
