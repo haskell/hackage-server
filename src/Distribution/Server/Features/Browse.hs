@@ -15,6 +15,7 @@ import qualified Data.Vector as V
 import Distribution.Server.Features.Browse.ApplyFilter (applyFilter)
 import Distribution.Server.Features.Browse.Options (BrowseOptions(..), IsSearch(..))
 import Distribution.Server.Features.Core (CoreFeature(CoreFeature), queryGetPackageIndex, coreResource)
+import Distribution.Server.Features.Distro (DistroFeature)
 import Distribution.Server.Features.PackageList (ListFeature(ListFeature), makeItemList)
 import Distribution.Server.Features.Search (SearchFeature(SearchFeature), searchPackages)
 import Distribution.Server.Features.Tags (TagsFeature(TagsFeature), tagsResource)
@@ -36,11 +37,12 @@ type BrowseFeature =
     -> TagsFeature
     -> ListFeature
     -> SearchFeature
+    -> DistroFeature
     -> IO HackageFeature
 
 initNewBrowseFeature :: ServerEnv -> IO BrowseFeature
 initNewBrowseFeature _env =
-  pure \coreFeature userFeature tagsFeature listFeature searchFeature ->
+  pure \coreFeature userFeature tagsFeature listFeature searchFeature distroFeature ->
     pure $
       (emptyHackageFeature "json")
         { featureResources =
@@ -50,7 +52,7 @@ initNewBrowseFeature _env =
               ]
             , resourcePost =
               [ ("json"
-                , \_ -> getNewPkgList coreFeature userFeature tagsFeature listFeature searchFeature
+                , \_ -> getNewPkgList coreFeature userFeature tagsFeature listFeature searchFeature distroFeature
                 )
               ]
             }
@@ -89,8 +91,8 @@ paginate PaginationConfig{totalNumberOfElements, pageNumber} = do
          else pageSize
    )
 
-getNewPkgList :: CoreFeature -> UserFeature -> TagsFeature -> ListFeature -> SearchFeature -> ServerPartT (ExceptT ErrorResponse IO) Response
-getNewPkgList CoreFeature{queryGetPackageIndex, coreResource} UserFeature{userResource} TagsFeature{tagsResource} ListFeature{makeItemList} SearchFeature{searchPackages} = do
+getNewPkgList :: CoreFeature -> UserFeature -> TagsFeature -> ListFeature -> SearchFeature -> DistroFeature -> ServerPartT (ExceptT ErrorResponse IO) Response
+getNewPkgList CoreFeature{queryGetPackageIndex, coreResource} UserFeature{userResource} TagsFeature{tagsResource} ListFeature{makeItemList} SearchFeature{searchPackages} distroFeature = do
   browseOptionsBS <- lookBS "browseOptions"
   browseOptions <- lift (parseBrowseOptions browseOptionsBS)
   (isSearch, packageNames) <-
@@ -99,8 +101,8 @@ getNewPkgList CoreFeature{queryGetPackageIndex, coreResource} UserFeature{userRe
       terms -> (IsSearch,)    <$> liftIO (searchPackages terms)
   pkgDetails <- liftIO (makeItemList packageNames)
   now <- liftIO getCurrentTime
-  let listOfPkgs = applyFilter now isSearch coreResource userResource tagsResource browseOptions pkgDetails
-      config =
+  listOfPkgs <- liftIO $ applyFilter now isSearch coreResource userResource tagsResource distroFeature browseOptions pkgDetails
+  let config =
         PaginationConfig
           { totalNumberOfElements = length listOfPkgs
           , pageNumber = fromIntegral $ boPage browseOptions

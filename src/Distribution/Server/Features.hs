@@ -333,6 +333,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                        tagsFeature
                        listFeature
                        searchFeature
+                       distroFeature
 
 #endif
 

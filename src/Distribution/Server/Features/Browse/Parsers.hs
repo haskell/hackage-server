@@ -36,6 +36,7 @@ data Filter
   | TagFilter String
   | MaintainerFilter String
   | DeprecatedFilter DeprecatedOption
+  | DistroFilter String
   | Not Filter
   deriving (Show, Eq)
 
@@ -84,7 +85,7 @@ allowedAfterOpeningBrace AllowNot = "not " <|> allowedAfterOpeningBrace Disallow
 allowedAfterOpeningBrace _ =
   asum
     [ "downloads", "rating", "lastUpload" , "ageOfLastUpload"
-    , "tag:", "maintainer:", "deprecated:"
+    , "tag:", "maintainer:", "deprecated:", "distro:"
     ]
 
 -- Whether the 'not' operator can be used.
@@ -111,6 +112,7 @@ filterWith allowNot = do
         "tag:" -> TagFilter <$> wordWoSpaceOrParens
         "maintainer:" -> MaintainerFilter <$> wordWoSpaceOrParens
         "deprecated:" -> DeprecatedFilter <$> deprecatedOption
+        "distro:" -> DistroFilter <$> wordWoSpaceOrParens
         _ -> fail "Impossible since fieldName possibilities are known at compile time"
       pure filt
 

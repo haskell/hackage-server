@@ -221,6 +221,8 @@
         <dd>Only show deprecated packages.</dd>
         <dt>(deprecated:false)</dt>
         <dd>Only show packages that are not deprecated. If no other deprecation filter is given, this filter is automatically added.</dd>
+        <dt>(distro:Debian)</dt>
+        <dd>Only show packages that are available in the Debian distribution. See the <a href="/distros">full list of available distributions</a>.</dd>
       </dl>
       </div>
       <table id=newBrowse class=fancy>
