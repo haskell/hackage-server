@@ -255,7 +255,7 @@ migrateAddUpdateLog users = do
 --   pre-existing 'preferred-versions' entries from the V1 'PackagesState' log
 --   (since that's the only place we keep track of their history for now)
 -- * We do this here rather than in the security feature so that this happens
---   before we set up the hook to update the hackage on package changes
+--   before we set up the hook to update the Hackage on package changes
 --   (otherwise the index would continuously be updated during this process,
 --   which would be far too expensive).
 -- * Moreover, this allows us to order the index such that the TUF files are

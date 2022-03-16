@@ -197,7 +197,7 @@ packageExists targetRepo pkgInfo =
 -- | Finalize the mirror
 --
 -- That is, now that the packages have been uploaded to the target repo,
--- update the index and securify files (if applicable). This is only necessary
+-- update the index and security files (if applicable). This is only necessary
 -- "dumb" target repositories.
 finalizeMirror :: SourceRepo -> TargetRepo -> MirrorSession ()
 finalizeMirror _ TargetHackage2{} =

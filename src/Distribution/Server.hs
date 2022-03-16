@@ -246,7 +246,7 @@ shutdown :: Server -> IO ()
 shutdown server =
   Features.shutdownAllFeatures (serverFeatures server)
 
---TODO: stop accepting incomming connections,
+--TODO: stop accepting incoming connections,
 -- wait for connections to be processed.
 
 -- | Write out a checkpoint of the server state. This makes recovery quicker
