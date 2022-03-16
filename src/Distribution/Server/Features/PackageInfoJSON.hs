@@ -73,7 +73,7 @@ data PackageInfoJSONResource = PackageInfoJSONResource {
 -- | Initializing our feature involves adding JSON variants to the
 -- endpoints that serve basic information about a package-version,
 -- and a packages version deprecation status.
--- Aditionally we set up caching for these endpoints,
+-- Additionally we set up caching for these endpoints,
 -- and attach a package change hook that invalidates the cache
 -- line for a package when it changes
 initPackageInfoJSONFeature
@@ -128,7 +128,7 @@ initPackageInfoJSONFeature env = do
       }
 
 
--- | Pure function for extrcacting basic package info from a Cabal file
+-- | Pure function for extracting basic package info from a Cabal file
 getBasicDescription
   :: CabalFileText
   -> Int

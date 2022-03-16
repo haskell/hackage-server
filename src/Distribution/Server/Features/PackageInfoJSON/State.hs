@@ -112,7 +112,7 @@ instance Aeson.FromJSON PackageBasicDescription where
         return $
           PackageBasicDescription {..}
 
--- | An index of versions for one hackage package
+-- | An index of versions for one Hackage package
 --   and their preferred/deprecated status
 newtype PackageVersions = PackageVersions {
   unPackageVersions :: [(Version, Preferred.VersionStatus)]

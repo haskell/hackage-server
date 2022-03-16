@@ -240,7 +240,7 @@ maintainerGroupDescription dname = nullDescription
   where str = display dname
 
 -- TODO: This calls parseCSV rather that importCSV -- not sure if that
--- matters (in particular, importCSV chops off the last, extranenous,
+-- matters (in particular, importCSV chops off the last, extraneous,
 -- null entry that parseCSV adds)
 lookCSVFile :: (CSVFile -> ServerPartE Response) -> ServerPartE Response
 lookCSVFile func = do

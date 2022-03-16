@@ -40,13 +40,13 @@ instance Pretty DistroName where
 instance Parsec DistroName where
   parsec = DistroName <$> P.munch1 (\c -> Char.isAlphaNum c || c `elem` "-_()[]{}=$,;")
 
--- | Listing of known distirbutions and their maintainers
+-- | Listing of known distributions and their maintainers
 data Distributions = Distributions {
     nameMap :: !(Map.Map DistroName UserIdSet)
 }
  deriving (Eq, Typeable, Show)
 
--- | Listing of which distirbutions have which version of particular
+-- | Listing of which distributions have which versions of particular
 -- packages.
 data DistroVersions = DistroVersions {
     packageDistroMap :: !(Map.Map PackageName (Map.Map DistroName DistroPackageInfo)),

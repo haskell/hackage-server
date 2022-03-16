@@ -23,14 +23,14 @@ import Distribution.Server.Framework.HappstackUtils (showContentType)
 -- to support both web browsers and machine clients using machine formats like
 -- JSON.
 --
--- For machine clients we want a nice set of seaprate resources using JSON and
+-- For machine clients we want a nice set of separate resources using JSON and
 -- GET\/PUT\/POST\/DELETE.
 --
 -- For web browsers we want nice pages that aggregate multiple aspects and that
 -- use only POST with @multipart\/form-data@. One problem is that these use
 -- different resource types: browsers want HTML and form-data, while other
 -- clients want JSON or other machine formats. Another problem is that humans
--- want nice pages that aggregate multuple bits into a single resouce, while
+-- want nice pages that aggregate multiple bits into a single resource, while
 -- machine clients want separate single-purpose resources. In addition, the
 -- stage changes from resource to resource when doing updates is different.
 -- A web browser wants to POST to modify some data and then see either the new
@@ -57,7 +57,7 @@ import Distribution.Server.Framework.HappstackUtils (showContentType)
 --   machines and the web UI lives just in HTML pages that do all the PUT
 --   DELETE etc directly.
 -- * wrappers or workarounds for accessing the machine REST API via html forms
---   and POST. This involes the framework translating special form POST
+--   and POST. This involves the framework translating special form POST
 --   requests into internal requests that are handled as if the were the simple
 --   direct machine REST API.
 --
@@ -77,7 +77,7 @@ import Distribution.Server.Framework.HappstackUtils (showContentType)
 -- simple JSON. On the response side, we deal with the fact that an HTML page
 -- that does a request wants to return to another HTML page, perhaps the same
 -- one or a different one, while for the simple machine REST API the response
--- if often a simple acknoledgement.
+-- if often a simple acknowledgement.
 --
 -- To indicate that these translation wrappers are required we use a hidden
 -- fields in the form. We use a @_method@ field to indicate that the POST

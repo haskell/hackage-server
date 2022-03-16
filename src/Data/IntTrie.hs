@@ -137,7 +137,7 @@ test1 = example2 == mkTrie example1
 #endif
 
 -- Each node has a size and a sequence of keys followed by an equal length
--- sequnce of corresponding entries. Since we're going to flatten this into
+-- sequence of corresponding entries. Since we're going to flatten this into
 -- a single array then we will need to replace the trie structure with pointers
 -- represented as array offsets.
 

@@ -166,10 +166,10 @@ legacyExtras = go Map.empty
 
 -- | Write tarball in legacy format
 --
--- "Legacy format" here refers to prior to the intrudction of the incremental
+-- "Legacy format" here refers to prior to the introduction of the incremental
 -- index, and contains the packages in order of packages/versions (for better
 -- compression), contains at most one preferred-version per package (important
--- because of a bug in cabal which would otherwise merge all perferred-versions
+-- because of a bug in cabal which would otherwise merge all preferred-versions
 -- files for a package), and does not contain the TUF files.
 writeLegacy :: Users -> Map String (ByteString, UTCTime) -> PackageIndex PkgInfo -> ByteString
 writeLegacy users =
