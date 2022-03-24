@@ -18,7 +18,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.CabalSpecVersion
-         ( CabalSpecVersion(..), showCabalSpecVersion )
+         ( CabalSpecVersion(..) )
 import Distribution.Version
          ( nullVersion )
 import Distribution.Types.PackageName
@@ -209,24 +209,8 @@ specVersionChecks specVerOk specVer = do
     throwError "'cabal-version' must be at least 1.2"
 
   -- Safeguard; should already be caught by parser
-  unless (specVer <= CabalSpecV2_4) $
-    throwError "'cabal-version' must be at most 2.4"
-
-  -- Check whether a known spec version had been used
-  -- TODO: move this into lib:Cabal
-  let knownSpecVersions =
-        [ CabalSpecV1_18
-        , CabalSpecV1_20
-        , CabalSpecV1_22
-        , CabalSpecV1_24
-        , CabalSpecV2_0
-        , CabalSpecV2_2
-        , CabalSpecV2_4
-        ]
-  when (specVer >= CabalSpecV1_18 && (specVer `notElem` knownSpecVersions)) $
-    throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
-                ++ showCabalSpecVersion specVer ++ "; for a list of valid specification versions please consult "
-                ++ "https://www.haskell.org/cabal/users-guide/file-format-changelog.html")
+  unless (specVer <= CabalSpecV3_0) $
+    throwError "'cabal-version' must be at most 3.0"
 
 -- | The issue is that browsers can upload the file name using either unix
 -- or windows convention, so we need to take the basename using either

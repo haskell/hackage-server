@@ -1,37 +1,26 @@
--- Body of the HTML page for a package
+-- Helpers for the body of the HTML page for a package
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE PatternGuards, RecordWildCards, ViewPatterns #-}
 module Distribution.Server.Pages.Package
-  ( packagePage
-  , renderPackageFlags
+  ( renderPackageFlags
   , renderDependencies
   , renderDetailedDependencies
   , renderVersion
-  , renderFields
-  , renderDownloads
-  , renderChangelog
   , moduleSection
-  , readmeSection
   , rendLicense
   , maintainField
   , categoryField
-  , linkField
-  , descriptionSection
   , renderHaddock
-  , maintainerSection
   , downloadSection
   , moduleToDocUrl
   ) where
 
 import Distribution.Server.Features.PreferredVersions
 
-import Distribution.Server.Pages.Template (hackagePageWithHead)
 import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
-import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
-import Distribution.Server.Util.Markdown (renderMarkdownRel, supposedToBeMarkdown)
 import Data.TarIndex (TarIndex)
 import qualified Data.TarIndex as Tar
 
@@ -48,99 +37,12 @@ import qualified Text.XHtml.Strict
 import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
 import Data.List                (intersperse, intercalate, partition)
 import Control.Arrow            (second)
-import System.FilePath.Posix    ((</>), (<.>), takeFileName)
-import Data.Time.Format         (defaultTimeLocale, formatTime)
+import System.FilePath.Posix    ((</>), (<.>))
 
 import qualified Documentation.Haddock.Markup as Haddock
 
-import qualified Data.Text                as T
-import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Encoding.Error as T (lenientDecode)
-import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
-
 instance HTML ShortText where
    toHtml = toHtml . fromShortText
-
-packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
-            -> [(String, Html)] -> Maybe TarIndex -> Maybe BS.ByteString
-            -> URL -> Bool
-            -> Html
-packagePage render headLinks top sections
-            bottom mdocIndex mreadMe
-            docURL isCandidate =
-    hackagePageWithHead [canonical] docTitle docBody
-  where
-    pkgid   = rendPkgId render
-    pkgName = display $ packageName pkgid
-
-    pkgUrl = "/package/" ++ pkgName
-
-    canonical = thelink ! [ rel "canonical"
-                          , href pkgUrl ] << noHtml
-    docTitle = pkgName
-            ++ case fromShortText $ synopsis (rendOther render) of
-                 ""    -> ""
-                 short -> ": " ++ short
-
-    docBody = bodyTitle
-          : concat [
-             candidateBanner,
-             renderHeads,
-             top,
-             pkgBody render sections docURL,
-             moduleSection render mdocIndex docURL False,
-             renderPackageFlags render docURL,
-             downloadSection render,
-             maintainerSection pkgid isCandidate,
-             readmeSection render mreadMe,
-             map pair bottom
-           ]
-
-    bodyTitle = case fromShortText $ synopsis (rendOther render) of
-      ""    -> h1 << pkgName
-      short -> h1 << [ toHtml (pkgName ++ ": ")
-                     , small (toHtml short)
-                     ]
-
-    candidateBanner
-      | isCandidate = [ thediv ! [theclass "candidate-info"]
-                        << [ paragraph << [ strong (toHtml "This is a package candidate release!")
-                                          , toHtml " Here you can preview how this package release will appear once published to the main package index (which can be accomplished via the 'maintain' link below)."
-                                          , toHtml " Please note that once a package has been published to the main package index it cannot be undone!"
-                                          , toHtml " Please consult the "
-                                          , anchor ! [href "/upload"] << "package uploading documentation"
-                                          , toHtml " for more information."
-                                          ] ] ]
-      | otherwise = []
-
-    renderHeads = case headLinks of
-        [] -> []
-        items -> [thediv ! [thestyle "font-size: small"] <<
-            (map (\item -> "[" +++ item +++ "] ") items)]
-
-    pair (title, content) =
-        toHtml [ h2 << title, content ]
-
--- | Body of the package page
-pkgBody :: PackageRender -> [(String, Html)] -> URL -> [Html]
-pkgBody render sections docURL =
-    descriptionSection render docURL
- ++ propertySection sections
-
-descriptionSection :: PackageRender -> URL -> [Html]
-descriptionSection PackageRender{..} docURL =
-        [thediv ! [identifier "description"] <<
-           renderHaddock (moduleToDocUrl PackageRender{..} docURL)
-                         (fromShortText $ description rendOther)]
-     ++ readmeLink
-  where
-    readmeLink = case rendReadme of
-      Just _ -> [ hr
-                , toHtml "["
-                , anchor ! [href "#readme"] << "Skip to ReadMe"
-                , toHtml "]"
-                ]
-      _      -> []
 
 -- | Resolve 'ModuleName' to 'URL' if module is exposed by package
 moduleToDocUrl :: PackageRender -> URL -> ModuleName -> Maybe URL
@@ -154,29 +56,6 @@ renderHaddock modResolv desc =
   case Haddock.parse desc of
       Nothing  -> [paragraph << p | p <- paragraphs desc]
       Just doc -> [Haddock.markup (htmlMarkup modResolv) doc]
-
-readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
-readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
-                            , rendPkgId  = pkgid }
-              (Just content) =
-    [ hr
-    , h2 ! [identifier "readme"] << ("Readme for " ++ name)
-    , toHtml "["
-    , anchor ! [href "#description"] << "back to package description"
-    , toHtml "]"
-    , thediv ! [theclass "embedded-author-content"]
-            << if supposedToBeMarkdown filename
-                 then renderMarkdownRel name content
-                 else pre << unpackUtf8 content
-    ] where
-      name = display pkgid
-readmeSection _ _ = []
-
-
-unpackUtf8 :: BS.ByteString -> String
-unpackUtf8 = T.unpack
-           . T.decodeUtf8With T.lenientDecode
-           . BS.toStrict
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]
@@ -230,17 +109,6 @@ downloadSection PackageRender{..} =
     cabalURL      = rendPkgUri </> display (packageName rendPkgId) <.> "cabal"
     srcURL        = rendPkgUri </> "src/"
     tarGzFileName = display rendPkgId ++ ".tar.gz"
-
-maintainerSection :: PackageId -> Bool -> [Html]
-maintainerSection pkgid isCandidate =
-    [ h4 << "Maintainers' corner"
-    , paragraph << "For package maintainers and hackage trustees"
-    , ulist << li << anchor ! [href maintainURL]
-                  << "edit package information"
-    ]
-  where
-    maintainURL | isCandidate = "candidate/maintain"
-                | otherwise   = display (packageName pkgid) </> "maintain"
 
 -- | Render a table of the package's flags and along side it a tip
 -- indicating how to enable/disable flags with Cabal.
@@ -306,12 +174,6 @@ moduleSection render mdocIndex docURL quickNav =
                        then " [" +++ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump" +++ "]"
                        else mempty))
           Nothing -> mempty
-
-propertySection :: [(String, Html)] -> [Html]
-propertySection sections =
-    [ h2 << "Properties"
-    , tabulate $ filter (not . isNoHtml . snd) sections
-    ]
 
 tabulate :: [(String, Html)] -> Html
 tabulate items = table ! [theclass "properties"] <<
@@ -439,69 +301,6 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
--- This is currently only used by the candidate view as the normal
--- package view is using the new template-based rendering
---
--- TODO: when converting the candidate view to the template-based
--- rendering the "warning" needs to be reimplemented
-renderChangelog :: PackageRender -> (String, Html)
-renderChangelog render =
-    ("Change log", case rendChangeLog render of
-                     Nothing            -> strong ! [theclass "warning"] << toHtml "None available"
-                     Just (_,_,_,fname) -> anchor ! [href changeLogURL]
-                                                 << takeFileName fname)
-  where
-    changeLogURL  = rendPkgUri render </> "changelog"
-
--- We don't keep currently per-version downloads in memory; if we decide that
--- it is important to show this all the time, we can reenable
-renderDownloads :: Int -> Int -> {- Int -> Version -> -} (String, Html)
-renderDownloads totalDown recentDown {- versionDown version -} =
-    ("Downloads", toHtml $ {- show versionDown ++ " for " ++ display version ++
-                      " and " ++ -} show totalDown ++ " total (" ++
-                      show recentDown ++ " in last 30 days)")
-
-renderFields :: PackageRender -> [(String, Html)]
-renderFields render = [
-        -- Cabal-Version
-        ("License",     rendLicense render),
-        ("Copyright",   toHtml $ P.copyright desc),
-        ("Author",      toHtml $ author desc),
-        ("Maintainer",  maintainField $ rendMaintainer render),
---        ("Stability",   toHtml $ stability desc),
-        ("Category",    commaList . map categoryField $ rendCategory render),
-        ("Home page",   linkField . fromShortText $ homepage desc),
-        ("Bug tracker", linkField . fromShortText $ bugReports desc),
-        ("Source repository", vList $ map sourceRepositoryField $ sourceRepos desc),
-        ("Executables", commaList . map toHtml $ rendExecNames render),
-        ("Uploaded", uncurry renderUploadInfo (rendUploadInfo render))
-      ]
-   ++ [ ("Updated", renderUpdateInfo revisionNo utime uinfo)
-      | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
-  where
-    desc = rendOther render
-    renderUploadInfo utime uinfo =
-        formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime +++ " by " +++ user
-      where
-        uname   = maybe "Unknown" (display . userName) uinfo
-        uactive = maybe False (isActiveAccount . userStatus) uinfo
-        user | uactive   = anchor ! [href $ "/user/" ++ uname] << uname
-             | otherwise = toHtml uname
-
-    renderUpdateInfo revisionNo utime uinfo =
-        renderUploadInfo utime uinfo +++ " to " +++
-        anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
-      where
-        revisionsURL = display (rendPkgId render) </> "revisions/"
-
-linkField :: String -> Html
-linkField url = case url of
-    [] -> noHtml
-    _  -> anchor ! [href url] << url
-
-sourceRepositoryField :: SourceRepo -> Html
-sourceRepositoryField sr = sourceRepositoryToHtml sr
-
 categoryField :: String -> Html
 categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
 
@@ -521,91 +320,9 @@ rendLicense render = case rendLicenseFiles render of
                               << "multiple license files"
                     +++ "]"
 
-
-sourceRepositoryToHtml :: SourceRepo -> Html
-sourceRepositoryToHtml sr
-    = toHtml (display (repoKind sr) ++ ": ")
-  +++ case repoType sr of
-      Just (KnownRepoType Darcs)
-       | (Just url, Nothing, Nothing) <-
-         (repoLocation sr, repoModule sr, repoBranch sr) ->
-          concatHtml [toHtml "darcs clone ",
-                      anchor ! [href url] << toHtml url,
-                      case repoTag sr of
-                          Just tag' -> toHtml (" --tag " ++ tag')
-                          Nothing   -> noHtml,
-                      case repoSubdir sr of
-                          Just sd -> toHtml " ("
-                                 +++ (anchor ! [href (url </> sd)]
-                                      << toHtml sd)
-                                 +++ toHtml ")"
-                          Nothing   -> noHtml]
-      Just (KnownRepoType Git)
-       | (Just url, Nothing) <-
-         (repoLocation sr, repoModule sr) ->
-          concatHtml [toHtml "git clone ",
-                      anchor ! [href url] << toHtml url,
-                      case repoBranch sr of
-                          Just branch -> toHtml (" -b " ++ branch)
-                          Nothing     -> noHtml,
-                      case repoTag sr of
-                          Just tag' -> toHtml ("(tag " ++ tag' ++ ")")
-                          Nothing   -> noHtml,
-                      case repoSubdir sr of
-                          Just sd -> toHtml ("(" ++ sd ++ ")")
-                          Nothing -> noHtml]
-      Just (KnownRepoType SVN)
-       | (Just url, Nothing, Nothing, Nothing) <-
-         (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
-          concatHtml [toHtml "svn checkout ",
-                      anchor ! [href url] << toHtml url,
-                      case repoSubdir sr of
-                          Just sd -> toHtml ("(" ++ sd ++ ")")
-                          Nothing   -> noHtml]
-      Just (KnownRepoType CVS)
-       | (Just url, Just m, Nothing, Nothing) <-
-         (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
-          concatHtml [toHtml "cvs -d ",
-                      anchor ! [href url] << toHtml url,
-                      toHtml (" " ++ m),
-                      case repoSubdir sr of
-                          Just sd -> toHtml ("(" ++ sd ++ ")")
-                          Nothing   -> noHtml]
-      Just (KnownRepoType Mercurial)
-       | (Just url, Nothing) <-
-         (repoLocation sr, repoModule sr) ->
-          concatHtml [toHtml "hg clone ",
-                      anchor ! [href url] << toHtml url,
-                      case repoBranch sr of
-                          Just branch -> toHtml (" -b " ++ branch)
-                          Nothing     -> noHtml,
-                      case repoTag sr of
-                          Just tag' -> toHtml (" -u " ++ tag')
-                          Nothing   -> noHtml,
-                      case repoSubdir sr of
-                          Just sd -> toHtml ("(" ++ sd ++ ")")
-                          Nothing   -> noHtml]
-      Just (KnownRepoType Bazaar)
-       | (Just url, Nothing, Nothing) <-
-         (repoLocation sr, repoModule sr, repoBranch sr) ->
-          concatHtml [toHtml "bzr branch ",
-                      anchor ! [href url] << toHtml url,
-                      case repoTag sr of
-                          Just tag' -> toHtml (" -r " ++ tag')
-                          Nothing -> noHtml,
-                      case repoSubdir sr of
-                          Just sd -> toHtml ("(" ++ sd ++ ")")
-                          Nothing   -> noHtml]
-      _ ->
-          -- We don't know how to show this SourceRepo.
-          -- This is a kludge so that we at least show all the info.
-          toHtml (show sr)
-
 commaList :: [Html] -> Html
 commaList = concatHtml . intersperse (toHtml ", ")
 
-vList :: [Html] -> Html
-vList = concatHtml . intersperse br
 -----------------------------------------------------------------------------
 
 renderModuleForest :: URL -> ModuleForest -> Html

@@ -471,6 +471,7 @@ sourceRepositoryToHtml sr
       _ ->
           -- We don't know how to show this SourceRepo.
           -- This is a kludge so that we at least show all the info.
+          -- currently missing known repo types are GnuArch and Monotone
            let url = fromMaybe "" $ repoLocation sr
                showRepoType (OtherRepoType rt) = rt
                showRepoType x = show x
