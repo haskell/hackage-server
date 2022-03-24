@@ -312,13 +312,32 @@ table.properties td, table.properties th {
 
 @media only screen and (min-width: 1920px) {
   #content {
+    /* keep this in sync with #left-pane children */
     width: 60vw;
+  }
+
+  #left-pane > * {
+      /*   (100% - (width of properties)) * (width of #content) - gap
+       * = (100% - 40%                  ) * 60vw                - 2em
+       * = 60%                            * 60vw                - 2em
+       * = 36vw - 2em
+       */
+      width: calc(36vw - 2em);
   }
 }
 
 @media only screen and (min-width: 1280px) and (max-width: 1919px) {
   #content {
     width: 65vw;
+  }
+
+  #left-pane > * {
+      /*   (100% - (width of properties)) * (width of #content) - gap
+       * = (100% - 40%                  ) * 65vw                - 2em
+       * = 60%                            * 65vw                - 2em
+       * = 39vw - 2em
+       */
+      width: calc(39vw - 2em);
   }
 }
 
@@ -343,6 +362,15 @@ table.properties td, table.properties th {
 
   #content {
     width: 75vw;
+  }
+
+  #left-pane > * {
+      /*   (100% - (width of properties)) * (width of #content) - gap
+       * = (100% - 40%                  ) * 75vw                - 2em
+       * = 60%                            * 75vw                - 2em
+       * = 45vw - 2em
+       */
+      width: calc(45vw - 2em);
   }
 }
 
@@ -370,17 +398,26 @@ table.properties td, table.properties th {
   }
 
   div #properties {
-      float:right;
       background: #fefefe;
       width: 40%;
-      margin-left: 2em;
       margin-bottom: 2em;
+  }
+
+  #flex-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 2em; /* keep this in sync with calculation above */
   }
 }
 
 @media only screen and (max-width: 949px) {
   #content {
     width: 88vw;
+  }
+
+  #left-pane > * {
+      width: fit-content;
   }
 
   #page-header {
@@ -437,6 +474,14 @@ table.properties td, table.properties th {
 /* @end */
 
 /* @group Page Structure */
+
+#left-pane > #modules {
+    /* This overrides the width in width-dependent blocks. We want a long
+     * module name to make the left-pane wide, so that it will push down
+     * #properties.
+     */
+    width: fit-content;
+}
 
 #content {
   margin: 0 auto;
@@ -836,16 +881,6 @@ ul.links li form button {
 #module-list ul {
   list-style: none;
   margin: 0 0 0 20px;
-
-     /* Warning: Needed for oldIE support, but words are broken up letter-by-letter */
-    -ms-word-break: break-all;
-    word-break: break-all;
-    /* Non standard for webkit */
-    word-break: break-word;
-    -webkit-hyphens: auto;
-    -moz-hyphens: auto;
-    -ms-hyphens: auto;
-    hyphens: auto;
 }
 
 /* Disable identation for the top level modules */

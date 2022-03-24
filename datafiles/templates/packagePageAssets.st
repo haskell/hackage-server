@@ -203,18 +203,3 @@
         \$("#" + i).removeClass('cool').addClass('uncool');
   }
 </script>
-
- <script>
-    // Responsive layout change
-    \$(function()  {
-          var onResize = function() {
-              if(jQuery(window).width()<=950) {
-                 jQuery("#properties").insertAfter(jQuery("#description"));
-              } else {
-                  jQuery("#properties").insertBefore(jQuery("#description"));
-             }
-            }
-            \$(window).resize(onResize);
-            onResize();
-     });
-</script>
