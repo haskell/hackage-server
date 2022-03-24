@@ -18,7 +18,7 @@ import qualified System.FilePath.Posix as Posix (joinPath, splitExtension)
 
 
 -- | A feature to provide redirection for URLs that existed in the first
--- incarnation of the hackage server.
+-- incarnation of the Hackage server.
 --
 legacyRedirectsFeature :: UploadFeature -> HackageFeature
 legacyRedirectsFeature upload = (emptyHackageFeature "legacy") {
@@ -32,7 +32,7 @@ legacyRedirectsFeature upload = (emptyHackageFeature "legacy") {
   , featureState = []
   }
 
--- | Support for the old URL scheme from the first version of hackage.
+-- | Support for the old URL scheme from the first version of Hackage.
 --
 
 -- | POST for package upload, particularly for cabal-install compatibility.

@@ -9,7 +9,7 @@ import Distribution.ModuleName
 import Distribution.Text        (simpleParse)
 import Documentation.Haddock.Types
 
--- C.f. haddock-api's "Haddock.Backends.Xhtml.DocMarkup"
+-- cf. haddock-api's "Haddock.Backends.Xhtml.DocMarkup"
 htmlMarkup :: (ModuleName -> Maybe URL) -> DocMarkupH mod String Html
 htmlMarkup modResolv = Markup {
   markupEmpty         = noHtml,

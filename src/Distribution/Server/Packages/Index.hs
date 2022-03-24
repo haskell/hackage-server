@@ -1,4 +1,7 @@
-{-# LANGUAGE BangPatterns, TemplateHaskell #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE PatternSynonyms #-}  -- for importing constructors
+{-# LANGUAGE TemplateHaskell #-}
+
 module Distribution.Server.Packages.Index (
     writeIncremental,
     TarIndexEntry(..),
@@ -30,7 +33,8 @@ import Distribution.Text
 import Distribution.Types.PackageName
 import Distribution.Package
          ( Package, PackageId, packageName, packageVersion )
-import Distribution.Version (mkVersion)
+import Distribution.CabalSpecVersion
+         ( pattern CabalSpecV2_0 )
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Clock.POSIX
@@ -166,10 +170,10 @@ legacyExtras = go Map.empty
 
 -- | Write tarball in legacy format
 --
--- "Legacy format" here refers to prior to the intrudction of the incremental
+-- "Legacy format" here refers to prior to the introduction of the incremental
 -- index, and contains the packages in order of packages/versions (for better
 -- compression), contains at most one preferred-version per package (important
--- because of a bug in cabal which would otherwise merge all perferred-versions
+-- because of a bug in cabal which would otherwise merge all preferred-versions
 -- files for a package), and does not contain the TUF files.
 writeLegacy :: Users -> Map String (ByteString, UTCTime) -> PackageIndex PkgInfo -> ByteString
 writeLegacy users =
@@ -218,7 +222,7 @@ writeLegacyAux externalPackageRep updateEntry extras =
   where
     -- entry :: pkg -> Maybe Tar.Entry
     entry pkg
-      | specVer >= mkVersion [2] = Nothing
+      | specVerGEq2              = Nothing
       | otherwise                = Just
                                  . updateEntry pkg
                                  . Tar.fileEntry tarPath
@@ -230,5 +234,5 @@ writeLegacyAux externalPackageRep updateEntry extras =
                         </> name <.> "cabal"
 
         -- TODO: Hack-alert! We want to do this in a more elegant way.
-        specVer = parseSpecVerLazy cabalText
+        specVerGEq2 = maybe False (>= CabalSpecV2_0) $ parseSpecVerLazy cabalText
         cabalText = externalPackageRep pkg

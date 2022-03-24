@@ -93,6 +93,12 @@ data UserInfo_v0 = UserInfo_v0 {
                   userStatus_v0 :: !UserStatus
                 } deriving (Eq, Show, Typeable)
 
+$(deriveSafeCopy 0 'base ''UserId)
+$(deriveSafeCopy 0 'base ''UserName)
+$(deriveSafeCopy 1 'base ''UserAuth)
+$(deriveSafeCopy 0 'base ''UserStatus)
+$(deriveSafeCopy 0 'base ''UserInfo_v0)
+
 instance Migrate UserInfo where
     type MigrateFrom UserInfo = UserInfo_v0
     migrate v0 =
@@ -102,9 +108,4 @@ instance Migrate UserInfo where
         , userTokens = M.empty
         }
 
-$(deriveSafeCopy 0 'base ''UserId)
-$(deriveSafeCopy 0 'base ''UserName)
-$(deriveSafeCopy 1 'base ''UserAuth)
-$(deriveSafeCopy 0 'base ''UserStatus)
-$(deriveSafeCopy 0 'base ''UserInfo_v0)
 $(deriveSafeCopy 1 'extension ''UserInfo)

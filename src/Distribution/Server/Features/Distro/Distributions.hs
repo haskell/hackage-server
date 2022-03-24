@@ -82,7 +82,7 @@ distroPackageStatus distro package dv = Map.lookup distro =<< Map.lookup package
 
 --- Removing
 
--- | Remove a distirbution from the list of known distirbutions
+-- | Remove a distribution from the list of known distributions
 removeDistro :: DistroName -> Distributions -> Distributions
 removeDistro distro distros = distros { nameMap = Map.delete distro (nameMap distros) }
 

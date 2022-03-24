@@ -1,4 +1,4 @@
--- | Error handling style for the hackage server.
+-- | Error handling style for the Hackage server.
 --
 -- The point is to be able to abort and return appropriate HTTP errors, plus
 -- human readable messages.

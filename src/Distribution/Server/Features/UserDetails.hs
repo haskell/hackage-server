@@ -67,13 +67,21 @@ data AccountKind = AccountKindRealUser | AccountKindSpecial
 newtype UserDetailsTable = UserDetailsTable (IntMap AccountDetails)
   deriving (Eq, Show, Typeable)
 
+data NameAndContact = NameAndContact { ui_name  :: Text, ui_contactEmailAddress :: Text }
+data AdminInfo      = AdminInfo      { ui_accountKind :: Maybe AccountKind, ui_notes :: Text }
+
+deriveJSON (compatAesonOptionsDropPrefix "ui_") ''NameAndContact
+deriveJSON  compatAesonOptions                  ''AccountKind
+deriveJSON (compatAesonOptionsDropPrefix "ui_") ''AdminInfo
+
 emptyAccountDetails :: AccountDetails
 emptyAccountDetails   = AccountDetails T.empty T.empty Nothing T.empty
+
 emptyUserDetailsTable :: UserDetailsTable
 emptyUserDetailsTable = UserDetailsTable IntMap.empty
 
-$(deriveSafeCopy 0 'base ''AccountDetails)
 $(deriveSafeCopy 0 'base ''AccountKind)
+$(deriveSafeCopy 0 'base ''AccountDetails)
 $(deriveSafeCopy 0 'base ''UserDetailsTable)
 
 instance MemSize AccountDetails where
@@ -297,10 +305,10 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
     -- Queries and updates
     --
 
-    queryUserDetails :: UserId -> MonadIO m => m (Maybe AccountDetails)
+    queryUserDetails :: MonadIO m => UserId -> m (Maybe AccountDetails)
     queryUserDetails uid = queryState userDetailsState (LookupUserDetails uid)
 
-    updateUserDetails :: UserId -> AccountDetails -> MonadIO m => m ()
+    updateUserDetails :: MonadIO m => UserId -> AccountDetails -> m ()
     updateUserDetails uid udetails = do
       updateState userDetailsState (SetUserDetails uid udetails)
 
@@ -364,12 +372,3 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
         uid <- lookupUserName =<< userNameInPath dpath
         updateState userDetailsState (SetUserAdminInfo uid Nothing T.empty)
         noContent $ toResponse ()
-
-
-data NameAndContact = NameAndContact { ui_name  :: Text, ui_contactEmailAddress :: Text }
-data AdminInfo      = AdminInfo      { ui_accountKind :: Maybe AccountKind, ui_notes :: Text }
-
-
-deriveJSON (compatAesonOptionsDropPrefix "ui_") ''NameAndContact
-deriveJSON (compatAesonOptionsDropPrefix "ui_") ''AdminInfo
-deriveJSON  compatAesonOptions                  ''AccountKind

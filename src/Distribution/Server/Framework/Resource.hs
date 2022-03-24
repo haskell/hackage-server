@@ -521,14 +521,11 @@ negotiateContent :: (FilterMonad Response m, ServerMonad m)
 negotiateContent def available = do
     when (length available > 1) $
       setHeaderM "Vary" "Accept"
-    maccept <- getHeaderM "Accept"
-    case maccept of
-      Nothing -> return def
-      Just accept ->
-        return $ fromMaybe def $ listToMaybe $ catMaybes
+    accept <- maybe "text/html" BS.unpack <$> getHeaderM "Accept"
+    return $ fromMaybe def $ listToMaybe $ catMaybes
                    [ simpleContentTypeMapping ct
                        >>= \f -> find (\x -> fst x == f) available
-                   | let acceptable = parseContentAccept (BS.unpack accept)
+                   | let acceptable = parseContentAccept accept
                    , ct <- acceptable ]
   where
     -- This is rather a non-extensible hack
@@ -597,4 +594,3 @@ addServerNode trunk response tree = treeFold trunk (ServerTree (Just response) M
 treeFold :: Monoid a => BranchPath -> ServerTree a -> ServerTree a -> ServerTree a
 treeFold [] newChild topLevel = combine newChild topLevel
 treeFold (sdir:otherTree) newChild topLevel = treeFold otherTree (ServerTree Nothing $ Map.singleton sdir newChild) topLevel
-

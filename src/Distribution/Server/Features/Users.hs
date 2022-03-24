@@ -204,6 +204,23 @@ emptyGroupIndex = GroupIndex IntMap.empty Map.empty
 instance MemSize GroupIndex where
     memSize (GroupIndex a b) = memSize2 a b
 
+--  Some types for JSON resources
+
+data UserNameIdResource = UserNameIdResource { ui_username    :: UserName,
+                                               ui_userid      :: UserId }
+data UserInfoResource   = UserInfoResource   { ui1_username    :: UserName,
+                                               ui1_userid      :: UserId,
+                                               ui1_groups      :: [T.Text] }
+data EnabledResource    = EnabledResource    { ui_enabled     :: Bool }
+data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
+                                               ui_description :: T.Text,
+                                               ui_members     :: [UserNameIdResource] }
+
+deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserNameIdResource
+deriveJSON (compatAesonOptionsDropPrefix "ui1_") ''UserInfoResource
+deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''EnabledResource
+deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserGroupResource
+
 -- TODO: add renaming
 initUserFeature :: ServerEnv -> IO (IO UserFeature)
 initUserFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
@@ -923,23 +940,3 @@ userFeature templates usersState adminsState
                      -> (Map String GroupDescription -> Map String GroupDescription)
                      -> GroupIndex -> GroupIndex
     adjustGroupIndex f g (GroupIndex a b) = GroupIndex (f a) (g b)
-
-
-{------------------------------------------------------------------------------
-  Some types for JSON resources
-------------------------------------------------------------------------------}
-
-data UserNameIdResource = UserNameIdResource { ui_username    :: UserName,
-                                               ui_userid      :: UserId }
-data UserInfoResource   = UserInfoResource   { ui1_username    :: UserName,
-                                               ui1_userid      :: UserId,
-                                               ui1_groups      :: [T.Text] }
-data EnabledResource    = EnabledResource    { ui_enabled     :: Bool }
-data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
-                                               ui_description :: T.Text,
-                                               ui_members     :: [UserNameIdResource] }
-
-deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserNameIdResource
-deriveJSON (compatAesonOptionsDropPrefix "ui1_") ''UserInfoResource
-deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''EnabledResource
-deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserGroupResource

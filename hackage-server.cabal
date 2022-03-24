@@ -113,7 +113,7 @@ common defaults
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 1.5
-    , Cabal                 ^>= 3.2.1.0
+    , Cabal                 ^>= 3.4.1.0
     , fail                  ^>= 4.9.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , network               >=  3 && < 3.2
@@ -317,6 +317,8 @@ library lib-server
       Distribution.Server.Features.HoogleData
       Distribution.Server.Features.HaskellPlatform
       Distribution.Server.Features.HaskellPlatform.State
+      Distribution.Server.Features.PackageInfoJSON
+      Distribution.Server.Features.PackageInfoJSON.State
       Distribution.Server.Features.Search
       Distribution.Server.Features.Search.BM25F
       Distribution.Server.Features.Search.DocIdSet
@@ -581,3 +583,14 @@ test-suite HashTests
       -- component-specific dependencies
     , tasty       ^>= 1.4
     , tasty-hunit ^>= 0.10
+
+test-suite DocTests
+  import:         test-defaults
+
+  type:           exitcode-stdio-1.0
+  main-is:        DocTestMain.hs
+
+  build-depends:
+    , lib-server
+    , doctest-parallel ^>= 0.2.2
+        -- doctest-parallel-0.2.2 is the first to filter out autogen-modules

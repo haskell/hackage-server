@@ -27,7 +27,7 @@ import Control.Arrow (first)
 --
 -- In particular it provides:
 --
--- * API introspection: let people find out what the API of this hackage server
+-- * API introspection: let people find out what the API of this Hackage server
 -- instance is. It lists all the active features and all the resources they
 -- serve, including what methods and formats they support.
 -- This should make things more obvious to people writing clients.

@@ -33,8 +33,7 @@ import Distribution.Text
 import Distribution.Pretty (prettyShow)
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
-import Distribution.Types.CondTree
-import Distribution.Types.UnqualComponentName
+import Distribution.Types.ModuleReexport
 
 -- hackage-server
 import Distribution.Server.Framework.CacheControl (ETag)
@@ -77,7 +76,7 @@ data PackageRender = PackageRender {
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
-    rendFlags        :: [Flag],
+    rendFlags        :: [PackageFlag],
     -- rendOther contains other useful fields which are merely strings, possibly empty
     --     for example: description, home page, copyright, author, stability
     -- If PackageRender is the One True Resource Representation, should they
@@ -203,7 +202,7 @@ flatDependencies pkg =
       where
         fromMap = map fromPair . Map.toList
         fromPair (pkgname, Versions _ ver) =
-            Dependency pkgname (fromVersionIntervals ver) Set.empty -- XXX: ok?
+            Dependency pkgname (fromVersionIntervals ver) mainLibSet -- XXX: ok?
 
         notSubLib pn _ = packageNameToUnqualComponentName pn `Set.notMember` sublibs
         sublibs = Set.fromList $ map fst (condSubLibraries pkg)
@@ -276,7 +275,7 @@ sortDeps = sortOn $ \(Dependency pkgname _ _) -> map toLower (display pkgname)
 combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
               -> [Dependency] -> [Dependency]
 combineDepsBy f =
-    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver) Set.empty) -- XXX: ok?
+    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver) mainLibSet) -- XXX: ok?
   . Map.toList
   . Map.fromListWith f
   . map (\(Dependency pkgname ver _) -> (pkgname, toVersionIntervals ver))
@@ -287,7 +286,7 @@ evalCondition :: [(FlagName,Bool)] -> Condition ConfVar -> Maybe Bool
 evalCondition flags cond =
     let eval = evalCondition flags
     in case cond of
-         Var (Flag f) -> lookup f flags
+         Var (PackageFlag f) -> lookup f flags
          Var _ -> Nothing
          Lit b -> Just b
          CNot c -> not `fmap` eval c

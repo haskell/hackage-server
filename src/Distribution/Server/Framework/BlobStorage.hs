@@ -289,7 +289,7 @@ data BlobStores = BlobStores {
   }
 
 -- | Check if a blob with the specified ID exists in any of the stores, and if
--- exists, hardlink it to the main store.
+-- exists, hard link it to the main store.
 find :: BlobStores -> BlobId -> IO Bool
 find BlobStores{..} blobId = do
      existsInMainStore <- doesFileExist $ filepath blobStoresMain blobId

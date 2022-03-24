@@ -91,17 +91,14 @@ instance SafeCopy VersionRange where
     kind    = extension
     putCopy = contain . cataVersionRange f
       where
-        f AnyVersionF = putWord8 0
         f (ThisVersionF v) = putWord8 1 >> safePut v
         f (LaterVersionF v) = putWord8 2 >> safePut v
         f (EarlierVersionF v) = putWord8 3 >> safePut v
         f (OrLaterVersionF v) = putWord8 4 >> safePut v
         f (OrEarlierVersionF v) = putWord8 5 >> safePut v
-        f (WildcardVersionF v) = putWord8 6 >> safePut v
         f (MajorBoundVersionF v) = putWord8 10 >> safePut v -- since Cabal-2.0
         f (UnionVersionRangesF u v) = putWord8 7 >> u >> v
         f (IntersectVersionRangesF u v) = putWord8 8 >> u >> v
-        f (VersionRangeParensF v) = putWord8 9 >> v
     getCopy = contain getVR
       where
         getVR = do

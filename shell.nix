@@ -17,5 +17,6 @@ pkgs.mkShell {
     # Dependencies
     pkgs.icu
     pkgs.zlib
+    pkgs.brotli
   ];
 }

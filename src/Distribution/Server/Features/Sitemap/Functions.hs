@@ -89,7 +89,7 @@ urlsToSitemapEntries urls lastModAll changeFreqAll priorityAll =
       }
     | url <- urls ]
 
--- | Make nodes with differeing paths and modification times, but common
+-- | Make nodes with differing paths and modification times, but common
 -- | change frequencies and priorities.
 pathsAndDatesToSitemapEntries :: [(String, UTCTime)] -> ChangeFreq -> Float
                               -> [SitemapEntry]

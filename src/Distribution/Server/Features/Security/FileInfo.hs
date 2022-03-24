@@ -43,6 +43,19 @@ data FileInfo = FileInfo {
   }
   deriving (Typeable, Show, Eq)
 
+data FileInfo_v0 = FileInfo_v0 Sec.Int54 SHA256Digest
+
+deriveSafeCopy 0 'base ''FileInfo_v0
+
+instance Migrate FileInfo where
+    type MigrateFrom FileInfo = FileInfo_v0
+    migrate (FileInfo_v0 len s256) =
+      FileInfo {
+        fileInfoLength = len,
+        fileInfoSHA256 = s256,
+        fileInfoMD5    = Nothing
+      }
+
 deriveSafeCopy 1 'extension ''FileInfo
 
 instance MemSize FileInfo where
@@ -60,19 +73,6 @@ instance HasFileInfo TarballCompressed where
 instance HasFileInfo BlobInfo where
   fileInfo bi@BlobInfo{..} = FileInfo (fromIntegral blobInfoLength) blobInfoHashSHA256 (Just $ blobInfoHashMD5 bi)
 
-
-data FileInfo_v0 = FileInfo_v0 Sec.Int54 SHA256Digest
-
-deriveSafeCopy 0 'base ''FileInfo_v0
-
-instance Migrate FileInfo where
-    type MigrateFrom FileInfo = FileInfo_v0
-    migrate (FileInfo_v0 len s256) =
-      FileInfo {
-        fileInfoLength = len,
-        fileInfoSHA256 = s256,
-        fileInfoMD5    = Nothing
-      }
 
 {-------------------------------------------------------------------------------
   Auxiliary

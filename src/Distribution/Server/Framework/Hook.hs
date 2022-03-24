@@ -11,7 +11,7 @@ module Distribution.Server.Framework.Hook (
 import Data.IORef
 import Control.Monad.Trans (MonadIO, liftIO)
 
--- | A list of actions accociated with an event.
+-- | A list of actions associated with an event.
 --
 newtype Hook a b = Hook (IORef [a -> IO b])
 

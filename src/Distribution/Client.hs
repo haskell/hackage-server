@@ -16,7 +16,7 @@ module Distribution.Client
   , requestPUT
   , (<//>)
   , provideAuthInfo
-    -- * TODO: Exported although they appear unusued
+    -- * TODO: Exported although they appear unused
   , extractURICredentials
   , removeURICredentials
   , getETag

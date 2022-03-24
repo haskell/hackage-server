@@ -1,4 +1,4 @@
--- | This module defines a plugin interface for hackage features.
+-- | This module defines a plugin interface for Hackage features.
 --
 {-# LANGUAGE ExistentialQuantification, RankNTypes, NoMonomorphismRestriction, RecordWildCards #-}
 module Distribution.Server.Framework.Feature
@@ -33,8 +33,8 @@ import Distribution.Server.Framework.MemSize
 import Data.Acid
 import Data.Acid.Advanced
 
--- | We compose the overall hackage server featureset from a bunch of these
--- features. The intention is to make the hackage server reasonably modular
+-- | We compose the overall Hackage server featureset from a bunch of these
+-- features. The intention is to make the Hackage server reasonably modular
 -- by allowing distinct features to be designed independently.
 --
 -- Features can hold their own canonical state and caches, and can provide a

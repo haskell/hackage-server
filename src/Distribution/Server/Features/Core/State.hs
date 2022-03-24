@@ -57,8 +57,6 @@ data PackagesState = PackagesState {
 -- 'ExtraEntry' carried over from 'PackagesState_v1'
 type ExtraFilesUpdateLog = [(FilePath,ByteString,UTCTime)]
 
-deriveSafeCopy 2 'extension ''PackagesState
-
 --TODO:
 
 instance MemSize PackagesState where
@@ -255,7 +253,7 @@ migrateAddUpdateLog users = do
 --   pre-existing 'preferred-versions' entries from the V1 'PackagesState' log
 --   (since that's the only place we keep track of their history for now)
 -- * We do this here rather than in the security feature so that this happens
---   before we set up the hook to update the hackage on package changes
+--   before we set up the hook to update the Hackage on package changes
 --   (otherwise the index would continuously be updated during this process,
 --   which would be far too expensive).
 -- * Moreover, this allows us to order the index such that the TUF files are
@@ -300,22 +298,6 @@ initialUpdateLog oldExtras users pkgs =
     vecToList :: Vec.Vector a -> [(Int, a)]
     vecToList = zip [0..] . Vec.toList
 
-makeAcidic ''PackagesState ['getPackagesState
-                           ,'replacePackagesState
-                           ,'addPackage
-                           ,'addPackage2
-                           ,'addPackage3
-                           ,'deletePackage
-                           ,'addPackageRevision
-                           ,'addPackageRevision2
-                           ,'addPackageTarball
-                           ,'setPackageUploader
-                           ,'setPackageUploadTime
-                           ,'updatePackageInfo
-                           ,'addOtherIndexEntry
-                           ,'migrateAddUpdateLog
-                           ]
-
 ------------------------------------------------------------------------------
 
 -- PackagesState v1
@@ -330,6 +312,10 @@ data TarIndexEntry_v0 =
 
 deriveSafeCopy 0 'base ''TarIndexEntry_v0
 
+data PackagesState_v0 = PackagesState_v0 !(PackageIndex PkgInfo)
+
+deriveSafeCopy 0 'base ''PackagesState_v0
+
 data PackagesState_v1 = PackagesState_v1 {
     packageIndex_v1      :: !(PackageIndex PkgInfo),
     packageUpdateLog_v1  :: !(Maybe (Seq TarIndexEntry_v0))
@@ -337,6 +323,14 @@ data PackagesState_v1 = PackagesState_v1 {
     -- we can change that later
   }
   deriving (Eq, Typeable, Show)
+
+instance Migrate PackagesState_v1 where
+    type MigrateFrom PackagesState_v1 = PackagesState_v0
+    migrate (PackagesState_v0 pkgs) =
+      PackagesState_v1 {
+        packageIndex_v1     = pkgs,
+        packageUpdateLog_v1 = Nothing -- filled in by a more complex migration
+      }
 
 deriveSafeCopy 1 'extension ''PackagesState_v1
 
@@ -349,16 +343,21 @@ instance Migrate PackagesState where
            -- filled in by a more complex migration
       }
 
--- PackagesState v1
+deriveSafeCopy 2 'extension ''PackagesState
 
-data PackagesState_v0 = PackagesState_v0 !(PackageIndex PkgInfo)
-
-deriveSafeCopy 0 'base ''PackagesState_v0
-
-instance Migrate PackagesState_v1 where
-    type MigrateFrom PackagesState_v1 = PackagesState_v0
-    migrate (PackagesState_v0 pkgs) =
-      PackagesState_v1 {
-        packageIndex_v1     = pkgs,
-        packageUpdateLog_v1 = Nothing -- filled in by a more complex migration
-      }
+makeAcidic ''PackagesState
+  [ 'getPackagesState
+  , 'replacePackagesState
+  , 'addPackage
+  , 'addPackage2
+  , 'addPackage3
+  , 'deletePackage
+  , 'addPackageRevision
+  , 'addPackageRevision2
+  , 'addPackageTarball
+  , 'setPackageUploader
+  , 'setPackageUploadTime
+  , 'updatePackageInfo
+  , 'addOtherIndexEntry
+  , 'migrateAddUpdateLog
+  ]

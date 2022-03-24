@@ -66,14 +66,14 @@ adminRealm   = RealmName "Hackage admin"
 
 
 -- | Check that the client is authenticated and is authorised to perform some
--- priviledged action.
+-- privileged action.
 --
 -- We check that:
 --
 --   * the client has supplied appropriate authentication credentials for a
 --      known enabled user account;
 --   * is a member of a given group of users who are permitted to perform
---     certain priviledged actions.
+--     certain privileged actions.
 --
 guardAuthorised :: RealmName -> Users.Users -> [PrivilegeCondition]
                 -> ServerPartE UserId
@@ -128,13 +128,13 @@ data PrivilegeCondition = InGroup    Group.UserGroup
                         | IsUserId   UserId
                         | AnyKnownUser
 
--- | Check that a given user is permitted to perform certain priviledged
+-- | Check that a given user is permitted to perform certain privileged
 -- actions.
 --
--- This is based on whether the user is a mamber of a particular group of
--- priviledged users.
+-- This is based on whether the user is a member of a particular group of
+-- privileged users.
 --
--- It only checks if the user is in the priviledged user group, it does not
+-- It only checks if the user is in the privileged user group, it does not
 -- imply that the current client has been authenticated, see 'guardAuthorised'.
 --
 guardPriviledged :: Users.Users -> UserId -> [PrivilegeCondition] -> ServerPartE ()

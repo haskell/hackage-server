@@ -1,8 +1,9 @@
-{-# LANGUAGE BangPatterns, NamedFieldPuns, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Distribution.Server.Features.Search.ExtractNameTerms (
     extractPackageNameTerms,
-    extractModuleNameTerms,
   ) where
 
 import Data.Text (Text)
@@ -14,12 +15,11 @@ import Data.Maybe (maybeToList)
 
 import Data.Functor.Identity
 import Control.Monad
-import Control.Monad.List
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Applicative
 
-
+-- UNUSED:
 extractModuleNameTerms :: String -> [Text]
 extractModuleNameTerms modname =
   map T.toCaseFold $
@@ -180,3 +180,82 @@ main = do
       , let mods = exposedModules lib
       , mod <- mods ]
 -}
+
+------------------------------------------------------------------------
+-- Vendoring deprecated ListT
+------------------------------------------------------------------------
+
+-- Monad transformers @ListT@ got removed in @transformers-0.6.0@
+-- so we vendor it here.
+-- It does not seem worthwhile rewriting this module to not use @ListT@,
+-- because:
+--
+--   - It is entirely undocumented.  It does not specify what the
+--     module is trying to achieve.
+--
+--   - Individual functions are also not documented, neither
+--     their invariants nor their expected behavior.
+--
+--   - The only exported function extractPackageNameTerms
+--     seems to be only used in a package search facility.
+--     Thus, it is not important from a security perspective.
+--
+--   - This module might become obsolete once package search
+--     is rewritten.
+--
+-- Andreas Abel, 2022-03-06
+
+newtype ListT m a = ListT { runListT :: m [a] }
+
+-- | Map between 'ListT' computations.
+--
+-- * @'runListT' ('mapListT' f m) = f ('runListT' m)@
+mapListT :: (m [a] -> n [b]) -> ListT m a -> ListT n b
+mapListT f m = ListT $ f (runListT m)
+{-# INLINE mapListT #-}
+
+instance (Functor m) => Functor (ListT m) where
+    fmap f = mapListT $ fmap $ map f
+    {-# INLINE fmap #-}
+
+instance (Foldable f) => Foldable (ListT f) where
+    foldMap f (ListT a) = foldMap (foldMap f) a
+    {-# INLINE foldMap #-}
+
+instance (Traversable f) => Traversable (ListT f) where
+    traverse f (ListT a) = ListT <$> traverse (traverse f) a
+    {-# INLINE traverse #-}
+
+instance (Applicative m) => Applicative (ListT m) where
+    pure a  = ListT $ pure [a]
+    {-# INLINE pure #-}
+    f <*> v = ListT $ (<*>) <$> runListT f <*> runListT v
+    {-# INLINE (<*>) #-}
+
+instance (Applicative m) => Alternative (ListT m) where
+    empty   = ListT $ pure []
+    {-# INLINE empty #-}
+    m <|> n = ListT $ (++) <$> runListT m <*> runListT n
+    {-# INLINE (<|>) #-}
+
+instance (Monad m) => Monad (ListT m) where
+    m >>= k  = ListT $ do
+        a <- runListT m
+        b <- mapM (runListT . k) a
+        return (concat b)
+    {-# INLINE (>>=) #-}
+
+instance (Monad m) => MonadPlus (ListT m) where
+    mzero       = ListT $ return []
+    {-# INLINE mzero #-}
+    m `mplus` n = ListT $ do
+        a <- runListT m
+        b <- runListT n
+        return (a ++ b)
+    {-# INLINE mplus #-}
+
+instance MonadTrans ListT where
+    lift m = ListT $ do
+        a <- m
+        return [a]
+    {-# INLINE lift #-}
