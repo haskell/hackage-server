@@ -62,8 +62,8 @@ data DistroPackageInfo
 
 $(deriveSafeCopy 0 'base ''DistroName)
 $(deriveSafeCopy 0 'base ''Distributions)
-$(deriveSafeCopy 0 'base ''DistroVersions)
 $(deriveSafeCopy 0 'base ''DistroPackageInfo)
+$(deriveSafeCopy 0 'base ''DistroVersions)
 
 instance MemSize Distributions where
     memSize (Distributions a) = memSize1 a

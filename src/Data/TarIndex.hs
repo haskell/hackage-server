@@ -69,8 +69,8 @@ newtype PathComponentId = PathComponentId Int
 
 type TarEntryOffset = Int
 
-$(deriveSafeCopy 0 'base ''TarIndex)
 $(deriveSafeCopy 0 'base ''PathComponentId)
+$(deriveSafeCopy 0 'base ''TarIndex)
 $(deriveSafeCopy 0 'base ''TarIndexEntry)
 
 instance MemSize TarIndex where

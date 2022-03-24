@@ -222,6 +222,11 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             resourceDesc = [(GET, "Candidate tarball")]
           , resourceGet  = [("tarball", serveCandidateTarball)]
           }
+      -- dummy null resource for revisions, since candidates don't have revisions
+      , coreCabalFileRev = (resourceAt "/package/:package/candidate/revisions/") {
+          resourceDesc = []
+        , resourceGet  = []
+      }
       , indexPackageUri = \format ->
           renderResource (corePackagesPage r) [format]
       , corePackageIdUri = \format pkgid ->

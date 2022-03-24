@@ -239,7 +239,7 @@ blobInfoFromId store blobId =
     blobInfoFromBS blobId <$> BlobStorage.fetch store blobId
 
 {-------------------------------------------------------------------------------
-  SafeCopy instances
+  SafeCopy instances & migration
 -------------------------------------------------------------------------------}
 
 instance SafeCopy CabalFileText where
@@ -267,10 +267,18 @@ instance Serialize PkgTarball_v0 where
     put (PkgTarball_v0 a b) = Serialize.put a >> Serialize.put b
     get = PkgTarball_v0 <$> Serialize.get <*> Serialize.get
 
-deriveSafeCopy 2 'extension ''PkgTarball_v1
-deriveSafeCopy 3 'extension ''PkgTarball
+instance Migrate PkgTarball_v1 where
+    type MigrateFrom PkgTarball_v1 = PkgTarball_v0
+    migrate (PkgTarball_v0 a b) = PkgTarball_v1 (migrate a) (migrate b)
 
 deriveSafeCopy 1 'base ''BlobInfo
+deriveSafeCopy 2 'extension ''PkgTarball_v1
+
+instance Migrate PkgTarball where
+    type MigrateFrom PkgTarball = PkgTarball_v1
+    migrate = PkgTarball_v2_v1
+
+deriveSafeCopy 3 'extension ''PkgTarball
 
 instance SafeCopy  PkgInfo_v0 where
     getCopy = contain Serialize.get
@@ -290,13 +298,31 @@ instance Serialize PkgInfo_v0 where
      <*> (map (\(bs,uinf) -> (CabalFileText bs, uinf)) <$> Serialize.get)
      <*> Serialize.get
 
-deriveSafeCopy 2 'extension ''PkgInfo_v1
-deriveSafeCopy 3 'extension ''PkgInfo_v2
-deriveSafeCopy 4 'extension ''PkgInfo
+instance Migrate PkgInfo_v1 where
+    type MigrateFrom PkgInfo_v1 = PkgInfo_v0
+    migrate (PkgInfo_v0 a b c d e) =
+      PkgInfo_v1 (migrate a) b
+                 [ (migrate (migrate pt), migrateUploadInfo ui) | (pt, ui) <- c ]
+                 [ (cf, (migrateUploadInfo ui)) | (cf, ui) <- d ]
+                 (migrateUploadInfo e)
+      where
+        migrateUploadInfo (UTCTime_v0 ts, UserId_v0 uid) = (ts, UserId uid)
 
-{-------------------------------------------------------------------------------
-  Migration
--------------------------------------------------------------------------------}
+deriveSafeCopy 2 'extension ''PkgInfo_v1
+
+instance Migrate PkgInfo_v2 where
+    type MigrateFrom PkgInfo_v2 = PkgInfo_v1
+    migrate (PkgInfo_v1 {..}) =
+      PkgInfo_v2 {
+        v2_pkgInfoId            = v1_pkgInfoId,
+        -- This migration was wrong. It put the revisions in the wrong order.
+        -- This mistake is corrected in the subsequent migration.
+        v2_pkgMetadataRevisions = Vec.fromList ((v1_pkgData, v1_pkgUploadData)
+                                                :v1_pkgDataOld),
+        v2_pkgTarballRevisions  = Vec.fromList v1_pkgTarball
+      }
+
+deriveSafeCopy 3 'extension ''PkgInfo_v2
 
 instance Migrate PkgInfo where
     type MigrateFrom PkgInfo = PkgInfo_v2
@@ -312,32 +338,4 @@ instance Migrate PkgInfo where
         pkgTarballRevisions  = v2_pkgTarballRevisions
       }
 
-instance Migrate PkgInfo_v2 where
-    type MigrateFrom PkgInfo_v2 = PkgInfo_v1
-    migrate (PkgInfo_v1 {..}) =
-      PkgInfo_v2 {
-        v2_pkgInfoId            = v1_pkgInfoId,
-        -- This migration was wrong. It put the revisions in the wrong order.
-        -- This mistake is corrected in the subsequent migration.
-        v2_pkgMetadataRevisions = Vec.fromList ((v1_pkgData, v1_pkgUploadData)
-                                                :v1_pkgDataOld),
-        v2_pkgTarballRevisions  = Vec.fromList v1_pkgTarball
-      }
-
-instance Migrate PkgInfo_v1 where
-    type MigrateFrom PkgInfo_v1 = PkgInfo_v0
-    migrate (PkgInfo_v0 a b c d e) =
-      PkgInfo_v1 (migrate a) b
-                 [ (migrate (migrate pt), migrateUploadInfo ui) | (pt, ui) <- c ]
-                 [ (cf, (migrateUploadInfo ui)) | (cf, ui) <- d ]
-                 (migrateUploadInfo e)
-      where
-        migrateUploadInfo (UTCTime_v0 ts, UserId_v0 uid) = (ts, UserId uid)
-
-instance Migrate PkgTarball where
-    type MigrateFrom PkgTarball = PkgTarball_v1
-    migrate = PkgTarball_v2_v1
-
-instance Migrate PkgTarball_v1 where
-    type MigrateFrom PkgTarball_v1 = PkgTarball_v0
-    migrate (PkgTarball_v0 a b) = PkgTarball_v1 (migrate a) (migrate b)
+deriveSafeCopy 4 'extension ''PkgInfo

@@ -240,17 +240,14 @@ instance MemSize Version where
 instance MemSize VersionRange where
     memSize = cataVersionRange f
       where
-        f AnyVersionF                   = memSize0
         f (ThisVersionF v)              = memSize1 v
         f (LaterVersionF v)             = memSize1 v
         f (OrLaterVersionF v)           = memSize1 v
         f (EarlierVersionF v)           = memSize1 v
         f (OrEarlierVersionF v)         = memSize1 v
-        f (WildcardVersionF v)          = memSize1 v
         f (MajorBoundVersionF v)        = memSize1 v
         f (UnionVersionRangesF u v)     = memSize2 u v
         f (IntersectVersionRangesF u v) = memSize2 u v
-        f (VersionRangeParensF v)       = memSize1 v
 
 instance MemSize PackageIdentifier where
     memSize (PackageIdentifier a b) = memSize2 a b

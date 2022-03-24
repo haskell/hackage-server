@@ -19,6 +19,7 @@ import qualified Data.ByteString.Lazy  as BSL
 import qualified Data.ByteString.Lazy.Char8 as BC8L
 import           Data.List.NonEmpty  ( toList)
 import           Distribution.Text
+import           Distribution.CabalSpecVersion
 import           Distribution.Pretty ( prettyShow )
 import           Distribution.Parsec ( PWarning, PError )
 import           Distribution.Version
@@ -45,12 +46,15 @@ import           Distribution.PackageDescription.Parsec ( runParseResult, parseG
 -- inferred 'specVersion'. IOW, Hackage ensures on upload that only
 -- @.cabal@ files are accepted which support the heuristic parsing.
 --
--- If no valid version field can be found, @mkVersion [0]@ is returned.
-parseSpecVer :: ByteString -> Version
-parseSpecVer = maybe (mkVersion [0]) id . findCabVer
+-- If no valid version field can be found, @Nothing@ is returned.
+parseSpecVer :: ByteString -> Maybe CabalSpecVersion
+parseSpecVer = findCabVer
 
-parseSpecVerLazy :: BSL.ByteString -> Version
+parseSpecVerLazy :: BSL.ByteString -> Maybe CabalSpecVersion
 parseSpecVerLazy = parseSpecVer . BSL.toStrict
+
+versionToCabalSpecVersion :: Version -> Maybe CabalSpecVersion
+versionToCabalSpecVersion = cabalSpecFromVersionDigits . versionNumbers
 
 isWS :: Word8 -> Bool
 isWS = (`elem` [0x20,0x09])
@@ -59,8 +63,8 @@ eatWS :: ByteString -> ByteString
 eatWS = BS.dropWhile isWS
 
 -- | Try to heuristically locate & parse a 'cabal-version' field
-findCabVer :: ByteString -> Maybe Version
-findCabVer raw = msum [ decodeVer y | (_,_,y) <- findCabVers raw ]
+findCabVer :: ByteString -> Maybe CabalSpecVersion
+findCabVer raw = msum [ versionToCabalSpecVersion =<< decodeVer y | (_,_,y) <- findCabVers raw ]
 
 -- | Return list of @cabal-version@ candidates as 3-tuples of
 -- (prefix,indentation-level,value-words) in reverse order of
@@ -282,16 +286,17 @@ scanSpecVersionLazy bs = do
 -- * Starting with cabal-version:2.2 'scanSpecVersionLazy' must succeed
 --
 -- 'True' is returned in the first element if sanity checks passes.
-parseGenericPackageDescriptionChecked :: BSL.ByteString -> (Bool,[PWarning], Either (Maybe Version, [PError]) GenericPackageDescription)
+parseGenericPackageDescriptionChecked :: BSL.ByteString -> (Bool, [PWarning], Either (Maybe Version, [PError]) GenericPackageDescription)
 parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription' bs of
    (warns, Left pe) -> (False, warns, Left $ fmap toList pe)
-   (warns, Right gpd)   -> (isOk (specVersion (packageDescription gpd)),warns, Right gpd)
+   (warns, Right gpd) -> (isOk (specVersion (packageDescription gpd)), warns, Right gpd)
  where
-   isOk :: Version -> Bool
+   isOk :: CabalSpecVersion -> Bool
    isOk v
-     | v /= parseSpecVerLazy bs           = False
-     | Just v' <- scanSpecVersionLazy bs  = v == v'
-     | otherwise                          = v < mkVersion [2,3]
+     | Just v /= parseSpecVerLazy bs      = False
+     | Just v' <- versionToCabalSpecVersion =<< scanSpecVersionLazy bs
+                                          = v == v'
+     | otherwise                          = v <= CabalSpecV2_2
 
 #if defined(MIN_VERSION_cabal_parsers)
    parseGenericPackageDescription' bs' = compatParseGenericPackageDescription (BSL.toStrict bs')

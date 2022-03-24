@@ -48,9 +48,10 @@ parseNonceM = either fail return . parseNonce
 newtype Nonce_v0 = Nonce_v0 ByteString
   deriving (Eq, Ord, Show, Typeable, MemSize)
 
+$(deriveSafeCopy 0 'base ''Nonce_v0)
+
 instance Migrate Nonce where
     type MigrateFrom Nonce = Nonce_v0
     migrate (Nonce_v0 x) = either (const $ Nonce x) Nonce $ Base16.decode x
 
-$(deriveSafeCopy 0 'base ''Nonce_v0)
 $(deriveSafeCopy 1 'extension ''Nonce)

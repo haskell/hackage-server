@@ -198,6 +198,9 @@ instance MemSize InMemStats where
   Serializing on-disk stats
 ------------------------------------------------------------------------------}
 
+deriveSafeCopy 0 'base ''InMemStats
+deriveSafeCopy 0 'base ''OnDiskPerPkg
+
 readOnDiskStats :: FilePath -> IO OnDiskStats
 readOnDiskStats stateDir = do
     createDirectoryIfMissing True stateDir
@@ -241,9 +244,6 @@ reconstructLog stateDir onDisk =
 {------------------------------------------------------------------------------
   ACID stuff
 ------------------------------------------------------------------------------}
-
-deriveSafeCopy 0 'base ''InMemStats
-deriveSafeCopy 0 'base ''OnDiskPerPkg
 
 getInMemStats :: Query InMemStats InMemStats
 getInMemStats = ask

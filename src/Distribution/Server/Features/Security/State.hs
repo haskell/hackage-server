@@ -66,7 +66,6 @@ data SecurityStateFiles =
      }
   deriving (Typeable, Show, Eq)
 
-deriveSafeCopy 2 'extension ''SecurityState
 deriveSafeCopy 0 'base      ''SecurityStateFiles
 
 instance MemSize SecurityState where
@@ -364,20 +363,6 @@ fauxFileInfo file =
     }
 
 {-------------------------------------------------------------------------------
-  The acid-state transactions
--------------------------------------------------------------------------------}
-
-makeAcidic ''SecurityState [
-    'getSecurityState
-  , 'replaceSecurityState
-  , 'getSecurityFiles
-  , 'updateSecurityState
-  , 'setRootMirrorsAndKeys
-  , 'setTarGzFileInfo
-  , 'resignSnapshotAndTimestamp
-  ]
-
-{-------------------------------------------------------------------------------
   Migration
 -------------------------------------------------------------------------------}
 
@@ -460,3 +445,19 @@ instance Migrate SecurityState where
     -- In this case (which can only happen with an empty server)
     -- we just use the new style initial state
     initialSecurityState
+
+deriveSafeCopy 2 'extension ''SecurityState
+
+{-------------------------------------------------------------------------------
+  The acid-state transactions
+-------------------------------------------------------------------------------}
+
+makeAcidic ''SecurityState
+  [ 'getSecurityState
+  , 'replaceSecurityState
+  , 'getSecurityFiles
+  , 'updateSecurityState
+  , 'setRootMirrorsAndKeys
+  , 'setTarGzFileInfo
+  , 'resignSnapshotAndTimestamp
+  ]

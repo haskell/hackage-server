@@ -17,8 +17,10 @@ import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
+import Distribution.CabalSpecVersion
+         ( CabalSpecVersion(..) )
 import Distribution.Version
-         ( Version, nullVersion, mkVersion )
+         ( nullVersion )
 import Distribution.Types.PackageName
          ( mkPackageName, unPackageName )
 import Distribution.Package
@@ -196,31 +198,19 @@ basicChecks pkgid tarIndex = do
     -- special meaning in cabal's UI
     reservedPkgNames = map mkPackageName ["all","any","none","setup","lib","exe","test"]
 
-specVersionChecks :: MonadError String m => Bool -> Version -> m ()
+specVersionChecks :: MonadError String m => Bool -> CabalSpecVersion -> m ()
 specVersionChecks specVerOk specVer = do
-  when (not specVerOk || specVer < mkVersion [1]) $
+  when (not specVerOk) $
     throwError "The 'cabal-version' field could not be properly parsed."
 
   -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
   -- TODO: slowly phase out ancient cabal spec versions below 1.10
-  when (specVer < mkVersion [1,2]) $
+  when (specVer < CabalSpecV1_2) $
     throwError "'cabal-version' must be at least 1.2"
 
-  -- Reject not well-defined cabal spec versions on upload
-  when (specVer >= mkVersion [1,25] && specVer < mkVersion [2]) $
-    throwError "'cabal-version' in unassigned >=1.25 && <2 range; use 'cabal-version: 2.0' instead"
-
   -- Safeguard; should already be caught by parser
-  unless (specVer < mkVersion [2,5]) $
-    throwError "'cabal-version' must be lower than 2.5"
-
-  -- Check whether a known spec version had been used
-  -- TODO: move this into lib:Cabal
-  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4] ]
-  when (specVer >= mkVersion [1,18] && (specVer `notElem` knownSpecVersions)) $
-    throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
-                ++ display specVer ++ "; for a list of valid specification versions please consult "
-                ++ "https://www.haskell.org/cabal/users-guide/file-format-changelog.html")
+  unless (specVer <= CabalSpecV3_0) $
+    throwError "'cabal-version' must be at most 3.0"
 
 -- | The issue is that browsers can upload the file name using either unix
 -- or windows convention, so we need to take the basename using either

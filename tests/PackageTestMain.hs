@@ -78,7 +78,7 @@ badSpecVer =
        Left err ->
          HUnit.assertBool
            ("Error found, but not about invalid spec version: " ++ err)
-           ("cabal-version" `isInfixOf` err)
+           ("cabal spec version" `isInfixOf` err)
 
 -- | Some tar files in hackage are missing directory entries.
 -- Ensure that they can be verified even without the directory entries.
