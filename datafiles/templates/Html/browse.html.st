@@ -9,7 +9,7 @@
       width: 50vw;
       margin-left: 0;
     }
-    #newBrowse th a {
+    #browseTable th a {
       display:block;
       color: inherit;
       text-decoration: inherit;
@@ -29,26 +29,26 @@
     .commaList li:last-child::after {
       content: "";
     }
-    #newBrowse {
+    #browseTable {
       width: 100%;
       margin-top: 3em;
     }
-    #newBrowse th, #newBrowse td {
+    #browseTable th, #browseTable td {
       padding: 4px 17px 4px 4px;
     }
-    #newBrowse th {
+    #browseTable th {
       border-bottom: 1px solid #111;
     }
-    #newBrowse th {
+    #browseTable th {
       background-repeat: no-repeat;
       background-image: url(/static/images/sort_both.png);
       background-position: center right;
       padding-right: 0;
     }
-    #newBrowse th.ascending {
+    #browseTable th.ascending {
       background-image: url(/static/images/sort_asc.png);
     }
-    #newBrowse th.descending {
+    #browseTable th.descending {
       background-image: url(/static/images/sort_desc.png);
     }
     .paginator {
@@ -133,7 +133,7 @@
     .lastUpload, #sliderAndOutput {
       white-space: nowrap;
     }
-    #newBrowseFooter {
+    #browseFooter {
       display: none;
     }
     #toggleAdvanced {
@@ -225,7 +225,7 @@
         <dd>Only show packages that are available in the Debian distribution. See the <a href="/distros">full list of available distributions</a>.</dd>
       </dl>
       </div>
-      <table id=newBrowse class=fancy>
+      <table id=browseTable class=fancy>
         <thead>
           <tr>
             <th id=arrow-name><a href="javascript: sort('name')">Name</a></th>
@@ -242,7 +242,7 @@
       <script type=module>
       import { sort, submitSearch, toggleAdvanced, appendDeprecated, appendAgeOfLastUL,
                appendTag, appendRating, validateAgeOfLastUL, validateTag }
-             from "/static/new-browse.js";
+             from "/static/browse.js";
       window.sort = sort;
       window.submitSearch = submitSearch;
       window.toggleAdvanced = toggleAdvanced;
@@ -255,7 +255,7 @@
       </script>
       <div id=paginatorContainer>
       </div>
-      <div id=newBrowseFooter>
+      <div id=browseFooter>
       Alternatively, if you are looking for a particular function then try <a href="#" id=hoogleLink target=_blank>Hoogle</a>.
       </div>
     </div>

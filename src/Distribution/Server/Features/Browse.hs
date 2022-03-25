@@ -1,5 +1,5 @@
 {-# LANGUAGE BlockArguments, NamedFieldPuns, TupleSections #-}
-module Distribution.Server.Features.Browse (initNewBrowseFeature, PaginationConfig(..), StartIndex(..), NumElems(..), paginate) where
+module Distribution.Server.Features.Browse (initBrowseFeature, PaginationConfig(..), StartIndex(..), NumElems(..), paginate) where
 
 import Control.Arrow (left)
 import Control.Monad.Except (ExceptT, liftIO, throwError)
@@ -40,8 +40,8 @@ type BrowseFeature =
     -> DistroFeature
     -> IO HackageFeature
 
-initNewBrowseFeature :: ServerEnv -> IO BrowseFeature
-initNewBrowseFeature _env =
+initBrowseFeature :: ServerEnv -> IO BrowseFeature
+initBrowseFeature _env =
   pure \coreFeature userFeature tagsFeature listFeature searchFeature distroFeature ->
     pure $
       (emptyHackageFeature "json")

@@ -21,7 +21,7 @@ import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
 #ifndef MINIMAL
-import Distribution.Server.Features.Browse (initNewBrowseFeature)
+import Distribution.Server.Features.Browse              (initBrowseFeature)
 import Distribution.Server.Features.TarIndexCache       (initTarIndexCacheFeature)
 import Distribution.Server.Features.Html                (initHtmlFeature)
 import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature, candidatesCoreResource, queryGetCandidateIndex)
@@ -153,8 +153,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initSitemapFeature env
     mkPackageFeedFeature    <- logStartup "package feed" $
                                initPackageFeedFeature env
-    mkNewBrowseFeature      <- logStartup "new browse" $
-                               initNewBrowseFeature env
+    mkBrowseFeature         <- logStartup "browse" $
+                               initBrowseFeature env
     mkPackageJSONFeature    <- logStartup "package info JSON" $
                                initPackageInfoJSONFeature env
 #endif
@@ -330,7 +330,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                             usersFeature
                             tarIndexCacheFeature
 
-    browseFeature <- mkNewBrowseFeature
+    browseFeature <- mkBrowseFeature
                        coreFeature
                        usersFeature
                        tagsFeature

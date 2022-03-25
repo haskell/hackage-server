@@ -12,14 +12,6 @@ module Distribution.Server.Features.Search.SearchEngine (
     insertDocs,
     deleteDoc,
     query,
-
-    NoFeatures,
-    noFeatures,
-
-    queryExplain,
-    BM25F.Explanation(..),
-    setRankParams,
-
     invariant,
   ) where
 
@@ -95,21 +87,6 @@ initSearchEngine config params =
         -- FIXME this use of undefined bears explaining
         bm25Context      = undefined
       }
-
-setRankParams :: SearchRankParameters field feature ->
-                 SearchEngine doc key field feature ->
-                 SearchEngine doc key field feature
-setRankParams params@SearchRankParameters{..} se =
-    se {
-      searchRankParams = params,
-      bm25Context      = (bm25Context se) {
-        BM25F.paramK1         = paramK1,
-        BM25F.paramB          = paramB,
-        BM25F.fieldWeight     = paramFieldWeights,
-        BM25F.featureWeight   = paramFeatureWeights,
-        BM25F.featureFunction = paramFeatureFunctions
-      }
-    }
 
 invariant :: (Ord key, Ix field, Bounded field) =>
              SearchEngine doc key field feature -> Bool
@@ -320,84 +297,6 @@ pruneRelevantResults softLimit hardLimit =
       | otherwise         = go (DocIdSet.union acc d) ds
       where
         size = DocIdSet.size acc + DocIdSet.size d
-
------------------------------
-
-queryExplain :: (Ix field, Bounded field, Ix feature, Bounded feature, Ord key) =>
-                SearchEngine doc key field feature ->
-                [Term] -> (Maybe key, [(BM25F.Explanation field feature Term, key)])
-queryExplain se@SearchEngine{ searchIndex,
-                              searchConfig     = SearchConfig{transformQueryTerm, makeKey},
-                              searchRankParams = SearchRankParameters{..} }
-      terms =
-
-  -- See 'query' above for explanation. Really we ought to combine them.
-  let lookupTerms :: [Term]
-      lookupTerms = [ term'
-                    | term  <- terms
-                    , let transformForField = transformQueryTerm term
-                    , term' <- nub [ transformForField field
-                                   | field <- range (minBound, maxBound) ]
-                    ]
-
-      exactMatch :: Maybe DocId
-      exactMatch = case terms of
-                     [] -> Nothing
-                     [x] -> SI.lookupDocKeyReal searchIndex (makeKey x)
-                     (_:_) -> Nothing
-
-      rawresults :: [Maybe (TermId, DocIdSet)]
-      rawresults = map (SI.lookupTerm searchIndex) lookupTerms
-
-      termids   :: [TermId]
-      docidsets :: [DocIdSet]
-      (termids, docidsets) = unzip (catMaybes rawresults)
-
-      unrankedResults :: DocIdSet
-      unrankedResults = pruneRelevantResults
-                          paramResultsetSoftLimit
-                          paramResultsetHardLimit
-                          docidsets
-
-   in ( fmap (SI.lookupDocId' searchIndex) exactMatch
-      , rankExplainResults se termids (DocIdSet.toList unrankedResults)
-      )
-
-rankExplainResults :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
-                      SearchEngine doc key field feature ->
-                      [TermId] ->
-                      [DocId] ->
-                      [(BM25F.Explanation field feature Term, key)]
-rankExplainResults se@SearchEngine{searchIndex} queryTerms docids =
-    sortBy (flip compare `on` (BM25F.overallScore . fst))
-      [ (explainRelevanceScore se queryTerms doctermids docfeatvals, dockey)
-      | docid <- docids
-      , let (dockey, doctermids, docfeatvals) = SI.lookupDocId searchIndex docid ]
-
-explainRelevanceScore :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
-                         SearchEngine doc key field feature ->
-                         [TermId] ->
-                         DocTermIds field ->
-                         DocFeatVals feature ->
-                         BM25F.Explanation field feature Term
-explainRelevanceScore SearchEngine{bm25Context, searchIndex}
-                      queryTerms doctermids docfeatvals =
-    fmap (SI.getTerm searchIndex) (BM25F.explain bm25Context doc queryTerms)
-  where
-    doc = indexDocToBM25Doc doctermids docfeatvals
-
------------------------------
-
-data NoFeatures = NoFeatures
-  deriving (Eq, Ord, Bounded)
-
-instance Ix NoFeatures where
-  range   _   = []
-  inRange _ _ = False
-  index   _ _ = -1
-
-noFeatures :: NoFeatures -> a
-noFeatures _ = error "noFeatures"
 
 -----------------------------
 

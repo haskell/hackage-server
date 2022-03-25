@@ -60,14 +60,13 @@ import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)
 
-import Data.Char (toLower)
 import Data.List (intercalate, intersperse, insert)
 import Data.Function (on)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import qualified Data.Text as T
-import qualified Data.ByteString.Lazy.Char8 as BS (ByteString, pack)
+import qualified Data.ByteString.Lazy.Char8 as BS (ByteString)
 import qualified Network.URI as URI
 
 import Text.XHtml.Strict
@@ -129,11 +128,11 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "tag-edit.html"
                    , "candidate-page.html"
                    , "candidate-index.html"
-                   , "new-browse.html"
+                   , "browse.html"
                    ]
 
 
-    return $ \user@UserFeature{groupChangedHook} core@CoreFeature{packageChangeHook}
+    return $ \user core@CoreFeature{packageChangeHook}
               packages upload
               candidates versions
               -- [reverse index disabled] reverse
@@ -147,7 +146,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
               reportsCore
               usersdetails -> do
       -- do rec, tie the knot
-      rec let (feature, packageIndex, packagesPage, browseTable) =
+      rec let (feature, packageIndex, packagesPage) =
                 htmlFeature env user core
                             packages upload
                             candidates versions
@@ -160,7 +159,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             reportsCore
                             usersdetails
                             (htmlUtilities core candidates tags user)
-                            mainCache namesCache browseCache
+                            mainCache namesCache
                             templates
 
           -- Index page caches
@@ -178,23 +177,13 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             asyncCacheUpdateDelay  = serverCacheDelay,
                             asyncCacheLogVerbosity = verbosity
                           }
-          browseCache <- newAsyncCacheNF browseTable
-                          defaultAsyncCachePolicy {
-                            asyncCacheName = "browse packages",
-                            asyncCacheUpdateDelay  = serverCacheDelay,
-                            asyncCacheLogVerbosity = verbosity
-                          }
 
       registerHook itemUpdate $ \_ -> do
         prodAsyncCache mainCache  "item update"
         prodAsyncCache namesCache "item update"
-        prodAsyncCache browseCache "item update"
       registerHook packageChangeHook $ \_ -> do
         prodAsyncCache mainCache  "package change"
         prodAsyncCache namesCache "package change"
-        prodAsyncCache browseCache "package change"
-      registerHook groupChangedHook $ \_ -> do
-        prodAsyncCache browseCache "package change"
 
       return feature
 
@@ -220,9 +209,8 @@ htmlFeature :: ServerEnv
             -> HtmlUtilities
             -> AsyncCache Response
             -> AsyncCache Response
-            -> AsyncCache BS.ByteString
             -> Templates
-            -> (HtmlFeature, IO Response, IO Response, IO BS.ByteString)
+            -> (HtmlFeature, IO Response, IO Response)
 
 htmlFeature env@ServerEnv{..}
             user
@@ -232,7 +220,7 @@ htmlFeature env@ServerEnv{..}
             -- [reverse index disabled] ReverseFeature{..}
             tags download
             rank
-            list@ListFeature{getAllLists, makeItemList}
+            list@ListFeature{getAllLists}
             names
             mirror distros
             docsCore docsCandidates
@@ -240,9 +228,9 @@ htmlFeature env@ServerEnv{..}
             reportsCore
             usersdetails
             utilities@HtmlUtilities{..}
-            cachePackagesPage cacheNamesPage cacheBrowseTable
+            cachePackagesPage cacheNamesPage
             templates
-  = (HtmlFeature{..}, packageIndex, packagesPage, browseTable)
+  = (HtmlFeature{..}, packageIndex, packagesPage)
   where
     htmlFeatureInterface = (emptyHackageFeature "html") {
         featureResources = htmlResources
@@ -255,10 +243,6 @@ htmlFeature env@ServerEnv{..}
          , CacheComponent {
              cacheDesc       = "packages page by name",
              getCacheMemSize = memSize <$> readAsyncCache cacheNamesPage
-           }
-         , CacheComponent {
-             cacheDesc       = "package browse page",
-             getCacheMemSize = memSize <$> readAsyncCache cacheBrowseTable
            }
          ]
       , featurePostInit = syncAsyncCache cachePackagesPage
@@ -283,7 +267,6 @@ htmlFeature env@ServerEnv{..}
                                       htmlPreferred
                                       cachePackagesPage
                                       cacheNamesPage
-                                      cacheBrowseTable
                                       templates
                                       names
                                       candidates
@@ -430,15 +413,6 @@ htmlFeature env@ServerEnv{..}
                 ]
         return htmlpage
 
-    browseTable :: IO BS.ByteString
-    browseTable = do
-      pkgIndex <- queryGetPackageIndex
-      let packageNames = sortOn (map toLower . unPackageName) $ Pages.toPackageNames pkgIndex
-      pkgDetails <- makeItemList packageNames
-      let rowList = map makeRow pkgDetails
-          tabledata = "" +++ rowList +++ ""
-      return . BS.pack . showHtmlFragment $ tabledata
-
     {-
     -- Currently unused, mainly because not all web browsers use eager authentication-sending
     -- Setting a cookie might work here, albeit one that's stateless for the server, is not
@@ -484,7 +458,6 @@ mkHtmlCore :: ServerEnv
            -> HtmlPreferred
            -> AsyncCache Response
            -> AsyncCache Response
-           -> AsyncCache BS.ByteString
            -> Templates
            -> SearchFeature
            -> PackageCandidatesFeature
@@ -511,7 +484,6 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            HtmlPreferred{..}
            cachePackagesPage
            cacheNamesPage
-           _cacheBrowseTable
            templates
            SearchFeature{..}
            PackageCandidatesFeature{..}
@@ -566,7 +538,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _dpath = do
-      template <- getTemplate templates "new-browse.html"
+      template <- getTemplate templates "browse.html"
       return $ toResponse $ template
           [ "heading" $= "Browse and search packages" ]
 

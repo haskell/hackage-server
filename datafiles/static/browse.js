@@ -2,7 +2,7 @@ const d = document;
 
 const initialParams = new URL(d.location).searchParams;
 // This parameter is named 'terms' because it is from before filters were
-// introduced. But we will parse it a normal search string (including filters)
+// introduced. But we will parse it as a normal search string (including filters)
 const initialSearchQuery = initialParams.has('terms') ? initialParams.get('terms') : ''
 d.querySelector("#searchQuery").value = initialSearchQuery;
 
@@ -212,9 +212,9 @@ const refresh = async () => {
   container.appendChild(createIndexIndicator());
   container.appendChild(createPaginator());
   if (state.searchQuery.trim() === "") {
-    d.querySelector("#newBrowseFooter").style.display = "none";
+    d.querySelector("#browseFooter").style.display = "none";
   } else {
-    d.querySelector("#newBrowseFooter").style.display = "block";
+    d.querySelector("#browseFooter").style.display = "block";
     const url = new URL(hoogleNoParam);
     url.searchParams.set("hoogle", state.searchQuery);
     d.querySelector("#hoogleLink").setAttribute("href", url);
