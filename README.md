@@ -15,14 +15,18 @@ of libraries that provide Unicode and Globalization support.
 The [text-icu](https://hackage.haskell.org/package/text-icu) Haskell package
 uses the [icu4c](http://icu-project.org/apiref/icu4c/) library to build.
 
-### Nix shell
+### [`nix-shell`](https://nixos.org/manual/nix/stable/command-ref/nix-shell.html)
 
-If you have the Nix package manager installed, the easiest way to obtain
-`hackage-server`'s dependencies is using the Nix shell:
+If you have the [Nix package manager](https://nixos.org/) installed, the easiest way to run `hackage-server` is by using the `nix-shell`. It should be unnecessary to install any dependencies manually. In this repository:
 
-    nix-shell
+    nix-shell --pure
 
-Note: `libbrotli-dev` has to be installed manually.
+    [nix-shell]$ cabal v2-run -- hackage-server init
+
+    [nix-shell]$ cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
+    hackage-server: Ready! Point your browser at http://127.0.0.1:8080
+
+Nix dependencies are managed by [Niv](https://github.com/nmattia/niv). Pull the latest version of the current [channel](https://nixos.wiki/wiki/Nix_channels) with `niv update`. Upgrade to a newer channel by editing `nix/sources.json`, and then `niv update`.
 
 ### Manually
 
