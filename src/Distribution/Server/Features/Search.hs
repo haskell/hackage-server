@@ -24,6 +24,7 @@ import qualified Data.Map as Map
 
 import Control.Applicative (optional)
 import Data.Aeson
+import qualified Data.Aeson.Key as Key
 
 data SearchFeature = SearchFeature {
     searchFeatureInterface :: HackageFeature,
@@ -160,7 +161,7 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
         _ ->
           errBadRequest "Invalid search request" [MText $ "Empty terms query"]
       where packageNameJSON pkgName =
-              object [ T.pack "name" .= unPackageName pkgName ]
+              object [ Key.fromString "name" .= unPackageName pkgName ]
 
 {-
     suggestJson :: ServerPartE Response
