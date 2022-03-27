@@ -181,9 +181,10 @@ parsePathTmpl v = parseKey
     parseJVal s                          = JSON.decode (BS8.pack s)
 
 accumJPaths :: [JPath] -> Maybe JSON.Value
-accumJPaths js = foldr (\j r v -> case insertJPath j v of
-                                    Nothing -> Nothing
-                                    Just v' -> r v') Just js JSON.Null
+accumJPaths js = f JSON.Null
+  where
+  f :: JSON.Value -> Maybe JSON.Value
+  f = foldr (\ j r -> insertJPath j >=> r) Just js
 
 insertJPath :: JPath -> JSON.Value -> Maybe JSON.Value
 insertJPath (JField f p) JSON.Null = do
