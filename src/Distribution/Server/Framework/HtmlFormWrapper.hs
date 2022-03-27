@@ -13,7 +13,8 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BS8
 import qualified Data.Aeson as JSON
 import qualified Data.Text as T
-import qualified Data.HashMap.Strict as HMap
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 import Control.Concurrent.MVar
 
 import Distribution.Server.Framework.HappstackUtils (showContentType)
@@ -187,18 +188,20 @@ accumJPaths js = f JSON.Null
   f = foldr (\ j r -> insertJPath j >=> r) Just js
 
 insertJPath :: JPath -> JSON.Value -> Maybe JSON.Value
+
 insertJPath (JField f p) JSON.Null = do
   v <- insertJPath p JSON.Null
-  return (JSON.object [(f, v)])
+  return (JSON.object [(Key.fromText f, v)])
 
 insertJPath (JField f p) (JSON.Object obj) = do
-  case HMap.lookup f obj of
+  let k = Key.fromText f
+  case KeyMap.lookup k obj of
     Nothing -> do
       v <- insertJPath p JSON.Null
-      return (JSON.Object (HMap.insert f v obj))
+      return (JSON.Object (KeyMap.insert k v obj))
     Just v0 -> do
       v <- insertJPath p v0
-      return (JSON.Object (HMap.insert f v obj))
+      return (JSON.Object (KeyMap.insert k v obj))
 
 insertJPath (JVal v) JSON.Null = return v
 insertJPath _        _         = Nothing

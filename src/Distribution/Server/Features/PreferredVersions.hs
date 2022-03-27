@@ -28,18 +28,19 @@ import Distribution.Package
 import Distribution.Version
 import Distribution.Text
 
-import Data.Function (fix)
-import Data.List (intercalate, find)
-import Data.Maybe (isJust, fromMaybe, catMaybes)
-import Data.Time.Clock (getCurrentTime)
-import Control.Arrow (second)
-import Control.Applicative (optional)
-import qualified Data.Map as Map
+import           Control.Arrow              (first, second)
+import           Control.Applicative        (optional)
+import           Data.Aeson                 (Value(..))
+import           Data.Function              (fix)
+import           Data.List                  (intercalate, find)
+import           Data.Maybe                 (isJust, fromMaybe, catMaybes)
+import           Data.Time.Clock            (getCurrentTime)
+import qualified Data.Aeson.Key             as Key
+import qualified Data.Aeson.KeyMap          as KeyMap
 import qualified Data.ByteString.Lazy.Char8 as BS (pack) -- Only used for ASCII data
-import Data.Aeson (Value(..))
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Text           as Text
-import qualified Data.Vector         as Vector
+import qualified Data.Map                   as Map
+import qualified Data.Text                  as Text
+import qualified Data.Vector                as Vector
 
 data VersionsFeature = VersionsFeature {
     versionsFeatureInterface :: HackageFeature,
@@ -198,7 +199,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
         versionType DeprecatedVersion = "deprecated-version"
         versionType UnpreferredVersion = "unpreferred-version"
       return . toResponse . object
-        $ map (\(i, vs) -> (Text.pack . versionType $ i, array $ map (string . display) vs))
+        $ map (\(i, vs) -> (versionType $ i, array $ map (string . display) vs))
           $ Map.toList classifiedVersions
 
     handlePackagesDeprecatedGet :: DynamicPath -> ServerPartE Response
@@ -234,7 +235,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
         Object o
           -- FIXME should just be a nested case
           -- or something more human friendly
-          | fields <- HashMap.toList o
+          | fields <- KeyMap.toList o
           , Just (Bool deprecated) <- lookup "is-deprecated" fields
           , Just (Array strs)      <- lookup "in-favour-of"  fields
           -- FIXME Audit this parsing -> PackageName code, suspiciously
@@ -415,8 +416,8 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 array :: [Value] -> Value
 array = Array . Vector.fromList
 
-object :: [(Text.Text, Value)] -> Value
-object = Object . HashMap.fromList
+object :: [(String, Value)] -> Value
+object = Object . KeyMap.fromList . map (first Key.fromString)
 
 string :: String -> Value
 string = String . Text.pack
