@@ -43,15 +43,15 @@ import Distribution.Version
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
-import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
-import qualified Text.XHtml.Strict as XHtml
-import           Text.XHtml.Strict ((<<), (!))
-import Data.Aeson (Value (..), object, toJSON, (.=))
-
-import Data.Function (fix)
-import Data.List (find, intersperse)
-import Data.Time.Clock (getCurrentTime)
-import qualified Data.Vector as Vec
+import qualified Data.ByteString.Lazy     as BS (ByteString, toStrict)
+import qualified Text.XHtml.Strict        as XHtml
+import           Text.XHtml.Strict        ((<<), (!))
+import           Data.Aeson               (Value (..), object, toJSON, (.=))
+import qualified Data.Aeson.Key           as Key
+import           Data.Function            (fix)
+import           Data.List                (find, intersperse)
+import           Data.Time.Clock          (getCurrentTime)
+import qualified Data.Vector               as Vec
 
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
@@ -281,10 +281,10 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         users  <- queryGetUserDb
         let lupUserName uid = (uid, fmap Users.userName (Users.lookupUserId uid users))
 
-        let pvs = [ object [ T.pack "version"  .= (T.pack . display . packageVersion . candInfoId) p
-                           , T.pack "sha256"   .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
-                           , T.pack "time"     .= (fst . snd) tarball
-                           , T.pack "uploader" .= (lupUserName . snd . snd) tarball
+        let pvs = [ object [ Key.fromString "version"  .= (T.pack . display . packageVersion . candInfoId) p
+                           , Key.fromString "sha256"   .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
+                           , Key.fromString "time"     .= (fst . snd) tarball
+                           , Key.fromString "uploader" .= (lupUserName . snd . snd) tarball
                            ]
                   | p <- pkgs
                   , let tarball = Vec.last . pkgTarballRevisions . candPkgInfo $ p
@@ -304,11 +304,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       where
         cpiToJSON :: [CandPkgInfo] -> Value
         cpiToJSON [] = Null -- should never happen
-        cpiToJSON pkgs = object [ T.pack "name" .= pn, T.pack "candidates" .= pvs ]
+        cpiToJSON pkgs = object
+            [ Key.fromString "name" .= pn
+            , Key.fromString "candidates" .= pvs
+            ]
           where
             pn = T.pack . display . pkgName . candInfoId . head $ pkgs
-            pvs = [ object [ T.pack "version" .= (T.pack . display . packageVersion . candInfoId) p
-                           , T.pack "sha256"  .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
+            pvs = [ object [ Key.fromString "version" .= (T.pack . display . packageVersion . candInfoId) p
+                           , Key.fromString "sha256"  .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
                            ]
                   | p <- pkgs
                   , let tarball = Vec.last . pkgTarballRevisions . candPkgInfo $ p

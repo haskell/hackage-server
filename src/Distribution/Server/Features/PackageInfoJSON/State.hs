@@ -15,8 +15,9 @@ import           Control.Monad.Reader (ask, asks)
 import qualified Control.Monad.State  as State
 import qualified Data.Aeson           as Aeson
 import           Data.Aeson           ((.=), (.:))
+import qualified Data.Aeson.Key       as Key
+import qualified Data.Aeson.KeyMap    as KeyMap
 import           Data.Acid            (Query, Update, makeAcidic)
-import qualified Data.HashMap.Strict  as HashMap
 import qualified Data.Map.Strict      as Map
 import           Data.Monoid          (Sum(..))
 import qualified Data.Text            as T
@@ -85,30 +86,30 @@ instance SafeCopy PackageBasicDescription where
 instance Aeson.ToJSON PackageBasicDescription where
   toJSON PackageBasicDescription {..} =
     Aeson.object
-      [ T.pack "license"           .= Pretty.prettyShow pbd_license
-      , T.pack "copyright"         .= pbd_copyright
-      , T.pack "synopsis"          .= pbd_synopsis
-      , T.pack "description"       .= pbd_description
-      , T.pack "author"            .= pbd_author
-      , T.pack "homepage"          .= pbd_homepage
-      , T.pack "metadata_revision" .= pbd_metadata_revision
+      [ Key.fromString "license"           .= Pretty.prettyShow pbd_license
+      , Key.fromString "copyright"         .= pbd_copyright
+      , Key.fromString "synopsis"          .= pbd_synopsis
+      , Key.fromString "description"       .= pbd_description
+      , Key.fromString "author"            .= pbd_author
+      , Key.fromString "homepage"          .= pbd_homepage
+      , Key.fromString "metadata_revision" .= pbd_metadata_revision
       ]
 
 
 instance Aeson.FromJSON PackageBasicDescription where
   parseJSON = Aeson.withObject "PackageBasicDescription" $ \obj -> do
-    pbd_version'     <- obj .: T.pack "license"
+    pbd_version'     <- obj .: Key.fromString "license"
     let parseEitherLicense t =
           Parsec.simpleParsec t <|> fmap licenseToSPDX (simpleParse t)
     case parseEitherLicense pbd_version' of
       Nothing -> fail $ concat ["Could not parse version: \"", pbd_version', "\""]
       Just pbd_license -> do
-        pbd_copyright         <- obj .: T.pack "copyright"
-        pbd_synopsis          <- obj .: T.pack "synopsis"
-        pbd_description       <- obj .: T.pack "description"
-        pbd_author            <- obj .: T.pack "author"
-        pbd_homepage          <- obj .: T.pack "homepage"
-        pbd_metadata_revision <- obj .: T.pack "metadata_revision"
+        pbd_copyright         <- obj .: Key.fromString "copyright"
+        pbd_synopsis          <- obj .: Key.fromString "synopsis"
+        pbd_description       <- obj .: Key.fromString "description"
+        pbd_author            <- obj .: Key.fromString "author"
+        pbd_homepage          <- obj .: Key.fromString "homepage"
+        pbd_metadata_revision <- obj .: Key.fromString "metadata_revision"
         return $
           PackageBasicDescription {..}
 
@@ -161,14 +162,13 @@ instance Aeson.FromJSON PackageVersions where
   parseJSON = Aeson.withObject "PackageVersions" $ \obj ->
     fmap PackageVersions
     $ traverse (parsePair)
-    $ HashMap.toList obj
+    $ KeyMap.toList obj
     where
       parsePair (vStr, vStatus) =
-        (,) <$> parseVersion vStr <*> parseStatus vStatus
+        (,) <$> parseVersion (Key.toString vStr) <*> parseStatus vStatus
 
-      parseVersion verText =
-        let verString = T.unpack verText
-        in case simpleParse verString of
+      parseVersion verString =
+        case simpleParse verString of
              Just ver -> return ver
              Nothing  -> fail $ concat ["Could not parse \""
                                        , verString ++ "\" as Version. "

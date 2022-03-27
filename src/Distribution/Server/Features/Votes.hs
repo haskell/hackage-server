@@ -21,9 +21,10 @@ import Distribution.Package
 import Distribution.Text
 
 import Data.Aeson
+import qualified Data.Aeson.Key    as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.Map as Map
 import qualified Data.Text as T
-import qualified Data.HashMap.Strict as HashMap
 
 import Control.Arrow (first)
 import qualified Text.XHtml.Strict as X
@@ -212,7 +213,7 @@ votesFeature  ServerEnv{..}
 
 -- Use to construct a list of tuples that can be toJSON'd
 objectL :: [(String, Value)] -> Value
-objectL = Object . HashMap.fromList . map (first T.pack)
+objectL = Object . KeyMap.fromList . map (first Key.fromString)
 
 -- Use inside an objectL to transform strings into json values
 string :: String -> Value

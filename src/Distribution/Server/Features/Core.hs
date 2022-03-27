@@ -23,9 +23,10 @@ module Distribution.Server.Features.Core (
 -- stdlib
 import qualified Codec.Compression.GZip                             as GZip
 import           Data.Aeson                                         (Value (..))
+import qualified Data.Aeson.Key                                     as Key
+import qualified Data.Aeson.KeyMap                                  as KeyMap
 import           Data.ByteString.Lazy                               (ByteString)
 import qualified Data.Foldable                                      as Foldable
-import qualified Data.HashMap.Strict                                as HashMap
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
 import           Data.Time.Format                                   (defaultTimeLocale, formatTime)
@@ -688,8 +689,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       -- in particular, we use objects for the packages so that we can add
       -- additional fields later without (hopefully) breaking clients
       let json = flip map list $ \str ->
-            Object . HashMap.fromList $ [
-                (Text.pack "packageName", String (Text.pack str))
+            Object . KeyMap.fromList $ [
+                (Key.fromString "packageName", String (Text.pack str))
               ]
       return . toResponse $ Array (Vec.fromList json)
 
@@ -727,10 +728,10 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       let revisions = pkgMetadataRevisions pkginfo
           revisionToObj rev (_, (utime, uid)) =
             let uname = userIdToName users uid in
-            Object $ HashMap.fromList
-              [ (Text.pack "number", Number (fromIntegral rev))
-              , (Text.pack "user", String (Text.pack (display uname)))
-              , (Text.pack "time", String (Text.pack (formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime)))
+            Object $ KeyMap.fromList
+              [ (Key.fromString "number", Number (fromIntegral rev))
+              , (Key.fromString "user", String (Text.pack (display uname)))
+              , (Key.fromString "time", String (Text.pack (formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime)))
               ]
           revisionsJson = Array $ Vec.imap revisionToObj revisions
       return (toResponse revisionsJson)

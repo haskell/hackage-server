@@ -14,7 +14,8 @@ import Text.XHtml.Strict
          , anchor, (!), href, name
          , ordList, unordList )
 import Data.Aeson (Value(..))
-import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Aeson.Key      as Key
+import qualified Data.Aeson.KeyMap   as KeyMap
 import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
 import Data.List
@@ -338,7 +339,7 @@ array :: [Value] -> Value
 array = Array . Vector.fromList
 
 object :: [(String, Value)] -> Value
-object = Object . HashMap.fromList . map (first Text.pack)
+object = Object . KeyMap.fromList . map (first Key.fromString)
 
 string :: String -> Value
 string = String . Text.pack

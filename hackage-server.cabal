@@ -112,7 +112,7 @@ common defaults
     , scientific
   -- other dependencies shared by most components
   build-depends:
-    , aeson                 ^>= 1.5
+    , aeson                 ^>= 2.0.3.0
     , Cabal                 ^>= 3.4.1.0
     , fail                  ^>= 4.9.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
@@ -361,7 +361,7 @@ library lib-server
     , acid-state            ^>= 0.16
     , async                 ^>= 2.2.1
     -- requires bumping http-io-streams
-    , attoparsec            ^>= 0.13
+    , attoparsec            ^>= 0.14.4
     , base16-bytestring     ^>= 1.0
     -- requires bumping http-io-streams
     , base64-bytestring     ^>= 1.1
