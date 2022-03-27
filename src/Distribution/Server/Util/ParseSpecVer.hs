@@ -239,8 +239,8 @@ decodeVerFallback v0 = simpleParse v <|> parseSpecVR
     parseSpecVR = do
         vr <- simpleParse v
         case asVersionIntervals vr of
-          []                            -> Just $ mkVersion [0]
-          ((LowerBound version _, _):_) -> Just $ version
+          VersionInterval (LowerBound version _) _ : _ -> Just version
+          [] -> Just $ mkVersion [0]
 
     v = BC8.unpack v0
 
