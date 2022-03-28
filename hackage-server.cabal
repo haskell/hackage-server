@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC == { 8.10.7, 8.8.4 }
+tested-with: GHC == { 9.2.2, 9.0.2, 8.10.7, 8.8.4 }
 
 data-dir: datafiles
 data-files:
@@ -95,9 +95,9 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.13  && < 4.16
+    , base                   >= 4.13  && < 4.17
     , binary                 >= 0.8   && < 0.9
-    , bytestring             >= 0.10  && < 0.11
+    , bytestring             >= 0.10  && < 0.12
     , containers            ^>= 0.6.0
     , deepseq                >= 1.4   && < 1.5
     , directory              >= 1.3   && < 1.4
@@ -105,15 +105,15 @@ common defaults
     , mtl                   ^>= 2.2.1
     , pretty                 >= 1.1   && < 1.2
     , process                >= 1.6   && < 1.7
-    , text                  ^>= 1.2.2
-    , time                   >= 1.9   && < 1.12
+    , text                  ^>= 1.2.5.0
+    , time                   >= 1.9   && < 1.13
     , transformers           >= 0.5   && < 0.6
     , unix                   >= 2.7   && < 2.8
     , scientific
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 2.0.3.0
-    , Cabal                 ^>= 3.4.1.0
+    , Cabal                 ^>= 3.6.3.0
     , fail                  ^>= 4.9.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , network               >=  3 && < 3.2
@@ -356,7 +356,7 @@ library lib-server
   -- NB: see also build-depends in `common defaults`!
   build-depends:
     , HStringTemplate       ^>= 0.8
-    , HTTP                  ^>= 4000.3.6
+    , HTTP                  ^>= 4000.3.16
     , QuickCheck            ^>= 2.14
     , acid-state            ^>= 0.16
     , async                 ^>= 2.2.1
@@ -364,7 +364,7 @@ library lib-server
     , attoparsec            ^>= 0.14.4
     , base16-bytestring     ^>= 1.0
     -- requires bumping http-io-streams
-    , base64-bytestring     ^>= 1.1
+    , base64-bytestring     ^>= 1.2.1.0
       --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder
     , blaze-builder         ^>= 0.4
     , blaze-html            ^>= 0.9
@@ -511,7 +511,7 @@ test-suite HighLevelTest
       -- component-specific dependencies
     , xml             ^>= 1.3.14
     , io-streams      ^>= 1.5.0.1
-    , http-io-streams ^>= 0.1.0.0
+    , http-io-streams ^>= 0.1.6.1
 
 test-suite CreateUserTest
   import:         test-defaults

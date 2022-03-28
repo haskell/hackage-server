@@ -31,7 +31,15 @@ import Distribution.PackageDescription.Configuration
 import Distribution.Package
 import Distribution.Text
 import Distribution.Pretty (prettyShow)
-import Distribution.Version
+import Distribution.Version (noVersion)
+import Distribution.Types.VersionInterval.Legacy
+  -- Andreas Abel, 2022-03-27:
+  -- Note that this "Legacy" module is both new and deprecated in Cabal-3.6.
+  -- However, the non-deprecated module "Distribution.Types.VersionInterval"
+  -- does not define the functions anymore we rely on here, namely
+  -- @{union,intersect}VersionIntervals@.
+  -- I criticized this unfortunate development at length at:
+  -- https://github.com/haskell/cabal/issues/7916
 import Distribution.ModuleName as ModuleName
 import Distribution.Types.ModuleReexport
 
@@ -41,7 +49,9 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ModuleForest
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
+import Distribution.Utils.Path (getSymbolicPath)
 import Distribution.Utils.ShortText (fromShortText)
+
 import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex, TarEntryOffset)
 
@@ -95,7 +105,7 @@ doPackageRender users info = PackageRender
     , rendSublibraryDeps = (unUnqualComponentName *** depTree libBuildInfo)
                                 `map` condSubLibraries genDesc
     , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
-    , rendLicenseFiles = licenseFiles desc
+    , rendLicenseFiles = map getSymbolicPath $ licenseFiles desc
     , rendMaintainer   = case fromShortText $ maintainer desc of
                            "None" -> Nothing
                            "none" -> Nothing

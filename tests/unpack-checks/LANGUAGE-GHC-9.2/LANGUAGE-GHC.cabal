@@ -1,0 +1,20 @@
+name:                LANGUAGE-GHC
+version:             9.2
+synopsis:            Test for LANGUAGE extensions (issue #1030)
+description:         Test whether Hackage accepts the latest LANGUAGE extensions
+license:             BSD3
+license-file:        LICENSE
+author:              Hackage Server Team
+maintainer:          no@email.com
+category:            Test case
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable foo
+  main-is:             Main.hs
+  build-depends:       base >=4.16 && <4.17
+  default-language:    GHC2021
+  default-extensions:
+    -- These LANGUAGE extensions are new in GHC 9.2:
+    NoFieldSelectors
+    OverloadedRecordDot
