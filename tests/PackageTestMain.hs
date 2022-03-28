@@ -1,3 +1,5 @@
+-- | Test that Hackage accepts or refuses certain packages.
+
 module Main
   ( main
   ) where
@@ -22,7 +24,11 @@ main = defaultMain allTests
 allTests :: TestTree
 allTests = testGroup "PackageTests"
     [ testGroup "Tar file permissions" tarPermissions
-    , testGroup "Cabal package integrity tests" cabalPackageCheckTests]
+    , testGroup "Cabal package integrity tests" cabalPackageCheckTests
+    ]
+
+---------------------------------------------------------------------------
+-- * File permission tests
 
 tarPermissions :: [TestTree]
 tarPermissions =
@@ -34,7 +40,8 @@ tarPermissions =
         (testPermissions "tests/permissions-tarballs/bad-file-perms.tar.gz" badFileMangler)
     , testCase
         "Bad Dir Permissions"
-        (testPermissions "tests/permissions-tarballs/bad-dir-perms.tar.gz" badDirMangler)]
+        (testPermissions "tests/permissions-tarballs/bad-dir-perms.tar.gz" badDirMangler)
+    ]
 
 goodMangler :: (Tar.Entry -> Maybe CombinedTarErrs)
 goodMangler = const Nothing
@@ -51,6 +58,9 @@ badDirMangler entry =
     Tar.Directory -> Just $ PermissionsError (Tar.entryPath entry) 0o700
     _ -> Nothing
 
+---------------------------------------------------------------------------
+-- * Package integry tests
+
 cabalPackageCheckTests :: [TestTree]
 cabalPackageCheckTests =
     [ testCase "Missing ./configure script" missingConfigureScriptTest
@@ -58,30 +68,41 @@ cabalPackageCheckTests =
     , testCase "Bad spec-version" badSpecVer
     ]
 
+---------------------------------------------------------------------------
+-- ** Tests that must fail
+
+-- | If @build-type: Configure@, then there must be a @./configure@ script.
+
 missingConfigureScriptTest :: Assertion
 missingConfigureScriptTest =
   do tar <- tarGzFile "missing-configure-0.1.0.0"
      now <- getCurrentTime
      case unpackPackage now "missing-configure-0.1.0.0.tar.gz" tar of
-       Right _ -> HUnit.assertFailure "expected error"
+       Right _ -> HUnit.assertFailure "error: unexpected success"
        Left err ->
          HUnit.assertBool
            ("Error found, but not about missing ./configure: " ++ err)
            ("The 'build-type' is 'Configure'" `isInfixOf` err)
+
+-- | The @cabal-version@ must be valid.
 
 badSpecVer :: Assertion
 badSpecVer =
   do tar <- tarGzFile "bad-specver-package-0"
      now <- getCurrentTime
      case unpackPackage now "bad-specver-package-0.tar.gz" tar of
-       Right _ -> HUnit.assertFailure "expected error"
+       Right _ -> HUnit.assertFailure "error: unexpected success"
        Left err ->
          HUnit.assertBool
            ("Error found, but not about invalid spec version: " ++ err)
            ("cabal spec version" `isInfixOf` err)
 
+---------------------------------------------------------------------------
+-- ** Tests that must succeed
+
 -- | Some tar files in hackage are missing directory entries.
 -- Ensure that they can be verified even without the directory entries.
+
 missingDirsInTarFileTest :: Assertion
 missingDirsInTarFileTest =
   do tar <- fmap keepOnlyFiles (tarGzFile "correct-package-0.1.0.0")
@@ -89,7 +110,10 @@ missingDirsInTarFileTest =
      case unpackPackage now "correct-package-0.1.0.0.tar.gz" tar of
        Right _ -> return ()
        Left err ->
-         HUnit.assertFailure ("Excpected success but got: " ++ show err)
+         HUnit.assertFailure ("Expected success but got: " ++ show err)
+
+---------------------------------------------------------------------------
+-- * Auxiliary functions
 
 tarGzFile :: String -> IO ByteString
 tarGzFile name = do
