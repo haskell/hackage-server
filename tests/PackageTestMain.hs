@@ -16,7 +16,7 @@ import Distribution.Server.Packages.Unpack
 import Distribution.Server.Packages.UnpackTest
 
 import Test.Tasty (defaultMain, TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, Assertion)
+import Test.Tasty.HUnit (testCase, Assertion, HasCallStack)
 
 main :: IO ()
 main = defaultMain allTests
@@ -105,15 +105,43 @@ badSpecVer =
 
 missingDirsInTarFileTest :: Assertion
 missingDirsInTarFileTest =
-  do tar <- fmap keepOnlyFiles (tarGzFile "correct-package-0.1.0.0")
-     now <- getCurrentTime
-     case unpackPackage now "correct-package-0.1.0.0.tar.gz" tar of
-       Right _ -> return ()
-       Left err ->
-         HUnit.assertFailure ("Expected success but got: " ++ show err)
+  successTestTGZ pkg =<< do keepOnlyFiles <$> tarGzFile pkg
+  where
+  pkg = "correct-package-0.1.0.0"
 
 ---------------------------------------------------------------------------
--- * Auxiliary functions
+-- * Auxiliary functions to construct tests
+
+-- | A generic successful test, given a directory with the package contents.
+--
+-- Note: the 'HasCallStack' constraint ensures that the assertion failure
+-- is thrown at the invocation site of this function.
+--
+successTest
+  :: HasCallStack
+  => String        -- ^ The directory which is also the package name.
+  -> Assertion
+successTest pkg = successTestTGZ pkg =<< tarGzFile pkg
+
+-- | A successful test, given the package name and its @.tgz@ stream.
+--
+-- Note: the 'HasCallStack' constraint ensures that the assertion failure
+-- is thrown at the invocation site of this function.
+--
+successTestTGZ
+  :: HasCallStack
+  => String        -- ^ The package name which is also the stem of the @.tgz@ file.
+  -> ByteString    -- ^ The content of the @.tgz@ archive.
+  -> Assertion
+successTestTGZ pkg tar = do
+  now <- getCurrentTime
+  case unpackPackage now (pkg ++ ".tar.gz") tar of
+    Right _ -> return ()
+    Left err ->
+      HUnit.assertFailure $ "Expected success, but got: " ++ show err
+
+---------------------------------------------------------------------------
+-- * Tar utilities
 
 tarGzFile :: String -> IO ByteString
 tarGzFile name = do
