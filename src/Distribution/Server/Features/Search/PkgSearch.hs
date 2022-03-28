@@ -3,9 +3,6 @@
 module Distribution.Server.Features.Search.PkgSearch (
     PkgSearchEngine,
     initialPkgSearchEngine,
-    defaultSearchRankParameters,
-    PkgDocField(..),
-    PkgDocFeatures,
   ) where
 
 import Distribution.Server.Features.Search.SearchEngine

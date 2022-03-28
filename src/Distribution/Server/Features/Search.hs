@@ -1,13 +1,7 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, RecursiveDo #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Search (
-    SearchFeature(..),
+    SearchFeature(SearchFeature, searchPackages, searchPackagesResource),
     initSearchFeature,
-
-    -- * Search parameters
-    defaultSearchRankParameters,
-    SearchEngine.SearchRankParameters(..),
-    PkgDocField, PkgDocFeatures,
-    BM25F.Explanation(..),
   ) where
 
 import Distribution.Server.Framework
@@ -17,9 +11,7 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.PackageList
 
 import Distribution.Server.Features.Search.PkgSearch
-import Distribution.Server.Features.Search.SearchEngine (SearchRankParameters(..))
 import qualified Distribution.Server.Features.Search.SearchEngine as SearchEngine
-import qualified Distribution.Server.Features.Search.BM25F as BM25F
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Packages.Types
@@ -39,13 +31,7 @@ data SearchFeature = SearchFeature {
 
     searchPackagesResource :: Resource,
 
-    searchPackages        :: forall m. MonadIO m => [String] -> m [PackageName],
-    searchPackagesExplain :: forall m. MonadIO m
-                          => SearchRankParameters PkgDocField PkgDocFeatures
-                          -> [String]
-                          -> m (Maybe PackageName,
-                               [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text
-                                ,PackageName)])
+    searchPackages        :: forall m. MonadIO m => [String] -> m [PackageName]
 }
 
 instance IsHackageFeature SearchFeature where
@@ -155,17 +141,6 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
     searchPackages terms = do
         se <- readMemState searchEngineState
         let results = SearchEngine.query se (map T.pack terms)
-        return results
-
-    searchPackagesExplain :: MonadIO m
-                          => SearchRankParameters PkgDocField PkgDocFeatures
-                          -> [String]
-                          -> m (Maybe PackageName, [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)])
-    searchPackagesExplain params terms = do
-        se <- readMemState searchEngineState
-        let results = SearchEngine.queryExplain
-                        (SearchEngine.setRankParams params se)
-                        (map T.pack terms)
         return results
 
     handlerGetOpenSearch :: DynamicPath -> ServerPartE Response

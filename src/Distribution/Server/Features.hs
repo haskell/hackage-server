@@ -21,6 +21,7 @@ import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
 #ifndef MINIMAL
+import Distribution.Server.Features.Browse              (initBrowseFeature)
 import Distribution.Server.Features.TarIndexCache       (initTarIndexCacheFeature)
 import Distribution.Server.Features.Html                (initHtmlFeature)
 import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature, candidatesCoreResource, queryGetCandidateIndex)
@@ -152,6 +153,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initSitemapFeature env
     mkPackageFeedFeature    <- logStartup "package feed" $
                                initPackageFeedFeature env
+    mkBrowseFeature         <- logStartup "browse" $
+                               initBrowseFeature env
     mkPackageJSONFeature    <- logStartup "package info JSON" $
                                initPackageInfoJSONFeature env
 #endif
@@ -327,6 +330,14 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                             usersFeature
                             tarIndexCacheFeature
 
+    browseFeature <- mkBrowseFeature
+                       coreFeature
+                       usersFeature
+                       tagsFeature
+                       listFeature
+                       searchFeature
+                       distroFeature
+                       
     packageInfoJSONFeature <- mkPackageJSONFeature
                                 coreFeature
                                 versionsFeature
@@ -378,6 +389,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 #ifdef DEBUG
          , serverCrashFeature
 #endif
+         , browseFeature
          ]
 
     -- Run all post init hooks, now that everyone's gotten a chance to register
@@ -395,6 +407,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     logStartup feature action = do
       loginfo verbosity ("Initialising " ++ feature ++ " feature")
       logTiming verbosity ("Initialising " ++ feature ++ " feature done") action
+
 
 -- | Checkpoint a feature's persistent state to disk.
 featureCheckpoint :: HackageFeature -> IO ()

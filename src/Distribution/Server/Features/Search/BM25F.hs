@@ -13,9 +13,6 @@ module Distribution.Server.Features.Search.BM25F (
     FeatureFunction(..),
     Doc(..),
     score,
-
-    Explanation(..),
-    explain,
   ) where
 
 import Data.Ix
@@ -113,79 +110,3 @@ applyFeatureFunction :: FeatureFunction -> (Float -> Float)
 applyFeatureFunction (LogarithmicFunction p1) = \fi -> log (p1 + fi)
 applyFeatureFunction (RationalFunction    p1) = \fi -> fi / (p1 + fi)
 applyFeatureFunction (SigmoidFunction  p1 p2) = \fi -> 1 / (p1 + exp (-fi * p2))
-
-
-------------------
--- Explanation
---
-
--- | A breakdown of the BM25F score, to explain somewhat how it relates to
--- the inputs, and so you can compare the scores of different documents.
---
-data Explanation field feature term = Explanation {
-       -- | The overall score is the sum of the 'termScores', 'positionScore'
-       -- and 'nonTermScore'
-       overallScore  :: Float,
-
-       -- | There is a score contribution from each query term. This is the
-       -- score for the term across all fields in the document (but see
-       -- 'termFieldScores').
-       termScores    :: [(term, Float)],
-{-
-       -- | There is a score contribution for positional information. Terms
-       -- appearing in the document close together give a bonus.
-       positionScore :: [(field, Float)],
--}
-       -- | The document can have an inate bonus score independent of the terms
-       -- in the query. For example this might be a popularity score.
-       nonTermScores :: [(feature, Float)],
-
-       -- | This does /not/ contribute to the 'overallScore'. It is an
-       -- indication of how the 'termScores' relates to per-field scores.
-       -- Note however that the term score for all fields is /not/ simply
-       -- sum of the per-field scores. The point of the BM25F scoring function
-       -- is that a linear combination of per-field scores is wrong, and BM25F
-       -- does a more cunning non-linear combination.
-       --
-       -- However, it is still useful as an indication to see scores for each
-       -- field for a term, to see how the compare.
-       --
-       termFieldScores :: [(term, [(field, Float)])]
-     }
-  deriving Show
-
-instance Functor (Explanation field feature) where
-  fmap f e@Explanation{..} =
-    e {
-      termScores      = [ (f t, s)  | (t, s)  <- termScores ],
-      termFieldScores = [ (f t, fs) | (t, fs) <- termFieldScores ]
-    }
-
-explain :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
-           Context term field feature ->
-           Doc term field feature -> [term] -> Explanation field feature term
-explain ctx doc ts =
-    Explanation {..}
-  where
-    overallScore  = sum (map snd termScores)
---                  + sum (map snd positionScore)
-                  + sum (map snd nonTermScores)
-    termScores    = [ (t, weightedTermScore ctx doc t) | t <- ts ]
---    positionScore = [ (f, 0) | f <- range (minBound, maxBound) ]
-    nonTermScores = [ (feature, weightedNonTermScore ctx doc feature)
-                    | feature <- range (minBound, maxBound) ]
-
-    termFieldScores =
-      [ (t, fieldScores)
-      | t <- ts
-      , let fieldScores =
-              [ (f, weightedTermScore ctx' doc t)
-              | f <- range (minBound, maxBound)
-              , let ctx' = ctx { fieldWeight = fieldWeightOnly f }
-              ]
-      ]
-    fieldWeightOnly f f' | sameField f f' = fieldWeight ctx f'
-                         | otherwise      = 0
-
-    sameField f f' = index (minBound, maxBound) f
-                  == index (minBound, maxBound) f'
