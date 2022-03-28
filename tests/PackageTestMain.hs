@@ -63,9 +63,12 @@ badDirMangler entry =
 
 cabalPackageCheckTests :: [TestTree]
 cabalPackageCheckTests =
+  -- Failing tests
     [ testCase "Missing ./configure script" missingConfigureScriptTest
-    , testCase "Missing directories in tar file" missingDirsInTarFileTest
     , testCase "Bad spec-version" badSpecVer
+  -- Successful tests
+    , testCase "Missing directories in tar file" missingDirsInTarFileTest
+    , testCase "Accept GHC 9.2 LANGUAGE extensions" acceptGHC902LanguageExtensions
     ]
 
 ---------------------------------------------------------------------------
@@ -108,6 +111,11 @@ missingDirsInTarFileTest =
   successTestTGZ pkg =<< do keepOnlyFiles <$> tarGzFile pkg
   where
   pkg = "correct-package-0.1.0.0"
+
+-- | Hackage should accept GHC 9.2 language extensions (issue #1030).
+
+acceptGHC902LanguageExtensions :: Assertion
+acceptGHC902LanguageExtensions = successTest "LANGUAGE-GHC-9.2"
 
 ---------------------------------------------------------------------------
 -- * Auxiliary functions to construct tests
