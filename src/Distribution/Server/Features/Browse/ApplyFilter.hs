@@ -8,7 +8,8 @@ import Data.Time.Clock (UTCTime(utctDay), diffUTCTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 
 import Data.Aeson (Value, (.=), object)
-import qualified Data.Text as T
+import qualified Data.Aeson.Key as Key
+
 import qualified Data.Set as S
 
 import Distribution.Server.Features.Browse.Options (BrowseOptions(..), Direction(..), Column(..), Sort(..), NormalColumn(..), IsSearch(..))
@@ -33,30 +34,30 @@ applyFilter now isSearch coreResource userResource tagsResource DistroFeature{qu
   packageIndexInfoToValue :: PackageItem -> Value
   packageIndexInfoToValue PackageItem{..} =
     object
-      [ T.pack "name" .= renderPackage itemName
-      , T.pack "downloads" .= itemDownloads
-      , T.pack "votes" .= itemVotes
-      , T.pack "description" .= itemDesc
-      , T.pack "tags" .= map renderTag (S.toAscList itemTags)
-      , T.pack "lastUpload" .= iso8601Show itemLastUpload
-      , T.pack "maintainers" .= map renderUser itemMaintainer
+      [ Key.fromString "name" .= renderPackage itemName
+      , Key.fromString "downloads" .= itemDownloads
+      , Key.fromString "votes" .= itemVotes
+      , Key.fromString "description" .= itemDesc
+      , Key.fromString "tags" .= map renderTag (S.toAscList itemTags)
+      , Key.fromString "lastUpload" .= iso8601Show itemLastUpload
+      , Key.fromString "maintainers" .= map renderUser itemMaintainer
       ]
   renderTag :: Tag -> Value
   renderTag tag =
     object
-      [ T.pack "uri" .= tagUri tagsResource "" tag
-      , T.pack "display" .= display tag
+      [ Key.fromString "uri" .= tagUri tagsResource "" tag
+      , Key.fromString "display" .= display tag
       ]
   renderUser :: UserName -> Value
   renderUser user =
     object
-      [ T.pack "uri" .= userPageUri userResource "" user
-      , T.pack "display" .= display user
+      [ Key.fromString "uri" .= userPageUri userResource "" user
+      , Key.fromString "display" .= display user
       ]
   renderPackage pkg =
     object
-      [ T.pack "uri" .= corePackageNameUri coreResource "" pkg
-      , T.pack "display" .= display pkg
+      [ Key.fromString "uri" .= corePackageNameUri coreResource "" pkg
+      , Key.fromString "display" .= display pkg
       ]
 
   includeItem :: PackageItem -> Filter -> IO Bool

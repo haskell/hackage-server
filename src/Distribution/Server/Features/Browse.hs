@@ -9,7 +9,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Time (getCurrentTime)
 
 import Data.Aeson (Value(Array), eitherDecode, object, toJSON, (.=))
-import qualified Data.Text as T
+import qualified Data.Aeson.Key as Key
 import qualified Data.Vector as V
 
 import Distribution.Server.Features.Browse.ApplyFilter (applyFilter)
@@ -115,8 +115,8 @@ getNewPkgList CoreFeature{queryGetPackageIndex, coreResource} UserFeature{userRe
   let pageContents = V.slice startIndex numElems (V.fromList listOfPkgs)
   pure . toResponse $
     object
-      [ T.pack "pageContents" .= Array pageContents
-      , T.pack "numberOfResults" .= toJSON (length listOfPkgs)
+      [ Key.fromString "pageContents" .= Array pageContents
+      , Key.fromString "numberOfResults" .= toJSON (length listOfPkgs)
       ]
 
 parseBrowseOptions :: ByteString -> ExceptT ErrorResponse IO BrowseOptions
