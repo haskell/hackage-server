@@ -28,6 +28,7 @@ import Data.Maybe
 import Network.HTTP hiding (user)
 import Network.HTTP.Auth
 import Data.Aeson (Result(..), Value(..), FromJSON(..), (.:), fromJSON, json')
+import System.Exit (die)
 
 import qualified Network.Http.Client as HC
 import qualified System.IO.Streams as Streams

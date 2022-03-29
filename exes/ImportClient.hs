@@ -41,7 +41,7 @@ import qualified Distribution.Server.Util.GZip as GZip
 
 import System.Environment
          ( getArgs, getProgName )
-import Data.Time.Locale.Compat
+import Data.Time.Format
          ( defaultTimeLocale )
 import System.Exit
          ( exitWith, ExitCode(..) )
@@ -868,7 +868,7 @@ isErrNotFound _                             = False
 
 -- | We can do http digest auth, however currently the Network.Browser module
 -- does not cache the auth info so it has to re-auth for every single request.
--- So instead here we just make it pre-emptively supply basic auth info.
+-- So instead here we just make it preemptively supply basic auth info.
 -- We assume this is fine since we're probably working with localhost anyway.
 --
 setAuthorityFromURI :: URI -> HttpSession ()

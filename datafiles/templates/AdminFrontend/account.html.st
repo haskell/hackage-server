@@ -147,7 +147,7 @@ Alternatively, as an administrator you can set account passwords directly.
       <td><input type="password" name="repeat-password" id="repeat-password" /></td>
     </tr>
   </table>
- 
+
   <p><input type="submit" value="Change password" /></p>
 </form>
 
@@ -198,7 +198,7 @@ $endif$
       <td><input type="text" name="contactEmailAddress=%s" id="email" value="$details.email$" /></td>
     </tr>
   </table>
- 
+
   <p><input type="submit" value="Update" /></p>
 </form>
 
@@ -225,7 +225,7 @@ $endif$
       <td><textarea name="notes=%s" id="notes" rows=5 cols=40>$details.notes$</textarea></td>
     </tr>
   </table>
- 
+
   <p><input type="submit" value="Update" /></p>
 </form>
 

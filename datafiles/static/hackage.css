@@ -24,11 +24,11 @@ body {
 }
 
 table, ul {
-	line-height: 1.35rem;
+  line-height: 1.35rem;
 }
 
 ul li + li {
-	margin-top: 0.2rem;
+  margin-top: 0.2rem;
 }
 
 ul + p {
@@ -76,12 +76,12 @@ body, button {
   font: 400 17px/1.43 'PT Sans',
     /* Fallback Font Stack */
     -apple-system,
-	  BlinkMacSystemFont,
+    BlinkMacSystemFont,
     'Segoe UI',
-	  Roboto,
-	  Oxygen-Sans,
-	  Cantarell,
-	  'Helvetica Neue',
+    Roboto,
+    Oxygen-Sans,
+    Cantarell,
+    'Helvetica Neue',
     sans-serif;
   *font-size: medium; /* for IE */
   *font:x-small; /* for IE in quirks mode */
@@ -101,13 +101,13 @@ select, input, button, textarea {
 }
 
 table {
-	margin: 0.8em 0;
-	font-size:inherit;
-	font:100%;
+  margin: 0.8em 0;
+  font-size:inherit;
+  font:100%;
 }
 
 pre, code, kbd, samp, .src {
-	font-family: monospace;
+  font-family: monospace;
 }
 
 .links, .link {
@@ -312,13 +312,32 @@ table.properties td, table.properties th {
 
 @media only screen and (min-width: 1920px) {
   #content {
+    /* keep this in sync with #left-pane children */
     width: 60vw;
+  }
+
+  #left-pane > * {
+      /*   (100% - (width of properties)) * (width of #content) - gap
+       * = (100% - 40%                  ) * 60vw                - 2em
+       * = 60%                            * 60vw                - 2em
+       * = 36vw - 2em
+       */
+      width: calc(36vw - 2em);
   }
 }
 
 @media only screen and (min-width: 1280px) and (max-width: 1919px) {
   #content {
     width: 65vw;
+  }
+
+  #left-pane > * {
+      /*   (100% - (width of properties)) * (width of #content) - gap
+       * = (100% - 40%                  ) * 65vw                - 2em
+       * = 60%                            * 65vw                - 2em
+       * = 39vw - 2em
+       */
+      width: calc(39vw - 2em);
   }
 }
 
@@ -343,6 +362,15 @@ table.properties td, table.properties th {
 
   #content {
     width: 75vw;
+  }
+
+  #left-pane > * {
+      /*   (100% - (width of properties)) * (width of #content) - gap
+       * = (100% - 40%                  ) * 75vw                - 2em
+       * = 60%                            * 75vw                - 2em
+       * = 45vw - 2em
+       */
+      width: calc(45vw - 2em);
   }
 }
 
@@ -370,17 +398,26 @@ table.properties td, table.properties th {
   }
 
   div #properties {
-      float:right;
       background: #fefefe;
       width: 40%;
-      margin-left: 2em;
       margin-bottom: 2em;
+  }
+
+  #flex-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 2em; /* keep this in sync with calculation above */
   }
 }
 
 @media only screen and (max-width: 949px) {
   #content {
     width: 88vw;
+  }
+
+  #left-pane > * {
+      width: fit-content;
   }
 
   #page-header {
@@ -438,6 +475,14 @@ table.properties td, table.properties th {
 
 /* @group Page Structure */
 
+#left-pane > #modules {
+    /* This overrides the width in width-dependent blocks. We want a long
+     * module name to make the left-pane wide, so that it will push down
+     * #properties.
+     */
+    width: fit-content;
+}
+
 #content {
   margin: 0 auto;
   padding: 0;
@@ -494,7 +539,7 @@ table.info {
 }
 
 .info th {
-	padding: 0 1em 0 0;
+  padding: 0 1em 0 0;
 }
 
 div#style-menu-holder {
@@ -516,16 +561,16 @@ div#style-menu-holder {
 }
 
 #style-menu li {
-	display: list-item;
-	border-style: none;
-	margin: 0;
-	padding: 0;
-	color: #000;
-	list-style-type: none;
+  display: list-item;
+  border-style: none;
+  margin: 0;
+  padding: 0;
+  color: #000;
+  list-style-type: none;
 }
 
 #style-menu li + li {
-	border-top: 1px solid #919191;
+  border-top: 1px solid #919191;
 }
 
 #style-menu a {
@@ -555,10 +600,10 @@ ul.links li form {
   display: inline-block;
 }
 ul.links li form input {
-	border:0px;
+  border:0px;
   padding:1px;
   margin: 0px;
-	width: 8em;
+  width: 8em;
   border-radius: 3px;
   background-color: rgba(255,255,255, 0.2);
   color: #fff;
@@ -658,7 +703,7 @@ ul.links li form button {
 #interface h3 + div.top,
 #interface h4 + div.top,
 #interface h5 + div.top {
- 	margin-top: 1em;
+   margin-top: 1em;
 }
 
 #interface .src .link {
@@ -798,19 +843,19 @@ ul.links li form button {
 }
 
 #alphabet ul {
-	list-style: none;
-	padding: 0;
-	margin: 0.5em 0 0;
-	text-align: center;
+  list-style: none;
+  padding: 0;
+  margin: 0.5em 0 0;
+  text-align: center;
 }
 
 #alphabet li {
-	display: inline;
-	margin: 0 0.25em;
+  display: inline;
+  margin: 0 0.25em;
 }
 
 #alphabet a {
-	font-weight: bold;
+  font-weight: bold;
 }
 
 #index .caption,
@@ -836,16 +881,6 @@ ul.links li form button {
 #module-list ul {
   list-style: none;
   margin: 0 0 0 20px;
-
-     /* Warning: Needed for oldIE support, but words are broken up letter-by-letter */
-    -ms-word-break: break-all;
-    word-break: break-all;
-    /* Non standard for webkit */
-    word-break: break-word;
-    -webkit-hyphens: auto;
-    -moz-hyphens: auto;
-    -ms-hyphens: auto;
-    hyphens: auto;
 }
 
 /* Disable identation for the top level modules */

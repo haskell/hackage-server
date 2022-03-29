@@ -28,7 +28,7 @@ to set a new password.
 <tr>
 <td><label for="email">Your email address</label>
 <td><input type="text" name="email" id="email">
-<td>This must be the same email address that you registered with originally. 
+<td>This must be the same email address that you registered with originally.
 </table>
 
 <p><input type="submit" value="Request account recovery">

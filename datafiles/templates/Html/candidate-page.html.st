@@ -23,7 +23,7 @@
       [$maintainHtml$]
       [<a href="candidate/publish">Publish</a>]
     </div>
-    
+
     $warningBox$
 
     <div id="description">
@@ -43,7 +43,7 @@
           <th>Versions</th>
           <td>$versions$</td>
         </tr>
-         
+
         <tr>
           $if(package.optional.hasChangelog)$
           <th>Change&nbsp;log</th>

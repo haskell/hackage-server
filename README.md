@@ -9,7 +9,7 @@ This is the `hackage-server` code. This is what powers <http://hackage.haskell.o
 
 ## Installing dependencies
 
-`hackage-server` depends on `icu` and `zlib`.
+`hackage-server` depends on `icu` and `zlib`. You'll also need `libbrotli-dev` for enabling tests.
 
 ICU stands for "International Components for Unicode". The `icu4c` is a set
 of libraries that provide Unicode and Globalization support.
@@ -23,6 +23,8 @@ If you have the Nix package manager installed, the easiest way to obtain
 
     nix-shell
 
+Note: `libbrotli-dev` has to be installed manually.
+
 ### Manually
 
 You can also install dependencies manually via your operating system's package
@@ -30,58 +32,66 @@ manager.
 
 #### ICU
 
-You'll need to do the following to get hackage-server's dependency `text-icu` to build:
+You'll need to do the following to get `hackage-server`'s dependency `text-icu` to build:
 
-##### Mac OS X
+  - Mac OS X
 
-    brew install icu4c
-    brew link icu4c --force
+        brew install icu4c
+        brew link icu4c --force
 
-Besides that, you might also need to include these in the `cabal.project.local` you created:
+    Besides that, you might also need to include these in the `cabal.project.local` you created:
 
-```
-package text-icu
-  extra-include-dirs: /usr/local/opt/icu4c/include
-  extra-lib-dirs: /usr/local/opt/icu4c/lib
-```
+    ```
+    package text-icu
+      extra-include-dirs: /usr/local/opt/icu4c/include
+      extra-lib-dirs:     /usr/local/opt/icu4c/lib
+    ```
 
-##### Ubuntu/Debian
+  - Ubuntu/Debian
 
-    sudo apt-get update
-    sudo apt-get install unzip libicu-dev
+        sudo apt-get update
+        sudo apt-get install unzip libicu-dev
 
-##### Fedora/CentOS
+  - Fedora/CentOS
 
-    sudo dnf install unzip libicu-devel
+        sudo dnf install unzip libicu-devel
 
-##### Nix/NixOS
+  - Nix/NixOS
 
-    nix-shell --packages icu
+        nix-shell --packages icu
+
+#### libbrotli
+
+  - Ubuntu/Debian
+
+        sudo apt update
+        sudo apt install libbrotli-dev
 
 #### zlib
 
-#### Mac OS X
+  - Mac OS X
 
-    brew install zlib
+        brew install zlib
 
-#### Ubuntu/Debian
+  - Ubuntu/Debian
 
-    sudo apt-get update
-    sudo apt-get install zlib
+        sudo apt-get update
+        sudo apt-get install zlib
 
-#### Fedora/CentOS
+  - Fedora/CentOS
 
-    sudo dnf install zlib
+        sudo dnf install zlib
 
-##### Nix/NixOS
+  - Nix/NixOS
 
-    nix-shell --packages zlib
+        nix-shell --packages zlib
 
 
 ## Setting up security infrastructure
 
-Out of the box the server comes with some example keys and TUF metadata. The
-example keys are in `example-keys/`; these keys were used to create
+Out of the box the server comes with some example keys and
+[TUF](https://theupdateframework.io) metadata. The example keys are in
+`example-keys/`; these keys were used to create
 
     datafiles/TUF/root.json
     datafiles/TUF/mirrors.json
@@ -121,7 +131,7 @@ you can find these as the file names of the files created in
 `signed.roles.root.keyids`). An example `cabal` client configuration might look
 something like
 
-    remote-repo my-private-hackage
+    repository my-private-hackage
       url: http://example.com:8080/
       secure: True
       root-keys: 865cc6ce84231ccc990885b1addc92646b7377dd8bb920bdfe3be4d20c707796
@@ -129,9 +139,15 @@ something like
                  e4182227adac4f3d0f60c9e9392d720e07a8586e6f271ddcc1697e1eeab73390
       key-threshold: 2
 
+Note that if you elect to not use a secure client, the hackage server will not
+provide your client the most recent versions of packages from its index. The
+cabal-version:2.0 format packages are thus only available in the newer secure
+repository mode. See [Issue #4625](https://github.com/haskell/cabal/issues/4624)
+for further information.
+
 ## Running
 
-    cabal install -j --enable-tests
+    cabal install
 
     hackage-server init
     hackage-server run
@@ -198,53 +214,56 @@ other groups. In particular there are groups:
 
 ### Mirroring
 
-There is a client program included in the hackage-server package called
-hackage-mirror. It's intended to run against two servers, syncing all the
+There is a client program included in the `hackage-server` package called
+`hackage-mirror`. It's intended to run against two servers, syncing all the
 packages from one to the other, e.g. getting all the packages from the old
 hackage and uploading them to a local instance of a hackage-server.
 
 To try it out:
 
 1. On the target server, add a user to the mirrorers group via
-   http://localhost:8080/packages/mirrorers/
-1. Create a config file that contains the source and target
+   http://localhost:8080/packages/mirrorers/.
+
+2. Create a config file that contains the source and target
    servers. Assuming you are cloning the packages on
-   <http://hackage.haskell.org> locally, create the file servers.cfg:
-```
-source "hackage"
-  uri: http://hackage.haskell.org
-  type: secure
+   <http://hackage.haskell.org> locally, create the file `servers.cfg`:
 
-target "mirror"
-  uri: http://admin:admin@localhost:8080
-  type: hackage2
+   ```
+   source "hackage"
+     uri: http://hackage.haskell.org
+     type: secure
 
-  post-mirror-hook: "shell command to execute"
-```
-Recognized types are hackage2, secure and local. The target server name was displayed when you ran.
+   target "mirror"
+     uri: http://admin:admin@localhost:8080
+     type: hackage2
 
-Note, the target must _not_ have a trailing slash, or confusion will tend to occur. Additionally, if you have ipv6 setup on the machine, you may need to replace `localhost` with `127.0.0.1`.
+     post-mirror-hook: "shell command to execute"
+   ```
+   Recognized types are `hackage2`, `secure` and `local`.
+   The target server name was displayed when you ran.
 
-Also note that you should mirror _from_ hackage2 or secure typically and mirror _to_ hackage2. Only mirroring from secure will include dependency revision information.
+   Note, the target must _not_ have a trailing slash, or confusion
+   will tend to occur.  Additionally, if you have ipv6 setup on the
+   machine, you may need to replace `localhost` with `127.0.0.1`.
 
-```bash
-   hackage-server run.
-```
+   Also note that you should mirror _from_ `hackage2` or `secure`
+   typically and mirror _to_ `hackage2`. Only mirroring from `secure`
+   will include dependency revision information.
 
-1. Run the client, pointing to the config file:
+   ```bash
+   hackage-server run
+   ```
 
-```bash
-hackage-mirror servers.cfg
-```
+3. Run the client, pointing to the config file:
 
-This will do a one-time sync, and will bail out at the first sign of
-trouble. You can also do more robust and continuous mirroring. Use the
-flag `--continuous`. It will sync every 30 minutes (configurable with
-`--interval`). In this mode it carries on even when some packages
-cannot be mirrored for some reason and remembers them so it doesn't
-try them again and again. You can force it to try again by deleting
-the state files it mentions.
-=======
-We use this branch for things that are specific to that instance, but which
-are not apprpriate for other instances that other people operate (e.g.
-certain user-facing documentation).
+   ```bash
+   hackage-mirror servers.cfg
+   ```
+
+   This will do a one-time sync, and will bail out at the first sign of
+   trouble. You can also do more robust and continuous mirroring. Use the
+   flag `--continuous`. It will sync every 30 minutes (configurable with
+   `--interval`). In this mode it carries on even when some packages
+   cannot be mirrored for some reason and remembers them so it doesn't
+   try them again and again. You can force it to try again by deleting
+   the state files it mentions.

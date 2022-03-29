@@ -3,15 +3,12 @@
 module Util (
     explode
   , trim
-  , die
   , info
   , decodeJSON
   ) where
 
 import Data.Char
 import Data.Aeson
-import System.IO
-import System.Exit (exitFailure)
 
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
@@ -28,10 +25,6 @@ trim = reverse . dropWhile isSpace
 
 info :: String -> IO ()
 info str = putStrLn ("= " ++ str)
-
-die :: String -> IO a
-die err = do hPutStrLn stderr err
-             exitFailure
 
 decodeJSON :: FromJSON a => String -> IO a
 decodeJSON str =

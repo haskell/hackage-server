@@ -1,3 +1,5 @@
+-- | Test that Hackage accepts or refuses certain packages.
+
 module Main
   ( main
   ) where
@@ -14,7 +16,7 @@ import Distribution.Server.Packages.Unpack
 import Distribution.Server.Packages.UnpackTest
 
 import Test.Tasty (defaultMain, TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, Assertion)
+import Test.Tasty.HUnit (testCase, Assertion, HasCallStack)
 
 main :: IO ()
 main = defaultMain allTests
@@ -22,7 +24,11 @@ main = defaultMain allTests
 allTests :: TestTree
 allTests = testGroup "PackageTests"
     [ testGroup "Tar file permissions" tarPermissions
-    , testGroup "Cabal package integrity tests" cabalPackageCheckTests]
+    , testGroup "Cabal package integrity tests" cabalPackageCheckTests
+    ]
+
+---------------------------------------------------------------------------
+-- * File permission tests
 
 tarPermissions :: [TestTree]
 tarPermissions =
@@ -34,7 +40,8 @@ tarPermissions =
         (testPermissions "tests/permissions-tarballs/bad-file-perms.tar.gz" badFileMangler)
     , testCase
         "Bad Dir Permissions"
-        (testPermissions "tests/permissions-tarballs/bad-dir-perms.tar.gz" badDirMangler)]
+        (testPermissions "tests/permissions-tarballs/bad-dir-perms.tar.gz" badDirMangler)
+    ]
 
 goodMangler :: (Tar.Entry -> Maybe CombinedTarErrs)
 goodMangler = const Nothing
@@ -51,45 +58,98 @@ badDirMangler entry =
     Tar.Directory -> Just $ PermissionsError (Tar.entryPath entry) 0o700
     _ -> Nothing
 
+---------------------------------------------------------------------------
+-- * Package integry tests
+
 cabalPackageCheckTests :: [TestTree]
 cabalPackageCheckTests =
+  -- Failing tests
     [ testCase "Missing ./configure script" missingConfigureScriptTest
-    , testCase "Missing directories in tar file" missingDirsInTarFileTest
     , testCase "Bad spec-version" badSpecVer
+  -- Successful tests
+    , testCase "Missing directories in tar file" missingDirsInTarFileTest
+    , testCase "Accept GHC 9.2 LANGUAGE extensions" acceptGHC902LanguageExtensions
     ]
+
+---------------------------------------------------------------------------
+-- ** Tests that must fail
+
+-- | If @build-type: Configure@, then there must be a @./configure@ script.
 
 missingConfigureScriptTest :: Assertion
 missingConfigureScriptTest =
   do tar <- tarGzFile "missing-configure-0.1.0.0"
      now <- getCurrentTime
      case unpackPackage now "missing-configure-0.1.0.0.tar.gz" tar of
-       Right _ -> HUnit.assertFailure "expected error"
+       Right _ -> HUnit.assertFailure "error: unexpected success"
        Left err ->
          HUnit.assertBool
            ("Error found, but not about missing ./configure: " ++ err)
            ("The 'build-type' is 'Configure'" `isInfixOf` err)
+
+-- | The @cabal-version@ must be valid.
 
 badSpecVer :: Assertion
 badSpecVer =
   do tar <- tarGzFile "bad-specver-package-0"
      now <- getCurrentTime
      case unpackPackage now "bad-specver-package-0.tar.gz" tar of
-       Right _ -> HUnit.assertFailure "expected error"
+       Right _ -> HUnit.assertFailure "error: unexpected success"
        Left err ->
          HUnit.assertBool
            ("Error found, but not about invalid spec version: " ++ err)
-           ("cabal-version" `isInfixOf` err)
+           ("cabal spec version" `isInfixOf` err)
+
+---------------------------------------------------------------------------
+-- ** Tests that must succeed
 
 -- | Some tar files in hackage are missing directory entries.
 -- Ensure that they can be verified even without the directory entries.
+
 missingDirsInTarFileTest :: Assertion
 missingDirsInTarFileTest =
-  do tar <- fmap keepOnlyFiles (tarGzFile "correct-package-0.1.0.0")
-     now <- getCurrentTime
-     case unpackPackage now "correct-package-0.1.0.0.tar.gz" tar of
-       Right _ -> return ()
-       Left err ->
-         HUnit.assertFailure ("Excpected success but got: " ++ show err)
+  successTestTGZ pkg =<< do keepOnlyFiles <$> tarGzFile pkg
+  where
+  pkg = "correct-package-0.1.0.0"
+
+-- | Hackage should accept GHC 9.2 language extensions (issue #1030).
+
+acceptGHC902LanguageExtensions :: Assertion
+acceptGHC902LanguageExtensions = successTest "LANGUAGE-GHC-9.2"
+
+---------------------------------------------------------------------------
+-- * Auxiliary functions to construct tests
+
+-- | A generic successful test, given a directory with the package contents.
+--
+-- Note: the 'HasCallStack' constraint ensures that the assertion failure
+-- is thrown at the invocation site of this function.
+--
+successTest
+  :: HasCallStack
+  => String        -- ^ The directory which is also the package name.
+  -> Assertion
+successTest pkg = successTestTGZ pkg =<< tarGzFile pkg
+
+-- | A successful test, given the package name and its @.tgz@ stream.
+--
+-- Note: the 'HasCallStack' constraint ensures that the assertion failure
+-- is thrown at the invocation site of this function.
+--
+successTestTGZ
+  :: HasCallStack
+  => String        -- ^ The package name which is also the stem of the @.tgz@ file.
+  -> ByteString    -- ^ The content of the @.tgz@ archive.
+  -> Assertion
+successTestTGZ pkg tar = do
+  now <- getCurrentTime
+  case unpackPackage now (pkg ++ ".tar.gz") tar of
+    Right _ -> return ()
+    Left err ->
+      HUnit.assertFailure $ "Expected success, but got: " ++ show err
+
+---------------------------------------------------------------------------
+-- * Tar utilities
 
 tarGzFile :: String -> IO ByteString
 tarGzFile name = do

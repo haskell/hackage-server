@@ -17,14 +17,16 @@ jobs:
       fail-fast: false
       matrix:
         versions:
-          - ghc: '8.10.5'
-            cabal: '3.4'
+          - ghc: '9.2.2'
+            cabal: '3.6'
+          - ghc: '9.0.2'
+            cabal: '3.6'
+          - ghc: '8.10.7'
+            cabal: '3.6'
           - ghc: '8.8.4'
-            cabal: '3.4'
+            cabal: '3.6'
     steps:
     - uses: actions/checkout@v2
-
-    # need to install older cabal/ghc versions from ppa repository
 
     - name: Install recent cabal/ghc
       uses: haskell/actions/setup@v1
@@ -58,9 +60,15 @@ jobs:
         sudo apt-get install libbrotli-dev
         cabal update
         cabal build --dependencies-only --enable-tests --disable-optimization
+
     - name: Build
       run: |
         cabal build --enable-tests --disable-optimization 2>&1 | tee build.log
+
     - name: Test
       run: |
-        cabal test --disable-optimization
+        cabal test --enable-tests --disable-optimization
+
+    - name: Haddock
+      run: |
+        cabal haddock --enable-tests --disable-optimization

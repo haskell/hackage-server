@@ -63,5 +63,4 @@ killProcessGroup pid = do
               checkReallyDead (n - 1)
 
 ignoreIOExceptions :: IO () -> IO ()
-ignoreIOExceptions io = io `catchIOError` ((\_ -> return ()))
-
+ignoreIOExceptions io = io `catchIOError` (\_ -> return ())

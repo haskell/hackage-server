@@ -19,7 +19,7 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.List (isInfixOf)
 import Data.String ()
 import System.Directory
-import System.Exit (ExitCode(..))
+import System.Exit (ExitCode(..), die)
 import System.FilePath
 import System.IO
 
@@ -162,9 +162,34 @@ runPackageUploadTests = do
                 (Auth "HackageTestUser1" "testpass1")
                 "/packages/" "package"
                 (testpackageTarFilename, testpackageTarFileContent)
+    do info "Adding HackageTestUser1 to mirrorers"
+       post (Auth "admin" "admin") "/packages/mirrorers/" [
+           ("user", "HackageTestUser1")
+         ]
+    do info "Checking Package Exists"
+       xs <- validate NoAuth "/package/testpackage-1.0.0.0"
+       unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
+           die ("Bad package info: " ++ show xs)
+    do info "Setting upload time"
+       putText (Auth "HackageTestUser1" "testpass1")
+           "/package/testpackage-1.0.0.0/upload-time"
+           uploadTime
+       xs <- getUrl NoAuth "/package/testpackage-1.0.0.0/upload-time"
+       unless (xs == uploadTimeISO) $
+            die ("Bad upload time: " ++ show xs)
+    do info "Setting upload time (ISO)"
+       putText (Auth "HackageTestUser1" "testpass1")
+           "/package/testpackage-1.0.0.0/upload-time"
+           uploadTimeISO2
+       xs <- getUrl NoAuth "/package/testpackage-1.0.0.0/upload-time"
+       unless (xs == uploadTimeISO2) $
+            die ("Bad upload time: " ++ show xs)
   where
     (testpackageTarFilename, testpackageTarFileContent, _, _, _, _) =
       testpackage
+    uploadTime = "Tue Oct 18 20:54:28 UTC 2010"
+    uploadTimeISO = "2010-10-18T20:54:28Z"
+    uploadTimeISO2 = "2020-10-18T20:54:28Z"
 
 runPackageTests :: IO ()
 runPackageTests = do
@@ -188,14 +213,27 @@ runPackageTests = do
                die "Bad index contents"
     do info "Getting package index with etag"
        validateETagHandling "/packages/index.tar.gz"
+
     do info "Getting testpackage info"
-       xs <- validate NoAuth "/package/testpackage"
+       xs <- validate NoAuth "/package/testpackage.html"
        unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
-           die ("Bad package info: " ++ show xs)
+           die ("Bad package info for unversioned HTML /package/testpackage.html endpoint: " ++ show xs)
+
     do info "Getting testpackage-1.0.0.0 info"
        xs <- validate NoAuth "/package/testpackage-1.0.0.0"
        unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
-           die ("Bad package info: " ++ show xs)
+           die ("Bad package info for versioned HTML /package/testpackage-1.0.0.0 endpoint: " ++ show xs)
+
+    do info "Getting testpackage-1.0.0.0 info (JSON)"
+       xs <- validate NoAuth "/package/testpackage-1.0.0.0.json"
+       unless ("\"synopsis\":\"test package testpackage\"" `isInfixOf` xs) $
+           die ("Bad package info for versioned JSON endpoint, expected the synopsis field to contain \"test package testpackage\": " ++ show xs)
+
+    do info "Getting testpackage version info (JSON)"
+       xs <- validate NoAuth "/package/testpackage.json"
+       unless ("\"1.0.0.0\":\"normal\"" `isInfixOf` xs) $
+           die ("Bad package version info: " ++ show xs)
+
     do info "Getting testpackage Cabal file"
        cabalFile <- getUrl NoAuth "/package/testpackage-1.0.0.0/testpackage.cabal"
        unless (cabalFile == testpackageCabalFile) $
@@ -222,4 +260,3 @@ runPackageTests = do
 
 testpackage :: (FilePath, String, FilePath, String, FilePath, String)
 testpackage = mkPackage "testpackage"
-
