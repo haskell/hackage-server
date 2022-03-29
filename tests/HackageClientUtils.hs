@@ -52,7 +52,7 @@ withServerRunning root f
                            info "Finished with server")
 
 serverRunningArgs :: [String]
-serverRunningArgs = ["run", "--ip", "127.0.0.1", "--port", show testPort]
+serverRunningArgs = ["run", "--ip", "127.0.0.1", "--port", show testPort, "--delay-cache-updates", "0"]
 
 waitForServer :: IO ()
 waitForServer = f 10
