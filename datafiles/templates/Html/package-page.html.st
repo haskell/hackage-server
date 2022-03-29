@@ -42,80 +42,12 @@
     $endif$
 
     <div id="flex-container">
-
-<<<<<<< HEAD
-    <div id="properties">
-    <table class="properties">
-      <tbody>
-
-        <tr>
-          <th>Versions <span style="font-weight:normal;font-size: small;">[<a href="/package/$package.name$.rss">RSS</a>]  [<a href="https://pvp.haskell.org/faq">faq</a>]</span></th>
-          <td>$versions$</td>
-        </tr>
-
-        $if(package.optional.hasChangelog)$
-        <tr>
-          <th>Change&nbsp;log</th>
-          <td class="word-wrap">$package.optional.changelog$</td>
-        </tr>
-        $endif$
-
-        <tr>
-          <th>Dependencies</th>
-          <td>$package.buildDepends$</td>
-        </tr>
-
-        <tr>
-          <th>License</th>
-          <td class="word-wrap">$package.license$</td>
-        </tr>
-
-        $if(package.optional.hasCopyright)$
-        <tr>
-          <th>Copyright</th>
-          <td class="word-wrap">$package.optional.copyright$</td>
-        </tr>
-        $endif$
-=======
       <div id="left-pane">
->>>>>>> master
 
         <div id="description">
           $if(package.optional.hasDescription)$
           $package.optional.description$
           $endif$
-<<<<<<< HEAD
-          </td>
-        </tr>
-        <tr>
-          <th>Status</th>
-	  <td><a href="https://matrix.hackage.haskell.org/package/$package.name$"><img src="https://matrix.hackage.haskell.org/api/v2/packages/$package.name$/badge" alt="Hackage Matrix CI" style="max-width:100%;" /></a><br/>$buildStatus$</td>
-        </tr>
-      </tbody>
-    </table>
-    </div> <!-- /properties -->
-
-    <div id="badges" style="margin-top: 20px;">
-        $if(install.0)$<img src="https://img.shields.io/static/v1?label=Build&message=$install.2$&color=$install.1$" />$endif$
-        $if(test.0)$<img src="https://img.shields.io/static/v1?label=Tests&message=$test.2$&color=$test.1$" />$endif$
-        $if(covg.0)$<img src="https://img.shields.io/static/v1?label=Coverage&message=$covg.2$%&color=$covg.1$" />$endif$
-        $if(!hasExecOnly)$<img src="https://img.shields.io/static/v1?label=Documentation&message=$if(hasDocs)$Available$else$Unavailable$endif$&color=$if(hasDocs)$success$else$critical$endif$" />$endif$
-    </div>
-
-    <div id="modules">
-      $moduleList$
-    </div>
-
-    $if(hackage.hasFlags)$
-    <div id="flags">
-      $hackage.flagsSection$
-    </div>
-    $endif$
-
-    <div id="downloads">
-      $downloadSection$
-    </div>
-=======
           $if(package.optional.hasReadme)$
           <hr>
           [<a href="#readme">Skip to Readme</a>]
@@ -138,7 +70,6 @@
           $hackage.flagsSection$
         </div>
         $endif$
->>>>>>> master
 
         <div id="downloads">
           $downloadSection$
