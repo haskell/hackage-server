@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.BuildReports (
+    BuildReportId(..),
     ReportsFeature(..),
     ReportsResource(..),
     initBuildReportsFeature
@@ -45,7 +46,7 @@ data ReportsFeature = ReportsFeature {
     queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
     pkgReportDetails    :: forall m. MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails,
-    queryLastReportStats:: forall m. MonadIO m => PackageIdentifier -> m (Maybe BuildReport, Maybe BuildCovg),
+    queryLastReportStats:: forall m. MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg)),
     reportsResource :: ReportsResource
 }
 
@@ -202,17 +203,17 @@ buildReportsFeature name
       latestRpt <- queryState reportsState $ LookupLatestReport pkgid
       (time, ghcId) <- case latestRpt of
         Nothing -> return (Nothing,Nothing)
-        Just (brp, _, _) -> do
+        Just (_, brp, _, _) -> do
           let (CompilerId _ vrsn) = compiler brp
           return (time brp, Just vrsn)
       return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId)
 
-    queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe BuildReport, Maybe BuildCovg)
+    queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg))
     queryLastReportStats pkgid = do
-      rpt <- queryState reportsState $ LookupLatestReport pkgid
-      case rpt of
-        Nothing -> return (Nothing, Nothing)
-        Just (a,_,b) -> return (Just a, b)
+      lookupRes <- queryState reportsState $ LookupLatestReport pkgid
+      case lookupRes of
+        Nothing -> return Nothing
+        Just (rptId, rpt, _, covg) -> return (Just (rptId, rpt, covg))
 
 
     ---------------------------------------------------------------------------

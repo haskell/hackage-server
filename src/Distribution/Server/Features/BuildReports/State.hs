@@ -77,7 +77,7 @@ resetFailCount pkgid = do
 lookupFailCount :: PackageId -> Query BuildReports (Maybe BuildStatus)
 lookupFailCount pkgid = asks (BuildReports.lookupFailCount pkgid)
 
-lookupLatestReport :: PackageId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg))
+lookupLatestReport :: PackageId -> Query BuildReports (Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg))
 lookupLatestReport pkgid = asks (BuildReports.lookupLatestReport pkgid)
 
 makeAcidic ''BuildReports ['addReport

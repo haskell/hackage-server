@@ -193,14 +193,15 @@ lookupFailCount pkgid buildReports = do
   rp <- Map.lookup pkgid (reportsIndex buildReports)
   return $ buildStatus rp
 
-lookupLatestReport :: PackageId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg)
+lookupLatestReport :: PackageId -> BuildReports -> Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg)
 lookupLatestReport pkgid buildReports = do
   rp <- Map.lookup pkgid (reportsIndex buildReports)
   let rs = reports rp
-  a  <- if Map.null rs
-          then Nothing
-          else Just $ fst $ Map.findMax rs
-  Map.lookup a rs
+  (maxKey, (rep, buildLog, covg)) <-
+    if Map.null rs
+      then Nothing
+      else Just $ Map.findMax rs
+  Just (maxKey, rep, buildLog, covg)
 
 -- addPkg::`
 -------------------
