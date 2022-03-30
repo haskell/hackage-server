@@ -4,6 +4,7 @@ module Distribution.Server.Features.Html (
     initHtmlFeature
   ) where
 
+import Control.Arrow ((&&&))
 import Prelude ()
 import Distribution.Server.Prelude
 
@@ -578,8 +579,11 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           documentationFeature reportsFeature realpkg
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
-        let (install, test, covg) = getBadgeStats rptStats
         let
+          idAndReport = fmap (\(rptId, rpt, _) -> (rptId, rpt)) rptStats
+          install = getInstall $ fmap (fst &&& BR.installOutcome . snd) idAndReport
+          test    = getTest    $ fmap (        BR.testsOutcome   . snd) idAndReport
+          covg = getAvgCovg $ (\(_, _, cvg) -> cvg) =<< rptStats
           loadDocMeta
             | Just doctarblob <- mdoctarblob
             , Just docIndex   <- mdocIndex
@@ -632,12 +636,16 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             utilities
             False
       where
-        getBadgeStats (rpt, cvg) = (getInstall (fmap BR.installOutcome rpt), getTest (fmap BR.testsOutcome rpt), getAvgCovg cvg)
-
-        getInstall Nothing                        = (False, "", "")
-        getInstall (Just BR.InstallOk)            = (True, "success", "InstallOk")
-        getInstall (Just (BR.DependencyFailed _)) = (True, "critical", "DependencyFailed")
-        getInstall (Just k)                       = (True, "critical", show k)
+        getInstall Nothing = (False, "", "", "")
+        getInstall (Just (rptId, buildStatus)) =
+          (isBadgeShowing, badgeColor, badgeText, rptUrl)
+          where
+            BuildReportId rawId = rptId
+            rptUrl = "reports/" <> show rawId
+            badgeContent BR.InstallOk            = (True, "success", "InstallOk")
+            badgeContent (BR.DependencyFailed _) = (True, "critical", "DependencyFailed")
+            badgeContent k                       = (True, "critical", show k)
+            (isBadgeShowing, badgeColor, badgeText) = badgeContent buildStatus
 
         getTest (Just BR.Ok)      = (True, "success", "Passed")
         getTest (Just BR.Failed)  = (True, "critical", "Failed")
