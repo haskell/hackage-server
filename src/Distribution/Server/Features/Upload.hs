@@ -59,8 +59,6 @@ data UploadFeature = UploadFeature {
     -- | The group of maintainers for a given package.
     maintainersGroup   :: PackageName -> UserGroup,
 
-    -- | Requiring being logged in as the maintainer of a package.
-    guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE Users.UserId,
     -- | Requiring being logged in as the maintainer of a package or a trustee.
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
 
@@ -294,10 +292,6 @@ uploadFeature ServerEnv{serverBlobStore = store}
 
     uploaderDescription :: GroupDescription
     uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders are allowed to upload packages. Note that if a package already exists then you also need to be in the maintainer group for that package." }
-
-    guardAuthorisedAsMaintainer :: PackageName -> ServerPartE Users.UserId
-    guardAuthorisedAsMaintainer pkgname =
-      guardAuthorised [InGroup (maintainersGroup pkgname)]
 
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainerOrTrustee pkgname =

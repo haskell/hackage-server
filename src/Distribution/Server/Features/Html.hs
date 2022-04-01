@@ -278,7 +278,7 @@ htmlFeature env@ServerEnv{..}
     htmlReports    = mkHtmlReports    utilities core reportsCore templates
     htmlCandidates = mkHtmlCandidates utilities core versions upload
                                       docsCandidates tarIndexCache
-                                      candidates templates
+                                      candidates user templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core upload user list tags templates
 
@@ -1057,6 +1057,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> DocumentationFeature
                  -> TarIndexCacheFeature
                  -> PackageCandidatesFeature
+                 -> UserFeature
                  -> Templates
                  -> HtmlCandidates
 mkHtmlCandidates utilities@HtmlUtilities{..}
@@ -1064,10 +1065,11 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
-                 UploadFeature{ guardAuthorisedAsMaintainer, guardAuthorisedAsMaintainerOrTrustee }
+                 uploadFeature@UploadFeature{ guardAuthorisedAsMaintainerOrTrustee }
                  DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
+                 UserFeature{ guardAuthorised }
                  templates = HtmlCandidates{..}
   where
     candidates     = candidatesResource
@@ -1240,6 +1242,8 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       candRender <- liftIO . candidateRender =<< lookupCandidateId candId
       let render = candPackageRender candRender
       return $ toResponse $ dependenciesPage True render "docs"
+
+    guardAuthorisedAsMaintainer pkgName = guardAuthorised [InGroup . maintainersGroup uploadFeature $ pkgName]
 
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do

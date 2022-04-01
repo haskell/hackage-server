@@ -442,7 +442,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       packages <- queryGetPackageIndex
       candidate <- packageInPath dpath >>= lookupCandidateId
       -- check authorization to upload - must already be a maintainer
-      uid <- guardAuthorisedAsMaintainer (packageName candidate)
+      uid <- guardAuthorised [InGroup . maintainersGroup $ packageName candidate]
       -- check if package or later already exists
       checkPublish uid packages candidate >>= \case
         Just failed -> throwError failed
