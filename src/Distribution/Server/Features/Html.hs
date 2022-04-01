@@ -465,7 +465,7 @@ mkHtmlCore :: ServerEnv
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
-           UserFeature{queryGetUserDb, checkAuthenticated, guardAuthorised_}
+           UserFeature{queryGetUserDb, checkAuthenticated, guardAuthorised_, adminGroup}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
@@ -680,14 +680,11 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         render <- liftIO $ packageRender pkg
         return $ toResponse $ dependenciesPage False render "docs"
 
-    guardAuthorisedAsMaintainerOrTrustee pkgname =
-      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
-
     serveMaintainPage :: DynamicPath -> ServerPartE Response
     serveMaintainPage dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
-      guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup, InGroup adminGroup]
       cacheControl [Public, NoCache] (etagFromHash (length pkgs))
       template <- getTemplate templates "maintain.html"
       return $ toResponse $ template
