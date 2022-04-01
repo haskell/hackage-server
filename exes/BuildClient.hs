@@ -798,6 +798,7 @@ cabal opts cmd args moutput = do
                  : verbosityArgs
                 ++ args
     info verbosity $ unwords ("cabal":all_args)
+    createDirectoryIfMissing False $ installDirectory opts
     ph <- runProcess "cabal" all_args (Just $ installDirectory opts)
                         Nothing Nothing moutput moutput
     waitForProcess ph
