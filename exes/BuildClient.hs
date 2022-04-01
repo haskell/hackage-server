@@ -40,7 +40,7 @@ import System.Directory (canonicalizePath, createDirectoryIfMissing,
                          doesFileExist, doesDirectoryExist, getDirectoryContents,
                          renameFile, removeFile, getAppUserDataDirectory,
                          createDirectory, removeDirectoryRecursive,
-                         createDirectoryIfMissing)
+                         createDirectoryIfMissing, makeAbsolute)
 import System.Console.GetOpt
 import System.Process
 import System.IO
@@ -220,11 +220,17 @@ configFile opts = bo_stateDir opts </> "hackage-build-config"
 writeCabalConfig :: BuildOpts -> BuildConfig -> IO ()
 writeCabalConfig opts config = do
     let tarballsDir  = bo_stateDir opts </> "cached-tarballs"
+    createDirectoryIfMissing False tarballsDir
+
+    -- Because we call runProcess with installDirectory as the cwd,
+    -- this relative path won't be valid when cabal is running.
+    -- An absolute path remains valid independently of cwd.
+    absTarballsDir <- makeAbsolute tarballsDir
+
     writeFile (bo_stateDir opts </> "cabal-config") . unlines $
         [ "remote-repo: " ++ srcName uri ++ ":" ++ show uri
         | uri <- bc_srcURI config : bc_auxURIs config ]
-     ++ [ "remote-repo-cache: " ++ tarballsDir ]
-    createDirectoryIfMissing False tarballsDir
+     ++ [ "remote-repo-cache: " ++ absTarballsDir ]
 
 
 ----------------------
