@@ -305,6 +305,9 @@ buildReportsFeature name
       void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
       noContent (toResponse ())
 
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+
     resetBuildFails :: DynamicPath -> ServerPartE Response
     resetBuildFails dpath = do
       pkgid <- packageInPath dpath

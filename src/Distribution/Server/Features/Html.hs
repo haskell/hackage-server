@@ -465,14 +465,14 @@ mkHtmlCore :: ServerEnv
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
-           UserFeature{queryGetUserDb, checkAuthenticated}
+           UserFeature{queryGetUserDb, checkAuthenticated, guardAuthorised_}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
                           , withPackagePreferred
                           }
-           UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
+           UploadFeature{..}
            TagsFeature{queryTagsForPackage}
            documentationFeature@DocumentationFeature{documentationResource, queryDocumentation}
            TarIndexCacheFeature{cachedTarIndex}
@@ -679,6 +679,9 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         cacheControlWithoutETag [Public, maxAgeMinutes 30]
         render <- liftIO $ packageRender pkg
         return $ toResponse $ dependenciesPage False render "docs"
+
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
 
     serveMaintainPage :: DynamicPath -> ServerPartE Response
     serveMaintainPage dpath = do
@@ -1065,11 +1068,11 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
-                 uploadFeature@UploadFeature{ guardAuthorisedAsMaintainerOrTrustee }
+                 UploadFeature{..}
                  DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
-                 UserFeature{ guardAuthorised }
+                 UserFeature{ guardAuthorised, guardAuthorised_ }
                  templates = HtmlCandidates{..}
   where
     candidates     = candidatesResource
@@ -1177,6 +1180,9 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                 ]
           ]
 
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+
     serveCandidateMaintain :: DynamicPath -> ServerPartE Response
     serveCandidateMaintain dpath = do
       pkgid <- packageInPath dpath
@@ -1243,7 +1249,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       let render = candPackageRender candRender
       return $ toResponse $ dependenciesPage True render "docs"
 
-    guardAuthorisedAsMaintainer pkgName = guardAuthorised [InGroup . maintainersGroup uploadFeature $ pkgName]
+    guardAuthorisedAsMaintainer pkgName = guardAuthorised [InGroup . maintainersGroup $ pkgName]
 
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do

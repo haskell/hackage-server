@@ -343,6 +343,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       pkgInfo <- uploadCandidate (==pkgid)
       seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = do
