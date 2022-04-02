@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, RankNTypes,
-    NamedFieldPuns, RecordWildCards, RecursiveDo, BangPatterns #-}
+    NamedFieldPuns, RecordWildCards, RecursiveDo, BangPatterns, OverloadedStrings #-}
 module Distribution.Server.Features.UserDetails (
     initUserDetailsFeature,
     UserDetailsFeature(..),
@@ -11,6 +11,7 @@ module Distribution.Server.Features.UserDetails (
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
@@ -251,22 +252,28 @@ initUserDetailsFeature :: ServerEnv
                        -> IO (UserFeature
                            -> CoreFeature
                            -> IO UserDetailsFeature)
-initUserDetailsFeature ServerEnv{serverStateDir} = do
+initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
     -- Canonical state
     usersDetailsState <- userDetailsStateComponent serverStateDir
 
     --TODO: link up to user feature to delete
 
+    templates <-
+      loadTemplates serverTemplatesMode
+      [serverTemplatesDir, serverTemplatesDir </> "UserDetails"]
+      [ "user-details-form.html" ]
+
     return $ \users core -> do
-      let feature = userDetailsFeature usersDetailsState users core
+      let feature = userDetailsFeature templates usersDetailsState users core
       return feature
 
 
-userDetailsFeature :: StateComponent AcidState UserDetailsTable
+userDetailsFeature :: Templates
+                   -> StateComponent AcidState UserDetailsTable
                    -> UserFeature
                    -> CoreFeature
                    -> UserDetailsFeature
-userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
+userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..}
   = UserDetailsFeature {..}
 
   where
@@ -286,7 +293,9 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
                          , (PUT,    "set the name and contact details of a user account")
                          , (DELETE, "delete the name and contact details of a user account")
                          ]
-      , resourceGet    = [ ("json", handlerGetUserNameContact) ]
+      , resourceGet    = [ ("json", handlerGetUserNameContact)
+                         , ("html", handlerGetUserNameContactHtml)
+                         ]
       , resourcePut    = [ ("json", handlerPutUserNameContact) ]
       , resourceDelete = [ ("",     handlerDeleteUserNameContact) ]
       }
@@ -314,6 +323,19 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
 
     -- Request handlers
     --
+    handlerGetUserNameContactHtml :: DynamicPath -> ServerPartE Response
+    handlerGetUserNameContactHtml dpath = do
+      (uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
+      template <- getTemplate templates "user-details-form.html"
+      udetails <- queryUserDetails uid
+      showConfirmationOfSave <- not . null <$> queryString (lookBSs "showConfirmationOfSave")
+      ok . toResponse $
+        template
+          [ "username" $= display (userName uinfo)
+          , "contactEmailAddress" $= maybe "" accountContactEmail udetails
+          , "name" $= maybe "" accountName udetails
+          , "showConfirmationOfSave" $= showConfirmationOfSave
+          ]
 
     handlerGetUserNameContact :: DynamicPath -> ServerPartE Response
     handlerGetUserNameContact dpath = do
