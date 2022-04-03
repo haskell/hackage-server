@@ -24,7 +24,7 @@ import Distribution.Server.Framework.Error (ErrorResponse(ErrorResponse))
 import Distribution.Server.Framework.Feature (HackageFeature(..), emptyHackageFeature)
 import Distribution.Server.Framework.Resource (Resource(..), resourceAt)
 import Distribution.Server.Framework.ServerEnv (ServerEnv(..))
-import qualified Distribution.Server.Pages.Index as Pages
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Happstack.Server.Monads (ServerPartT)
 import Happstack.Server.Response (ToMessage(toResponse))
@@ -97,7 +97,7 @@ getNewPkgList CoreFeature{queryGetPackageIndex, coreResource} UserFeature{userRe
   browseOptions <- lift (parseBrowseOptions browseOptionsBS)
   (isSearch, packageNames) <-
     case boSearchTerms browseOptions of
-      [] ->    (IsNotSearch,) <$> Pages.toPackageNames <$> queryGetPackageIndex
+      [] ->    (IsNotSearch,) <$> PackageIndex.allPackageNames <$> queryGetPackageIndex
       terms -> (IsSearch,)    <$> liftIO (searchPackages terms)
   pkgDetails <- liftIO (makeItemList packageNames)
   now <- liftIO getCurrentTime
