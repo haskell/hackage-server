@@ -455,7 +455,9 @@ requestPUT uri mimetype body = do
       _       -> return (Just (mkErrorResponse uri rsp))
   where
     headers = [ Header HdrContentLength (show (BS.length body))
-              , Header HdrContentType mimetype ]
+              , Header HdrContentType mimetype
+              , Header HdrAccept "text/plain"
+              ]
 
 {-------------------------------------------------------------------------------
   Auxiliary functions used by HttpSession actions
