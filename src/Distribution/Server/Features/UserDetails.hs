@@ -329,11 +329,22 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..}
       template <- getTemplate templates "user-details-form.html"
       udetails <- queryUserDetails uid
       showConfirmationOfSave <- not . null <$> queryString (lookBSs "showConfirmationOfSave")
+      let
+        emailTxt = maybe "" accountContactEmail udetails
+        nameTxt  = maybe "" accountName         udetails
+      cacheControl
+        [Private]
+        (etagFromHash
+          ( emailTxt
+          , nameTxt
+          , showConfirmationOfSave
+          )
+        )
       ok . toResponse $
         template
           [ "username" $= display (userName uinfo)
-          , "contactEmailAddress" $= maybe "" accountContactEmail udetails
-          , "name" $= maybe "" accountName udetails
+          , "contactEmailAddress" $= emailTxt
+          , "name" $= nameTxt
           , "showConfirmationOfSave" $= showConfirmationOfSave
           ]
 
