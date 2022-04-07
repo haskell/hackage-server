@@ -36,14 +36,18 @@ addEventListener('popstate', async (evt) => {
 });
 
 const get = () => new Promise((resolve,reject) => {
-    const formData = new FormData();
     const obj =
       {   page: state.page
-        , sort: {column: state.column, direction: state.direction}
+        , sortColumn: state.column
+        , sortDirection: state.direction
         , searchQuery: state.searchQuery
       };
-    formData.append('browseOptions', JSON.stringify(obj));
-    fetch('/packages/search', {method:'POST', body: formData}).then(async (response) => {
+    const fetchOptions =
+      {   method: 'POST'
+        , headers: {'content-type': 'application/json'}
+        , body: JSON.stringify(obj)
+      };
+    fetch('/packages/search', fetchOptions).then(async (response) => {
       if (!response.ok) {
         const el = d.querySelector("#fatalError");
         el.style.display = "block";
