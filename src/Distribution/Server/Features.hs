@@ -232,6 +232,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          uploadFeature
                          tarIndexCacheFeature
                          reportsCoreFeature
+                         usersFeature
 
     documentationCandidatesFeature <- mkDocumentationCandidatesFeature
                          (candidatesCoreResource candidatesFeature)
@@ -239,6 +240,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          uploadFeature
                          tarIndexCacheFeature
                          reportsCandidatesFeature
+                         usersFeature
 
     downloadFeature <- mkDownloadFeature
                          coreFeature
@@ -257,6 +259,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
                          uploadFeature
                          tagsFeature
+                         usersFeature
 
     {- [reverse index disabled]
     reverseFeature  <- mkReverseFeature

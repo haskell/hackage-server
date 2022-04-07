@@ -343,6 +343,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       pkgInfo <- uploadCandidate (==pkgid)
       seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = do
@@ -442,7 +445,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       packages <- queryGetPackageIndex
       candidate <- packageInPath dpath >>= lookupCandidateId
       -- check authorization to upload - must already be a maintainer
-      uid <- guardAuthorisedAsMaintainer (packageName candidate)
+      uid <- guardAuthorised [InGroup . maintainersGroup $ packageName candidate]
       -- check if package or later already exists
       checkPublish uid packages candidate >>= \case
         Just failed -> throwError failed

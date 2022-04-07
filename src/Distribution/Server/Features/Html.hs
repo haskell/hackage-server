@@ -278,7 +278,7 @@ htmlFeature env@ServerEnv{..}
     htmlReports    = mkHtmlReports    utilities core reportsCore templates
     htmlCandidates = mkHtmlCandidates utilities core versions upload
                                       docsCandidates tarIndexCache
-                                      candidates templates
+                                      candidates user templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core upload user list tags templates
 
@@ -465,14 +465,14 @@ mkHtmlCore :: ServerEnv
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
-           UserFeature{queryGetUserDb, checkAuthenticated}
+           UserFeature{queryGetUserDb, checkAuthenticated, guardAuthorised_, adminGroup}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
                           , withPackagePreferred
                           }
-           UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
+           UploadFeature{..}
            TagsFeature{queryTagsForPackage}
            documentationFeature@DocumentationFeature{documentationResource, queryDocumentation}
            TarIndexCacheFeature{cachedTarIndex}
@@ -684,7 +684,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveMaintainPage dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
-      guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup, InGroup adminGroup]
       cacheControl [Public, NoCache] (etagFromHash (length pkgs))
       template <- getTemplate templates "maintain.html"
       return $ toResponse $ template
@@ -1057,6 +1057,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> DocumentationFeature
                  -> TarIndexCacheFeature
                  -> PackageCandidatesFeature
+                 -> UserFeature
                  -> Templates
                  -> HtmlCandidates
 mkHtmlCandidates utilities@HtmlUtilities{..}
@@ -1064,10 +1065,11 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
-                 UploadFeature{ guardAuthorisedAsMaintainer, guardAuthorisedAsMaintainerOrTrustee }
+                 UploadFeature{..}
                  DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
+                 UserFeature{ guardAuthorised, guardAuthorised_ }
                  templates = HtmlCandidates{..}
   where
     candidates     = candidatesResource
@@ -1175,6 +1177,9 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                 ]
           ]
 
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+
     serveCandidateMaintain :: DynamicPath -> ServerPartE Response
     serveCandidateMaintain dpath = do
       pkgid <- packageInPath dpath
@@ -1240,6 +1245,8 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       candRender <- liftIO . candidateRender =<< lookupCandidateId candId
       let render = candPackageRender candRender
       return $ toResponse $ dependenciesPage True render "docs"
+
+    guardAuthorisedAsMaintainer pkgName = guardAuthorised [InGroup . maintainersGroup $ pkgName]
 
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do

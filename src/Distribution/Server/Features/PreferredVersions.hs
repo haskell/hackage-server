@@ -19,6 +19,7 @@ import Distribution.Server.Features.PreferredVersions.Backup
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.Users
 import Distribution.Server.Features.Tags
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -91,15 +92,16 @@ initVersionsFeature :: ServerEnv
                     -> IO (CoreFeature
                         -> UploadFeature
                         -> TagsFeature
+                        -> UserFeature
                         -> IO VersionsFeature)
 initVersionsFeature env@ServerEnv{serverStateDir} = do
     preferredState <- preferredStateComponent False serverStateDir
     deprecatedHook <- newHook
 
-    return $ \core upload tags -> do
+    return $ \core upload tags user -> do
 
       let feature = versionsFeature env
-                                    core upload tags
+                                    core upload tags user
                                     preferredState deprecatedHook
       return feature
 
@@ -121,6 +123,7 @@ versionsFeature :: ServerEnv
                 -> CoreFeature
                 -> UploadFeature
                 -> TagsFeature
+                -> UserFeature
                 -> StateComponent AcidState PreferredVersions
                 -> Hook (PackageName, Maybe [PackageName]) ()
                 -> VersionsFeature
@@ -128,6 +131,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
                 CoreFeature{..}
                 UploadFeature{..}
                 TagsFeature{..}
+                UserFeature{ guardAuthorised_ }
                 preferredState
                 deprecatedHook
   = VersionsFeature{..}
@@ -224,6 +228,9 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
             , ("in-favour-of", array [ string $ display pkg
                                      | pkg <- fromMaybe [] mdep ])
             ]
+
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
 
     handlePackageDeprecatedPut :: DynamicPath -> ServerPartE Response
     handlePackageDeprecatedPut dpath = do
