@@ -242,10 +242,8 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
 
     -- tags on merging
     constructMergedTagIndex :: forall m. (Functor m, MonadIO m) => Tag -> Tag -> PackageIndex PkgInfo -> m PackageTags
-    constructMergedTagIndex orig depr = foldM addToTags emptyPackageTags . PackageIndex.allPackagesByName
-      where addToTags calcTags pkgList = do
-                let info = pkgDesc $ last pkgList
-                    !pn = packageName info
+    constructMergedTagIndex orig depr = foldM addToTags emptyPackageTags . PackageIndex.allPackageNames
+      where addToTags calcTags pn = do
                 pkgTags <- queryTagsForPackage pn
                 if Set.member depr pkgTags
                     then do

@@ -6,6 +6,7 @@ import Control.Monad.Except (ExceptT, liftIO, throwError)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (except)
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.Map as Map
 import Data.Time (getCurrentTime)
 
 import Data.Aeson (Value(Array), eitherDecode, object, toJSON, (.=))
@@ -14,9 +15,9 @@ import qualified Data.Vector as V
 
 import Distribution.Server.Features.Browse.ApplyFilter (applyFilter)
 import Distribution.Server.Features.Browse.Options (BrowseOptions(..), IsSearch(..))
-import Distribution.Server.Features.Core (CoreFeature(CoreFeature), queryGetPackageIndex, coreResource)
+import Distribution.Server.Features.Core (CoreFeature(CoreFeature), coreResource)
 import Distribution.Server.Features.Distro (DistroFeature)
-import Distribution.Server.Features.PackageList (ListFeature(ListFeature), makeItemList)
+import Distribution.Server.Features.PackageList (ListFeature(ListFeature), getAllLists, makeItemList)
 import Distribution.Server.Features.Search (SearchFeature(SearchFeature), searchPackages)
 import Distribution.Server.Features.Tags (TagsFeature(TagsFeature), tagsResource)
 import Distribution.Server.Features.Users (UserFeature(UserFeature), userResource)
@@ -24,7 +25,6 @@ import Distribution.Server.Framework.Error (ErrorResponse(ErrorResponse))
 import Distribution.Server.Framework.Feature (HackageFeature(..), emptyHackageFeature)
 import Distribution.Server.Framework.Resource (Resource(..), resourceAt)
 import Distribution.Server.Framework.ServerEnv (ServerEnv(..))
-import qualified Distribution.Server.Pages.Index as Pages
 
 import Happstack.Server.Monads (ServerPartT)
 import Happstack.Server.Response (ToMessage(toResponse))
@@ -92,14 +92,18 @@ paginate PaginationConfig{totalNumberOfElements, pageNumber} = do
    )
 
 getNewPkgList :: CoreFeature -> UserFeature -> TagsFeature -> ListFeature -> SearchFeature -> DistroFeature -> ServerPartT (ExceptT ErrorResponse IO) Response
-getNewPkgList CoreFeature{queryGetPackageIndex, coreResource} UserFeature{userResource} TagsFeature{tagsResource} ListFeature{makeItemList} SearchFeature{searchPackages} distroFeature = do
+getNewPkgList CoreFeature{coreResource} UserFeature{userResource} TagsFeature{tagsResource} ListFeature{getAllLists, makeItemList} SearchFeature{searchPackages} distroFeature = do
   browseOptionsBS <- lookBS "browseOptions"
   browseOptions <- lift (parseBrowseOptions browseOptionsBS)
-  (isSearch, packageNames) <-
-    case boSearchTerms browseOptions of
-      [] ->    (IsNotSearch,) <$> Pages.toPackageNames <$> queryGetPackageIndex
-      terms -> (IsSearch,)    <$> liftIO (searchPackages terms)
-  pkgDetails <- liftIO (makeItemList packageNames)
+  (isSearch, pkgDetails) <-
+    liftIO $ case boSearchTerms browseOptions of
+      [] -> do
+        allItemsMap <- getAllLists
+        pure (IsNotSearch, Map.elems allItemsMap)
+      terms -> do
+        packageNames <- searchPackages terms
+        items <- makeItemList packageNames
+        pure (IsSearch, items)
   now <- liftIO getCurrentTime
   listOfPkgs <- liftIO $ applyFilter now isSearch coreResource userResource tagsResource distroFeature browseOptions pkgDetails
   let config =

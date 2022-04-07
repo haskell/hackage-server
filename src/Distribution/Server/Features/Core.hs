@@ -683,8 +683,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     servePackageList :: DynamicPath -> ServerPartE Response
     servePackageList _ = do
       pkgIndex <- queryGetPackageIndex
-      let pkgs = PackageIndex.allPackagesByName pkgIndex
-          list = [display . pkgName . pkgInfoId $ pkg | pkg <- map head pkgs]
+      let pkgNames = PackageIndex.allPackageNames pkgIndex
+          list = map display pkgNames
       -- We construct the JSON manually so that we control what it looks like;
       -- in particular, we use objects for the packages so that we can add
       -- additional fields later without (hopefully) breaking clients

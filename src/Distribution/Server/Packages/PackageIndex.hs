@@ -42,6 +42,7 @@ module Distribution.Server.Packages.PackageIndex (
     searchByNameSubstring,
 
     -- ** Bulk queries
+    allPackageNames,
     allPackages,
     allPackagesByName
   ) where
@@ -256,6 +257,9 @@ allPackages (PackageIndex m) = concat (Map.elems m)
 --
 allPackagesByName :: Package pkg => PackageIndex pkg -> [[pkg]]
 allPackagesByName (PackageIndex m) = Map.elems m
+
+allPackageNames :: PackageIndex pkg -> [PackageName]
+allPackageNames (PackageIndex m) = Map.keys m
 
 --
 -- * Lookups
