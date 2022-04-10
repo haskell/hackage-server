@@ -4,7 +4,9 @@ module Distribution.Server.Pages.Recent (
     recentPage,
     recentFeed,
     revisionsPage,
-    recentRevisionsFeed
+    recentRevisionsFeed,
+    recentPaging,
+    revisionsPaging,
   ) where
 
 import Distribution.Server.Packages.Types
@@ -36,31 +38,72 @@ import Data.Time.Format
          ( defaultTimeLocale, formatTime )
 import Data.Maybe
          ( listToMaybe)
+import Distribution.Server.Util.Paging (PaginatedConf (PaginatedConf), paginate, totalPages)
 
 -- | Takes a list of package info, in reverse order by timestamp.
---
-recentPage :: Users -> [PkgInfo] -> Html
-recentPage users pkgs =
-  let log_rows = map (makeRow users) (take 25 pkgs)
-      docBody = [XHtml.h2 << "Recent additions",
-                 XHtml.table ! [XHtml.align "center"] << log_rows,
-                 XHtml.anchor ! [XHtml.href recentRevisionsURL] << XHtml.toHtml "Recent revisions"]
-      rss_link = XHtml.thelink ! [XHtml.rel "alternate",
-                                  XHtml.thetype "application/rss+xml",
-                                  XHtml.title "Hackage RSS Feed",
-                                  XHtml.href rssFeedURL] << XHtml.noHtml
+
+recentPaging :: PaginatedConf -> Users -> [PkgInfo] -> Html
+recentPaging conf users pkgs =
+  let log_rows = makeRow users <$> paginate conf pkgs
+      docBody =
+        [ XHtml.h2 << "Recent additions",
+          XHtml.table ! [XHtml.align "center"] << log_rows,
+          paginator conf recentURL,
+          XHtml.anchor ! [XHtml.href recentRevisionsURL] << XHtml.toHtml "Recent revisions"
+        ]
+      rss_link =
+        XHtml.thelink
+          ! [ XHtml.rel "alternate",
+              XHtml.thetype "application/rss+xml",
+              XHtml.title "Hackage RSS Feed",
+              XHtml.href rssFeedURL
+            ]
+          << XHtml.noHtml
    in hackagePageWithHead [rss_link] "recent additions" docBody
 
-revisionsPage :: Users -> [PkgInfo] -> Html
-revisionsPage users pkgs =
-  let log_rows = map (makeRevisionRow users) (take 40 pkgs)
-      docBody = [XHtml.h2 << "Recent cabal metadata revisions",
-          XHtml.table ! [XHtml.align "center"] << log_rows]
-      rss_link = XHtml.thelink ! [XHtml.rel "alternate",
-                                  XHtml.thetype "application/rss+xml",
-                                  XHtml.title "Hackage Revisions RSS Feed",
-                                  XHtml.href revisionsRssFeedURL] << XHtml.noHtml
+
+recentPage :: Users -> [PkgInfo] -> Html
+recentPage = recentPaging (PaginatedConf 1 25 1000)
+
+
+paginator :: PaginatedConf -> URL -> Html 
+paginator pc@(PaginatedConf currPage _ totalAmount) baseUrl = 
+  let 
+    total = totalPages pc
+    infoText = "Showing " ++ show currPage ++ " to " ++ show total ++ " of " ++ show totalAmount ++ " entries"
+    info = XHtml.thediv << infoText
+    next = XHtml.anchor ! [XHtml.href (paginateURLNext pc baseUrl)] << "Next"
+    prev = XHtml.anchor ! [XHtml.href (paginateURLPrev pc baseUrl)] << "Previous"
+    wrapper = XHtml.thediv ! [XHtml.theclass "paginator"] << (prev <> next)
+  in XHtml.thediv ! [XHtml.identifier "paginatorContainer"] << mconcat [info, wrapper]
+
+
+-- Should actually check if next exists
+paginateURLNext,paginateURLPrev :: PaginatedConf -> URL -> URL
+paginateURLNext (PaginatedConf cp _ _) url = url <> "?page=" ++ (show . succ) cp
+paginateURLPrev (PaginatedConf cp _ _) url = url <> "?page=" ++ (show . pred) cp
+
+revisionsPaging :: PaginatedConf -> Users -> [PkgInfo] -> Html
+revisionsPaging conf users pkgs =
+  let log_rows = map (makeRevisionRow users) (paginate conf pkgs)
+      docBody =
+        [ XHtml.h2 << "Recent cabal metadata revisions",
+          XHtml.table ! [XHtml.align "center"] << log_rows,
+          paginator conf recentRevisionsURL
+        ]
+      rss_link =
+        XHtml.thelink
+          ! [ XHtml.rel "alternate",
+              XHtml.thetype "application/rss+xml",
+              XHtml.title "Hackage Revisions RSS Feed",
+              XHtml.href revisionsRssFeedURL
+            ]
+          << XHtml.noHtml
    in hackagePageWithHead [rss_link] "recent revisions" docBody
+
+-- Remove Later
+revisionsPage :: Users -> [PkgInfo] -> Html
+revisionsPage = revisionsPaging (PaginatedConf 1 50 1000)
 
 makeRow :: Users -> PkgInfo -> Html
 makeRow users pkginfo =
@@ -109,6 +152,9 @@ packageURL pkgid = "/package/" ++ display pkgid
 
 rssFeedURL :: URL
 rssFeedURL = "/recent.rss"
+
+recentURL :: URL
+recentURL = "/packages/recent.html"
 
 recentAdditionsURL :: URL
 recentAdditionsURL = "/recent.html"

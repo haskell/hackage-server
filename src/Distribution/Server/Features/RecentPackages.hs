@@ -92,14 +92,12 @@ recentPackagesFeature env
     recentPackagesResource = RecentPackagesResource {
         recentPackages = (extendResourcePath "/recent.:format" (corePackagesPage coreResource)) {
             resourceGet = [
-                ("html", const $ liftM (\(x,_,_,_) -> x) $ readAsyncCache cacheRecent)
-              , ("rss",  const $ addAllowOriginHeader >> (liftM (\(_,x,_,_) -> x) $ readAsyncCache cacheRecent))
+                ("rss",  const $ addAllowOriginHeader >> (liftM (\(_,x,_,_) -> x) $ readAsyncCache cacheRecent))
               ]
           },
         recentRevisions = (extendResourcePath "/recent/revisions.:format" (corePackagesPage coreResource)) {
             resourceGet = [
-                ("html", const $ liftM (\(_,_,x,_) -> x) $ readAsyncCache cacheRecent)
-              , ("rss",  const $ addAllowOriginHeader >> (liftM (\(_,_,_,x) -> x) $ readAsyncCache cacheRecent))
+                ("rss",  const $ addAllowOriginHeader >> (liftM (\(_,_,_,x) -> x) $ readAsyncCache cacheRecent))
               ]
           }
       }

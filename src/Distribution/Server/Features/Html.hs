@@ -75,6 +75,8 @@ import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
 import Distribution.PackageDescription (hasLibs)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
+import qualified Distribution.Server.Pages.Recent as Pages
+import qualified Distribution.Server.Util.Paging as Paging
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -491,7 +493,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
   = HtmlCore{..}
   where
     candidatesCore = candidatesCoreResource
-    cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
+    cores@CoreResource {packageInPath, lookupPackageName, lookupPackageId} = coreResource
     versions = versionsResource
     docs     = documentationResource
 
@@ -535,7 +537,50 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       , (resourceAt "/package/:package/revisions/.:format") {
             resourceGet  = [("html", serveCabalRevisionsPage)]
           }
+      , (resourceAt "/packages/recent.:format") {
+            resourceGet = [("html", serveRecentPage)]
+          }
+      , (resourceAt "/packages/recent/revisions.:format") {
+            resourceGet = [("html", serveRevisionPage)]
+          }
       ]
+
+    serveRecentPage :: DynamicPath -> ServerPartE Response
+    serveRecentPage _ = do
+      -- TODO
+      -- [x] Change paginate to use custom object to prohibit messing things up
+      -- [x] Extract out revision to HTML feature
+      -- [x] Show different pagination options in HTML
+      -- [-] Remove old HTML from RecentPackages Feature
+      -- [] Convert over RSS to use pagination with query params
+      -- [] Convert paginator HTML to look and act like search paginator
+      pkgIndex <- queryGetPackageIndex
+      users <- queryGetUserDb
+      page <- readWithDefault 1 <$> optional (look "page")
+      pageSize <- readWithDefault 25 <$> optional (look "pageSize")
+      let recentChanges = sortBy (flip $ comparing pkgOriginalUploadTime)
+                          (PackageIndex.allPackages pkgIndex)
+      let conf = Paging.createConf page pageSize recentChanges
+
+      
+      
+      return . toResponse $ Pages.recentPaging conf users recentChanges
+        where 
+          readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
+
+    serveRevisionPage :: DynamicPath -> ServerPartE Response
+    serveRevisionPage _ = do
+      pkgIndex <- queryGetPackageIndex
+      users <- queryGetUserDb
+      page <- readWithDefault 1 <$> optional (look "page")
+      pageSize <- readWithDefault 50 <$> optional (look "pageSize")
+      let recentChanges = sortBy (flip $ comparing pkgOriginalUploadTime)
+                          (PackageIndex.allPackages pkgIndex)
+      let conf = Paging.createConf page pageSize recentChanges
+
+
+      return . toResponse $ Pages.revisionsPaging conf users recentChanges
+        where readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _dpath = do
