@@ -27,17 +27,13 @@ import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml
          ( Html, URL, (<<), (!) )
 import qualified Text.RSS as RSS
-import Text.RSS
-         ( RSS(RSS) )
-import Network.URI
-         ( URI(..), uriToString )
-import Data.Time.Clock
-         ( UTCTime, addUTCTime )
-import Data.Time.Format
-         ( defaultTimeLocale, formatTime )
-import Data.Maybe
-         ( listToMaybe)
-import Distribution.Server.Util.Paging (PaginatedConf (PaginatedConf, currPage), paginate, totalPages, allPagedURLS, hasNext, hasPrev)
+import Text.RSS ( RSS(RSS) )
+import Network.URI ( URI(..), uriToString )
+import Data.Time.Clock ( UTCTime )
+import Data.Time.Format ( defaultTimeLocale, formatTime )
+import Data.Maybe ( listToMaybe)
+import Distribution.Server.Util.Paging (PaginatedConf (..), paginate, allPagedURLS, hasNext, hasPrev, pageIndexRange)
+import qualified Text.XHtml as Xhtml
 
 -- | Takes a list of package info, in reverse order by timestamp.
 
@@ -63,14 +59,16 @@ recentPage conf users pkgs =
 paginator :: PaginatedConf -> URL -> Html 
 paginator pc@(PaginatedConf currPage _ totalAmount) baseUrl = 
   let 
-    total = totalPages pc
-    infoText = "Showing " ++ show currPage ++ " to " ++ show total ++ " of " ++ show totalAmount ++ " entries"
+    (start, end) = pageIndexRange pc
+    infoText = "Showing " ++ show start ++ " to " ++ show end ++ " of " ++ show totalAmount ++ " entries"
     info = XHtml.thediv << infoText
 
-    next = XHtml.anchor ! [XHtml.href (paginateURLNext pc baseUrl), 
-      if hasNext pc then noAttr else XHtml.disabled] << "Next"
-    prev = XHtml.anchor ! [XHtml.href (paginateURLPrev pc baseUrl), 
-      if hasPrev pc then noAttr else XHtml.disabled] << "Previous"
+    next = if hasNext pc 
+      then XHtml.anchor ! [XHtml.href (paginateURLNext pc baseUrl)] << "Next" 
+      else Xhtml.noHtml
+    prev = if hasPrev pc 
+      then XHtml.anchor ! [XHtml.href (paginateURLPrev pc baseUrl) ] << "Previous" 
+      else XHtml.noHtml 
 
     pagedURLS = zip [1..] (allPagedURLS baseUrl pc)
     pagedLinks = (\(x,y) -> XHtml.anchor ! [XHtml.href y, 
@@ -192,32 +190,30 @@ recentRevisionsURL :: URL
 recentRevisionsURL = "/packages/recent/revisions.html"
 
 
-recentFeed :: Users -> URI -> UTCTime -> [PkgInfo] -> RSS
-recentFeed users hostURI now pkgs = RSS
+recentFeed :: PaginatedConf -> Users -> URI -> UTCTime -> [PkgInfo] -> RSS
+recentFeed conf users hostURI now pkgs = RSS
   "Recent additions"
   (hostURI { uriPath = recentAdditionsURL})
   desc
   (channel updated)
   (map (releaseItem users hostURI) pkgList)
   where
-    desc = "The 20 most recent additions to Hackage (or last 48 hours worth, whichever is greater), the Haskell package database."
-    twoDaysAgo = addUTCTime (negate $ 60 * 60 * 48) now
-    pkgListTwoDays = takeWhile (\p -> pkgLatestUploadTime p > twoDaysAgo) pkgs
-    pkgList = if length pkgListTwoDays > 20 then pkgListTwoDays else take 20 pkgs
+    (start,end) = pageIndexRange conf
+    desc = "Showing" ++ show start ++ " - " ++ show end ++ " most recent additions to Hackage, the Haskell package database."
+    pkgList = paginate conf pkgs
     updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
 
-recentRevisionsFeed :: Users -> URI -> UTCTime -> [PkgInfo] -> RSS
-recentRevisionsFeed users hostURI now pkgs = RSS
+recentRevisionsFeed :: PaginatedConf -> Users -> URI -> UTCTime -> [PkgInfo] -> RSS
+recentRevisionsFeed conf users hostURI now pkgs = RSS
   "Recent revisions"
   (hostURI { uriPath = recentRevisionsURL})
   desc
   (channel updated)
   (map (revisionItem users hostURI) pkgList)
   where
-    desc = "The 40 most recent revisions to cabal metadata in Hackage (or last 48 hours worth, whichever is greater), the Haskell package database."
-    twoDaysAgo = addUTCTime (negate $ 60 * 60 * 48) now
-    pkgListTwoDays = takeWhile (\p -> pkgLatestUploadTime p > twoDaysAgo) pkgs
-    pkgList = if length pkgListTwoDays > 40 then pkgListTwoDays else take 40 pkgs
+    (start, end) = pageIndexRange conf
+    desc = "Showing" ++ show start ++ " - " ++ show end ++ " most recent revisions to cabal metadata in Hackage, the Haskell package database."
+    pkgList = paginate conf pkgs
     updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
 
 channel :: UTCTime -> [RSS.ChannelElem]

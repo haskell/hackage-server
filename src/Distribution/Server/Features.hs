@@ -190,7 +190,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                 tarIndexCacheFeature
                                 usersFeature
 
-    packagesFeature <- mkRecentPackagesFeature
+    recentPackagesFeature <- mkRecentPackagesFeature
                          usersFeature
                          coreFeature
 
@@ -303,6 +303,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          tarIndexCacheFeature
                          reportsCoreFeature
                          userDetailsFeature
+                         recentPackagesFeature
+                         
 
     editCabalFeature <- mkEditCabalFilesFeature
                           usersFeature
@@ -359,7 +361,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 #ifndef MINIMAL
          , getFeatureInterface tarIndexCacheFeature
          , getFeatureInterface packageContentsFeature
-         , getFeatureInterface packagesFeature
+         , getFeatureInterface recentPackagesFeature
          , getFeatureInterface userDetailsFeature
          , getFeatureInterface userSignupFeature
          , getFeatureInterface legacyPasswdsFeature

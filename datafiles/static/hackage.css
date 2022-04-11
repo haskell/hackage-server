@@ -1060,21 +1060,25 @@ a.deprecated[href]:visited {
   padding: 0.5em 1em;
   margin-left: 2px;
   text-align: center;
-  text-decoration: none !important;
-  color: #333 !important;
+  text-decoration: none;
+  color: #333;
   border: 1px solid transparent;
   border-radius: 2px;
 }
 
+.paginator a[href]:link, .paginator a[href]:visited {
+  color: #333;
+}
+
 .paginator .current,
 .paginator .current:hover {
-  color: #333 !important;
+  color: #333;
   border: 1px solid #979797;
   background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
 }
 
 .paginator a:hover {
-  color: white !important;
+  color: white;
   border: 1px solid #111;
   background: linear-gradient(to bottom, #585858 0%, #111 100%);
 }
@@ -1084,6 +1088,6 @@ a.deprecated[href]:visited {
   cursor: default;
 }
 
-.paginator .disabled {
+.paginator a[disabled], .paginator a[disabled]:hover { 
   color: #666;
 }

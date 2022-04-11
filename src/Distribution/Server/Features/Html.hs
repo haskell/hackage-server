@@ -77,6 +77,8 @@ import Distribution.PackageDescription (hasLibs)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import qualified Distribution.Server.Pages.Recent as Pages
 import qualified Distribution.Server.Util.Paging as Paging
+import Distribution.Server.Features.RecentPackages (RecentPackagesFeature (RecentPackagesFeature, getRecentRevisions, getRecentPackages))
+import Data.Time (getCurrentTime)
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -113,6 +115,7 @@ initHtmlFeature :: ServerEnv
                     -> TarIndexCacheFeature
                     -> ReportsFeature
                     -> UserDetailsFeature
+                    -> RecentPackagesFeature
                     -> IO HtmlFeature)
 
 initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
@@ -147,7 +150,8 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
               docsCore docsCandidates
               tarIndexCache
               reportsCore
-              usersdetails -> do
+              usersdetails
+              recentPackagesFeature -> do
       -- do rec, tie the knot
       rec let (feature, packageIndex, packagesPage) =
                 htmlFeature env user core
@@ -164,6 +168,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             (htmlUtilities core candidates tags user)
                             mainCache namesCache
                             templates
+                            recentPackagesFeature
 
           -- Index page caches
           mainCache  <- newAsyncCacheNF packageIndex
@@ -213,6 +218,7 @@ htmlFeature :: ServerEnv
             -> AsyncCache Response
             -> AsyncCache Response
             -> Templates
+            -> RecentPackagesFeature 
             -> (HtmlFeature, IO Response, IO Response)
 
 htmlFeature env@ServerEnv{..}
@@ -233,6 +239,7 @@ htmlFeature env@ServerEnv{..}
             utilities@HtmlUtilities{..}
             cachePackagesPage cacheNamesPage
             templates
+            recentPackagesFeature
   = (HtmlFeature{..}, packageIndex, packagesPage)
   where
     htmlFeatureInterface = (emptyHackageFeature "html") {
@@ -273,6 +280,7 @@ htmlFeature env@ServerEnv{..}
                                       templates
                                       names
                                       candidates
+                                      recentPackagesFeature
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
@@ -464,6 +472,7 @@ mkHtmlCore :: ServerEnv
            -> Templates
            -> SearchFeature
            -> PackageCandidatesFeature
+           -> RecentPackagesFeature
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
@@ -490,6 +499,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            templates
            SearchFeature{..}
            PackageCandidatesFeature{..}
+           RecentPackagesFeature{getRecentPackages, getRecentRevisions}
   = HtmlCore{..}
   where
     candidatesCore = candidatesCoreResource
@@ -538,10 +548,10 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             resourceGet  = [("html", serveCabalRevisionsPage)]
           }
       , (resourceAt "/packages/recent.:format") {
-            resourceGet = [("html", serveRecentPage)]
+            resourceGet = [("html", serveRecentPage),("rss", serveRecentRSS)]
           }
       , (resourceAt "/packages/recent/revisions.:format") {
-            resourceGet = [("html", serveRevisionPage)]
+            resourceGet = [("html", serveRevisionPage), ("rss", serveRevisionRSS)]
           }
       ]
 
@@ -558,32 +568,58 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       -- [/] Convert paginator HTML to look and act like search paginator
       --    [] Check that Paging is done correctly
       --    [] Make disabled state work on buttons
-      pkgIndex <- queryGetPackageIndex
+      --    [] Add in Form to set pageSize
+
+      recentPackages <- getRecentPackages
       users <- queryGetUserDb
       page <- readWithDefault 1 <$> optional (look "page")
       pageSize <- readWithDefault 25 <$> optional (look "pageSize")
-      let recentChanges = sortBy (flip $ comparing pkgOriginalUploadTime)
-                          (PackageIndex.allPackages pkgIndex)
-      let conf = Paging.createConf page pageSize recentChanges
+      
+      let conf = Paging.createConf page pageSize recentPackages
+      
+      return . toResponse $ Pages.recentPage conf users recentPackages
+        where 
+          readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
+    serveRecentRSS :: DynamicPath -> ServerPartE Response
+    serveRecentRSS _ = do
+      recentPackages <- getRecentPackages
+      users <- queryGetUserDb
+      page <- readWithDefault 1 <$> optional (look "page")
+      pageSize <- readWithDefault 25 <$> optional (look "pageSize")
+      now   <- liftIO getCurrentTime
       
+      let conf = Paging.createConf page pageSize recentPackages
       
-      return . toResponse $ Pages.recentPage conf users recentChanges
+      return . toResponse $ Pages.recentFeed conf users serverBaseURI now recentPackages
         where 
           readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
     serveRevisionPage :: DynamicPath -> ServerPartE Response
     serveRevisionPage _ = do
-      pkgIndex <- queryGetPackageIndex
+      revisions <- getRecentRevisions
       users <- queryGetUserDb
       page <- readWithDefault 1 <$> optional (look "page")
       pageSize <- readWithDefault 50 <$> optional (look "pageSize")
-      let recentChanges = sortBy (flip $ comparing pkgOriginalUploadTime)
-                          (PackageIndex.allPackages pkgIndex)
-      let conf = Paging.createConf page pageSize recentChanges
+      
+      let conf = Paging.createConf page pageSize revisions
 
 
-      return . toResponse $ Pages.revisionsPage conf users recentChanges
+      return . toResponse $ Pages.revisionsPage conf users revisions
+        where readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
+
+    serveRevisionRSS :: DynamicPath -> ServerPartE Response
+    serveRevisionRSS _ = do
+      revisions <- getRecentRevisions
+      users <- queryGetUserDb
+      page <- readWithDefault 1 <$> optional (look "page")
+      pageSize <- readWithDefault 40 <$> optional (look "pageSize")
+      now   <- liftIO getCurrentTime
+      
+      let conf = Paging.createConf page pageSize revisions
+
+
+      return . toResponse $ Pages.recentRevisionsFeed conf users serverBaseURI now revisions
         where readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
     serveBrowsePage :: DynamicPath -> ServerPartE Response
