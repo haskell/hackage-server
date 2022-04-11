@@ -58,6 +58,8 @@ data UserFeature = UserFeature {
     groupChangedHook :: Hook (GroupDescription, Bool, UserId, UserId, String) (),
 
     -- Authorisation
+    -- | Require any of a set of groups, with a friendly error message
+    guardAuthorisedWhenInAnyGroup :: [Group.UserGroup] -> ServerPartE UserId,
     -- | Require any of a set of privileges.
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
     -- | Require any of a set of privileges, giving the id of the current user.
@@ -405,6 +407,15 @@ userFeature templates usersState adminsState
     --
     -- Authorisation: authentication checks and privilege checks
     --
+
+    guardAuthorisedWhenInAnyGroup :: [Group.UserGroup] -> ServerPartE UserId
+    guardAuthorisedWhenInAnyGroup [] =
+        fail "Group list is empty, this is not meant to happen"
+    guardAuthorisedWhenInAnyGroup groups = do
+        users <- queryGetUserDb
+        uid   <- guardAuthenticatedWithErrHook users
+        Auth.guardInAnyGroup users uid groups
+        return uid
 
     -- High level, all in one check that the client is authenticated as a
     -- particular user and has an appropriate privilege, but then ignore the

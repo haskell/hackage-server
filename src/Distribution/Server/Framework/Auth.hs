@@ -22,6 +22,7 @@ module Distribution.Server.Framework.Auth (
     -- ** Special cases
     guardAuthenticated, checkAuthenticated,
     guardPriviledged,   checkPriviledged,
+    guardInAnyGroup,
     PrivilegeCondition(..),
 
     -- ** Errors
@@ -127,6 +128,17 @@ data AuthType = BasicAuth | DigestAuth | AuthToken
 data PrivilegeCondition = InGroup    Group.UserGroup
                         | IsUserId   UserId
                         | AnyKnownUser
+
+guardInAnyGroup :: Users.Users -> UserId -> [Group.UserGroup] -> ServerPartE ()
+guardInAnyGroup _ _ [] =
+  fail "Group list is empty, this is not meant to happen"
+guardInAnyGroup users uid groups = do
+  allok <- checkPriviledged users uid (map InGroup groups)
+  let groupTitles = map (Group.groupTitle . Group.groupDesc) groups
+      errMsg = "Access denied, you must be member of either of the following groups: "
+               <> show groupTitles
+  when (not allok) $
+    errForbidden "Missing group membership" [MText errMsg]
 
 -- | Check that a given user is permitted to perform certain privileged
 -- actions.
