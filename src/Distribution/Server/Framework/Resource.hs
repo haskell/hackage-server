@@ -464,8 +464,14 @@ serveResource errRes (Resource _ rget rput rpost rdelete rformat rend _) = \dpat
                 Just answer -> handleErrors (Just format) $ answer dpath
                 Nothing -> mzero -- return 404 if the specific format is not found
                   -- return default response when format is empty or non-existent
-            _ -> do (format,answer) <- negotiateContent (head res) res
-                    handleErrors (Just format) $ answer dpath
+            _ -> do
+              let
+                contentResponsePair =
+                  case find ((== "html") . fst) res of
+                    Just x -> x
+                    Nothing -> head res
+              (format,answer) <- negotiateContent contentResponsePair res
+              handleErrors (Just format) $ answer dpath
 
     handleErrors format =
       handleErrorResponse (serveErrorResponse errRes format)
