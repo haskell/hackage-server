@@ -13,11 +13,10 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Packages.Types
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Data.Time.Clock (getCurrentTime)
-import Data.List (sortBy)
-import Data.Ord (comparing)
+import Data.List (sortBy, sortOn)
+import Data.Ord (comparing, Down (Down))
 
 -- the goal is to have the HTML modules import /this/ one, not the other way around
 import qualified Distribution.Server.Pages.Recent as Pages
@@ -68,8 +67,8 @@ initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verb
 recentPackagesFeature :: ServerEnv
                       -> UserFeature
                       -> CoreFeature
-                      -> AsyncCache (Response, Response, Response, Response)
-                      -> (RecentPackagesFeature, IO (Response, Response, Response, Response))
+                      -> AsyncCache (Response, Response)
+                      -> (RecentPackagesFeature, IO (Response, Response))
 
 recentPackagesFeature env
                       UserFeature{..}
@@ -82,7 +81,7 @@ recentPackagesFeature env
       , featureState     = []
       , featureCaches    = [
             CacheComponent {
-              cacheDesc       = "recents packages and revisions page (html, rss, html, rss)",
+              cacheDesc       = "recent packages and revisions page (rss, rss)",
               getCacheMemSize = memSize <$> readAsyncCache cacheRecent
             }
           ]
@@ -92,34 +91,32 @@ recentPackagesFeature env
     recentPackagesResource = RecentPackagesResource {
         recentPackages = (extendResourcePath "/recent.:format" (corePackagesPage coreResource)) {
             resourceGet = [
-                ("rss",  const $ addAllowOriginHeader >> (liftM (\(_,x,_,_) -> x) $ readAsyncCache cacheRecent))
+                ("rss",  const $ addAllowOriginHeader >> (fmap fst  . readAsyncCache $ cacheRecent))
               ]
           },
         recentRevisions = (extendResourcePath "/recent/revisions.:format" (corePackagesPage coreResource)) {
             resourceGet = [
-                ("rss",  const $ addAllowOriginHeader >> (liftM (\(_,_,_,x) -> x) $ readAsyncCache cacheRecent))
+                ("rss",  const $ addAllowOriginHeader >> (fmap snd . readAsyncCache $ cacheRecent))
               ]
           }
       }
 
+    updateRecentCache :: IO (Response, Response)
     updateRecentCache = do
-        -- TODO: move the html version to the HTML feature
         pkgIndex <- queryGetPackageIndex
         users <- queryGetUserDb
-        now   <- getCurrentTime
-        let recentChanges = sortBy (flip $ comparing pkgOriginalUploadTime)
-                            (PackageIndex.allPackages pkgIndex)
-            xmlRepresentation = toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges
-            rssRepresentation = toResponse $ Pages.recentFeed users (serverBaseURI env) now recentChanges
+        now   <- liftIO getCurrentTime
+        
 
-            recentRevisions = sortBy (flip $ comparing revisionTime) .
-                              filter isRevised $ (PackageIndex.allPackages pkgIndex)
-            revisionTime pkgInfo = pkgLatestUploadTime pkgInfo
+        let packages = PackageIndex.allPackages pkgIndex
             isRevised pkgInfo = pkgNumRevisions pkgInfo > 1
-            xmlRevisions = toResponse $ Resource.XHtml $ Pages.revisionsPage users recentRevisions
+            recentChanges = sortOn (Down . pkgOriginalUploadTime) packages
+            rssRepresentation = toResponse $ Pages.recentFeed users (serverBaseURI env) now recentChanges
+            recentRevisions = sortOn (Down . revisionTime) . filter isRevised $ packages
+            revisionTime pkgInfo = pkgLatestUploadTime pkgInfo
             rssRevisions = toResponse $ Pages.recentRevisionsFeed users (serverBaseURI env) now recentRevisions
 
-        return (xmlRepresentation, rssRepresentation, xmlRevisions, rssRevisions)
+        return (rssRepresentation, rssRevisions)
 
 
 addAllowOriginHeader :: (FilterMonad Response m) => m ()

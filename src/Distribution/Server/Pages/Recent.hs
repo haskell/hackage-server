@@ -1,12 +1,11 @@
 -- Takes a reversed log file on the standard input and outputs web page.
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Distribution.Server.Pages.Recent (
     recentPage,
     recentFeed,
     revisionsPage,
     recentRevisionsFeed,
-    recentPaging,
-    revisionsPaging,
   ) where
 
 import Distribution.Server.Packages.Types
@@ -38,12 +37,12 @@ import Data.Time.Format
          ( defaultTimeLocale, formatTime )
 import Data.Maybe
          ( listToMaybe)
-import Distribution.Server.Util.Paging (PaginatedConf (PaginatedConf), paginate, totalPages)
+import Distribution.Server.Util.Paging (PaginatedConf (PaginatedConf, currPage), paginate, totalPages, allPagedURLS, hasNext, hasPrev)
 
 -- | Takes a list of package info, in reverse order by timestamp.
 
-recentPaging :: PaginatedConf -> Users -> [PkgInfo] -> Html
-recentPaging conf users pkgs =
+recentPage :: PaginatedConf -> Users -> [PkgInfo] -> Html
+recentPage conf users pkgs =
   let log_rows = makeRow users <$> paginate conf pkgs
       docBody =
         [ XHtml.h2 << "Recent additions",
@@ -61,30 +60,61 @@ recentPaging conf users pkgs =
           << XHtml.noHtml
    in hackagePageWithHead [rss_link] "recent additions" docBody
 
-
-recentPage :: Users -> [PkgInfo] -> Html
-recentPage = recentPaging (PaginatedConf 1 25 1000)
-
-
 paginator :: PaginatedConf -> URL -> Html 
 paginator pc@(PaginatedConf currPage _ totalAmount) baseUrl = 
   let 
     total = totalPages pc
     infoText = "Showing " ++ show currPage ++ " to " ++ show total ++ " of " ++ show totalAmount ++ " entries"
     info = XHtml.thediv << infoText
-    next = XHtml.anchor ! [XHtml.href (paginateURLNext pc baseUrl)] << "Next"
-    prev = XHtml.anchor ! [XHtml.href (paginateURLPrev pc baseUrl)] << "Previous"
-    wrapper = XHtml.thediv ! [XHtml.theclass "paginator"] << (prev <> next)
+
+    next = XHtml.anchor ! [XHtml.href (paginateURLNext pc baseUrl), 
+      if hasNext pc then noAttr else XHtml.disabled] << "Next"
+    prev = XHtml.anchor ! [XHtml.href (paginateURLPrev pc baseUrl), 
+      if hasPrev pc then noAttr else XHtml.disabled] << "Previous"
+
+    pagedURLS = zip [1..] (allPagedURLS baseUrl pc)
+    pagedLinks = (\(x,y) -> XHtml.anchor ! [XHtml.href y, 
+      if currPage == x then XHtml.theclass "current" else noAttr ] << show x) <$> pagedURLS
+
+    wrapper = XHtml.thediv ! [XHtml.theclass "paginator"] << 
+      (prev <> reducePagedLinks pc pagedLinks <> next)
+
+
   in XHtml.thediv ! [XHtml.identifier "paginatorContainer"] << mconcat [info, wrapper]
 
+-- | Results in a empty attr, kinda hackish but surprisingly XHtml.HtmlAttr has no concept of a mempty
+noAttr :: XHtml.HtmlAttr
+noAttr = XHtml.theclass ""
+
+-- Worst code I've written so far
+reducePagedLinks :: PaginatedConf -> [Html] -> Html
+reducePagedLinks PaginatedConf{currPage} xs
+  | currPage >= (length xs - 3) = mconcat  . keepLastPages .fillFirst $ xs -- Beginning ellipses
+  | length xs > 5 && currPage < 5 = mconcat . keepFirstPages . fillLast $ xs -- Ending ellipses
+  | length xs <= 5 = mconcat xs -- Do Nothing
+  | otherwise = mconcat . keepMiddlePages . fillLast . fillFirst $ xs -- Begin and End ellipses
+  where filler = XHtml.anchor << "..."
+        fillFirst x = insertAt 1 filler x
+        fillLast x = insertAt (pred . length $ x) filler x
+        keepFirstPages x = case splitAt (length x - 2) x of (hts, hts') -> take 5 hts ++ hts'
+        keepLastPages x = case splitAt 2 x of (hts, hts') -> hts ++ takeLast 5 hts'
+        keepMiddlePages x = 
+          case splitAt currPage x of (hts, hts') -> take 2 hts ++ [last hts] ++ take 2 hts' 
+                                      ++ takeLast 2 hts'
+                                      
+insertAt :: Int -> a -> [a] -> [a]
+insertAt n a x = case splitAt n x of (hts, hts') -> hts ++ [a] ++ hts'
+
+takeLast :: Int -> [a] -> [a]
+takeLast n = reverse . take n . reverse
 
 -- Should actually check if next exists
 paginateURLNext,paginateURLPrev :: PaginatedConf -> URL -> URL
 paginateURLNext (PaginatedConf cp _ _) url = url <> "?page=" ++ (show . succ) cp
 paginateURLPrev (PaginatedConf cp _ _) url = url <> "?page=" ++ (show . pred) cp
 
-revisionsPaging :: PaginatedConf -> Users -> [PkgInfo] -> Html
-revisionsPaging conf users pkgs =
+revisionsPage :: PaginatedConf -> Users -> [PkgInfo] -> Html
+revisionsPage conf users pkgs =
   let log_rows = map (makeRevisionRow users) (paginate conf pkgs)
       docBody =
         [ XHtml.h2 << "Recent cabal metadata revisions",
@@ -100,10 +130,6 @@ revisionsPaging conf users pkgs =
             ]
           << XHtml.noHtml
    in hackagePageWithHead [rss_link] "recent revisions" docBody
-
--- Remove Later
-revisionsPage :: Users -> [PkgInfo] -> Html
-revisionsPage = revisionsPaging (PaginatedConf 1 50 1000)
 
 makeRow :: Users -> PkgInfo -> Html
 makeRow users pkginfo =

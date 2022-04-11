@@ -551,9 +551,13 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       -- [x] Change paginate to use custom object to prohibit messing things up
       -- [x] Extract out revision to HTML feature
       -- [x] Show different pagination options in HTML
-      -- [-] Remove old HTML from RecentPackages Feature
-      -- [] Convert over RSS to use pagination with query params
-      -- [] Convert paginator HTML to look and act like search paginator
+      -- [x] Remove old HTML from RecentPackages Feature
+      -- [/] Convert over RSS to use pagination with query params
+      --    Blocked due to not being able to query for query params
+      --    Maybe change RecentPackages to only return back cached packages then inject to HTML Feature
+      -- [/] Convert paginator HTML to look and act like search paginator
+      --    [] Check that Paging is done correctly
+      --    [] Make disabled state work on buttons
       pkgIndex <- queryGetPackageIndex
       users <- queryGetUserDb
       page <- readWithDefault 1 <$> optional (look "page")
@@ -564,7 +568,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
       
       
-      return . toResponse $ Pages.recentPaging conf users recentChanges
+      return . toResponse $ Pages.recentPage conf users recentChanges
         where 
           readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
@@ -579,7 +583,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       let conf = Paging.createConf page pageSize recentChanges
 
 
-      return . toResponse $ Pages.revisionsPaging conf users recentChanges
+      return . toResponse $ Pages.revisionsPage conf users recentChanges
         where readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
     serveBrowsePage :: DynamicPath -> ServerPartE Response
