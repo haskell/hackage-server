@@ -1042,7 +1042,6 @@ a.deprecated[href]:visited {
 }
 
 /* Paginator */
-/* Maybe should remove this from browse.html.st */
 #paginatorContainer {
   display: flex;
   align-items: center;
@@ -1085,11 +1084,12 @@ a.deprecated[href]:visited {
   background: linear-gradient(to bottom, #585858 0%, #111 100%);
 }
 
-.paginator span {
-  padding: 0 1em;
+.paginator a[href][disabled] { 
+  color: #666;
   cursor: default;
 }
 
-.paginator a[disabled], .paginator a[disabled]:hover { 
-  color: #666;
+.paginator a[href][disabled]:hover {
+  background: none;
+  border: none;
 }
