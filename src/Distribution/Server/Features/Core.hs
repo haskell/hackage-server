@@ -502,7 +502,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- Queries
     --
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
-    queryGetPackageIndex = return . packageIndex =<< queryState packagesState GetPackagesState
+    queryGetPackageIndex = packageIndex <$> queryState packagesState GetPackagesState
 
     queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
     queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball

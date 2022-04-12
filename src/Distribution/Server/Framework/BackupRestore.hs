@@ -108,7 +108,7 @@ abstractRestoreBackup putSt = go
   where
     go RestoreBackup {..} = AbstractRestoreBackup {
         abstractRestoreEntry = \store entry ->
-          fmap go    <$> runRestore store (restoreEntry entry)
+          fmap go <$> do runRestore store $ restoreEntry entry
       , abstractRestoreFinalize = \store ->
           fmap putSt <$> runRestore store restoreFinalize
       }
