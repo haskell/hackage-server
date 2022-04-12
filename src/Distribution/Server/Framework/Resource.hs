@@ -1,5 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving,
-             FlexibleContexts, FlexibleInstances, NamedFieldPuns #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, NamedFieldPuns #-}
 
 module Distribution.Server.Framework.Resource (
     -- | Paths
@@ -44,11 +43,10 @@ import Distribution.Server.Framework.HappstackUtils (remainingPathString, uriEsc
 import Distribution.Server.Util.ContentType (parseContentAccept)
 import Distribution.Server.Framework.Error
 
-import Data.List (isSuffixOf)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Function (on)
-import Data.List (intercalate, unionBy, findIndices, find)
+import Data.List (intercalate, unionBy, elemIndices, find, isSuffixOf)
 import qualified Text.ParserCombinators.Parsec as Parse
 
 import System.FilePath.Posix ((</>), (<.>))
@@ -189,7 +187,7 @@ extendResourcePath arg resource =
         ResourceFormat NoFormat Nothing -> case loc of
             (TrailingBranch:rest) -> rest
             _ -> loc
-        _ -> funcError $ "invalid resource format in argument 2"
+        _ -> funcError "invalid resource format in argument 2"
   in
     extendResource resource { resourceLocation = reverse loc' ++ endLoc, resourceFormat = format', resourcePathEnd = slash' }
   where
@@ -499,7 +497,7 @@ serveResource errRes (Resource _ rget rput rpost rdelete rformat rend _) = \dpat
                                 (pname', format') = splitAt (length pname - fsize - 1) pname
                             in if '.':format == format' then Just pname'
                                                         else Nothing
-    extractExt pname = case findIndices (=='.') pname of
+    extractExt pname = case elemIndices '.' pname of
         [] -> (pname, "")
         xs -> case splitAt (last xs) pname of (pname', _:format) -> (pname', format)
                                               _ -> (pname, "") -- this shouldn't happen

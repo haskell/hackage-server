@@ -36,7 +36,7 @@ reversePackageRender pkgid packageLink r isRecent (ReversePageRender renders cou
         versionBox = if hasVersion && total /= allCounts
             then thediv ! [theclass "notification"] << [toHtml $ "These statistics only apply to this version of " ++ display pkgname ++ ". See also ",  anchor ! [href $ reverseNameUri r "" pkgname] << [toHtml "packages which depend on ", emphasize << "any", toHtml " version"], toHtml $ " (all " ++ show total ++ " of them)."]
             else noHtml
-        allCounts = fst counts + snd counts
+        allCounts = uncurry (+) counts
         otherCount = case total - allCounts of
             diff | diff > 0 -> paragraph << [show diff ++ " packages depend on versions of " ++ display pkgid ++ " other than this one."]
             _ -> noHtml
@@ -96,7 +96,7 @@ reverseFlatRender pkgname packageLink r (ReverseCount total flat _) pairs =
     _ ->
       [ paragraph << if total == flat
         then [toHtml "All packages which use ", toPackage pkgname, toHtml " depend on it ", anchor ! [href $ reverseNameUri r "" pkgname] << "directly", toHtml $ ". " ++ onlyPackage total]
-        else [toPackage pkgname, toHtml $ " has ", anchor ! [href $ reverseNameUri r "" pkgname] << num total "packages" "package", toHtml $ " which directly " ++ num' total "depend" "depends" ++ " on it, but there are more packages which depend on ", emphasize << "those", toHtml $ " packages. If you flatten the tree of reverse dependencies, you'll find " ++ show flat ++ " packages which use " ++ display pkgname ++ ", and " ++ show (flat-total) ++ " which do so without depending directly on it. All of these packages are listed below."]
+        else [toPackage pkgname, toHtml " has ", anchor ! [href $ reverseNameUri r "" pkgname] << num total "packages" "package", toHtml $ " which directly " ++ num' total "depend" "depends" ++ " on it, but there are more packages which depend on ", emphasize << "those", toHtml $ " packages. If you flatten the tree of reverse dependencies, you'll find " ++ show flat ++ " packages which use " ++ display pkgname ++ ", and " ++ show (flat-total) ++ " which do so without depending directly on it. All of these packages are listed below."]
       , paragraph << [toHtml "See also the ", anchor ! [href $ reverseStatsUri r "" pkgname] << "statistics for specific versions", toHtml $ " of " ++ display pkgname ++ "."]
       , reverseTable
       ]
@@ -151,7 +151,7 @@ num' n plural singular = if n == 1 then singular else plural
 -- /packages/reverse
 reversePackagesRender :: (PackageName -> String) -> ReverseResource -> Int -> [(PackageName, Int, Int)] -> [Html]
 reversePackagesRender packageLink r pkgCount triples =
-        h2 << ("Reverse dependencies") :
+        h2 << "Reverse dependencies" :
       [ paragraph << [ "Hackage has " ++ show pkgCount ++ " packages. Here are all the packages that have package that depend on them:"]
       , reverseTable ]
   where

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 module Distribution.Server.Users.AuthToken
     ( AuthToken

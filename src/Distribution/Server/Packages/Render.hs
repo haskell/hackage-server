@@ -41,7 +41,6 @@ import Distribution.Types.VersionInterval.Legacy
   -- I criticized this unfortunate development at length at:
   -- https://github.com/haskell/cabal/issues/7916
 import Distribution.ModuleName as ModuleName
-import Distribution.Types.ModuleReexport
 
 -- hackage-server
 import Distribution.Server.Framework.CacheControl (ETag)

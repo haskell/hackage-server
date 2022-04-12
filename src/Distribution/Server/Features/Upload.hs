@@ -391,7 +391,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                         "You are not an authorized package uploader. Please contact the server "
                      ++ "trustees to request to be added to the Uploaders group."
                      ]
-        caseClash pkgs = [MText $
+        caseClash pkgs = [MText
                          "Package(s) with the same name as this package, modulo case, already exist: "
                          ]
                       ++ intersperse (MText ", ") [ MLink pn ("/package/" ++ pn)

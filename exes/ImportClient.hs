@@ -119,7 +119,7 @@ main = topHandler $ do
     printHelp help = getProgName >>= putStr . help
     printOptionsList = putStr . unlines
     printErrors errs = do
-      putStr (concat (intersperse "\n" errs))
+      putStr (intercalate "\n" errs)
       exitWith (ExitFailure 1)
     printVersion = putStrLn $ "hackage-import " ++ display Paths.version
 
@@ -408,7 +408,7 @@ importIndex jobs indexFile baseURI = do
          =<< LBS.readFile indexFile
 
     pkgs' <- evaluate (sortBy (comparing fst) pkgs)
-    info $ "Uploading..."
+    info "Uploading..."
 
     concForM_ jobs pkgs' $ \tasks ->
       httpSession $ do
@@ -802,7 +802,7 @@ downloadCountCommand =
   where
     name = "downloads"
     shortDesc = "Import download counts"
-    longDesc  = Just $ \_ -> unlines $ [
+    longDesc  = Just $ \_ -> unlines [
         "Replace the on-disk download statistics with the download statistics"
       , "extracted from Apache log files (in .gz format)"
       ]

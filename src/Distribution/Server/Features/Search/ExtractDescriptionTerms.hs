@@ -16,7 +16,6 @@ import Data.Char
 import qualified NLP.Tokenize as NLP
 import qualified NLP.Snowball as NLP
 import qualified Data.Foldable as F
-import Data.List (intercalate)
 
 import qualified Documentation.Haddock.Markup as Haddock
 import Documentation.Haddock.Types
@@ -64,7 +63,7 @@ extractDescriptionTerms ss stopWords =
         [] --TODO: something here
         (  filter (not . ignoreTok)
          . NLP.tokenize
-         . intercalate " " . Haddock.markup termsMarkup)
+         . unwords . Haddock.markup termsMarkup)
     . Haddock.parse
 
 termsMarkup :: DocMarkupH () String [String]

@@ -357,8 +357,8 @@ checkPackageDescriptions checkXRevision
             extraDocFilesA extraDocFilesB
 
   checkSame "Cannot change custom/extension fields"
-            (filter (\(f,_) -> not (f `elem` ["x-revision","x-curation"])) customFieldsPDA)
-            (filter (\(f,_) -> not (f `elem` ["x-revision","x-curation"])) customFieldsPDB)
+            (filter (\(f,_) -> f `notElem` ["x-revision","x-curation"]) customFieldsPDA)
+            (filter (\(f,_) -> f `notElem` ["x-revision","x-curation"]) customFieldsPDB)
 
   checkSpecVersionRaw pdA pdB
   checkSetupBuildInfo setupBuildInfoA setupBuildInfoB
@@ -573,15 +573,15 @@ checkSetupBuildInfo (Just _) Nothing =
 
 checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
     logChange $ Change Normal
-                       ("added a 'custom-setup' section with 'setup-depends'")
+                       "added a 'custom-setup' section with 'setup-depends'"
                        "[implicit]" (intercalate ", " (map prettyShow setupDependsA))
 
 checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
                     (Just (SetupBuildInfo setupDependsB _internalB)) = do
     forM_ removed $ \dep ->
-      logChange $ Change Normal ("removed 'custom-setup' dependency on") (prettyShow dep) ""
+      logChange $ Change Normal "removed 'custom-setup' dependency on" (prettyShow dep) ""
     forM_ added $ \dep ->
-      logChange $ Change Normal ("added 'custom-setup' dependency on") "" (prettyShow dep)
+      logChange $ Change Normal "added 'custom-setup' dependency on" "" (prettyShow dep)
     forM_ changed $ \(pkgn, (verA, verB)) ->
         changesOk ("the 'custom-setup' dependency on " ++ prettyShow'' pkgn)
                   prettyShow verA verB

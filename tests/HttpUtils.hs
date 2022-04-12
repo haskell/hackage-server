@@ -1,5 +1,5 @@
 -- | Generic HTTP utilities
-{-# LANGUAGE ViewPatterns, OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wall #-}
 module HttpUtils (
   -- * Stateless functions
@@ -79,7 +79,7 @@ withAuth (Auth user pass) req f = do
       | rspCode rsp == (4, 0, 1) -> do
           let uri        = rqURI req
               hdrs       = retrieveHeaders HdrWWWAuthenticate rsp
-              challenges = catMaybes $ map (headerToChallenge uri) hdrs
+              challenges = mapMaybe (headerToChallenge uri) hdrs
           auth <- case challenges of
                     [] ->
                       die "No challenges"

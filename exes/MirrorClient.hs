@@ -126,7 +126,7 @@ mirrorOnce verbosity opts
               ignoreCount   = length pkgsToMirror - mirrorCount
 
           if mirrorCount == 0
-            then liftIO $ notice verbosity $ "No packages to mirror"
+            then liftIO $ notice verbosity "No packages to mirror"
             else do
               liftIO $ notice verbosity $
                   show mirrorCount ++ " packages to mirror."

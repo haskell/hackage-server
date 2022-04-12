@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NamedFieldPuns  #-}
 -- | Constructing TUF package metadata
 module Distribution.Server.Packages.Metadata (
     computePkgMetadata

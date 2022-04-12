@@ -12,7 +12,7 @@ import Distribution.Server.Features.Search.ExtractDescriptionTerms
 import Data.Ix
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import qualified Data.Text as T
 import NLP.Snowball
 
@@ -20,7 +20,6 @@ import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.Utils.ShortText
 import Distribution.Text (display)
-import Data.Text (unpack)
 
 
 type PkgSearchEngine = SearchEngine

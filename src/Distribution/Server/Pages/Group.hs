@@ -12,7 +12,6 @@ import qualified Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Group (GroupDescription(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Text
-import Data.Maybe
 
 renderGroupName :: GroupDescription -> Maybe String -> Html
 renderGroupName desc murl =
@@ -73,4 +72,4 @@ listGroup :: [Users.UserName] -> Maybe String -> Html
 listGroup [] _ = p << "No member exist presently"
 listGroup users muri = unordList (map displayName users)
   where displayName uname = (anchor ! [href $ "/user/" ++ display uname] << display uname) +++
-                            fromMaybe [] (fmap (removeUser uname) muri)
+                            maybe [] (removeUser uname) muri

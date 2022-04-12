@@ -28,8 +28,7 @@ applyFilter now isSearch coreResource userResource tagsResource DistroFeature{qu
  packages <- filterM filterForItem items
  pure $
    map packageIndexInfoToValue $
-   sort isSearch (boSort browseOptions) $
-   packages
+   sort isSearch (boSort browseOptions) packages
  where
   packageIndexInfoToValue :: PackageItem -> Value
   packageIndexInfoToValue PackageItem{..} =
@@ -85,7 +84,7 @@ applyFilter now isSearch coreResource userResource tagsResource DistroFeature{qu
 
   filterForItem :: PackageItem -> IO Bool
   filterForItem item =
-    all id <$> traverse (includeItem item) filtersWithDefaults
+    and <$> traverse (includeItem item) filtersWithDefaults
 
 sort :: IsSearch -> Sort -> [PackageItem] -> [PackageItem]
 sort isSearch Sort {sortColumn, sortDirection} =

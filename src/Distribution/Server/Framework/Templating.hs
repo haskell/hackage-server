@@ -245,7 +245,7 @@ checkTemplates templateGroup templateDirs expectedTemplates = do
 
     when (not (null missing)) $
       fail $ "Missing template files: " ++ intercalate ", " (map (<.> "st") missing)
-         ++ ". Search path was: " ++ intercalate " " templateDirs
+         ++ ". Search path was: " ++ unwords templateDirs
 
     when (not (null problems)) $
       fail $ reportTemplateProblems problems

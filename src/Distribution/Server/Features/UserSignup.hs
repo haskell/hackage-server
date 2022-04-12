@@ -202,7 +202,7 @@ signupResetBackup = go []
      }
 
 importSignupInfo :: CSV -> Restore [(Nonce, SignupResetInfo)]
-importSignupInfo = sequence . map fromRecord . drop 2
+importSignupInfo = mapM fromRecord . drop 2
   where
     fromRecord :: Record -> Restore (Nonce, SignupResetInfo)
     fromRecord [nonceStr, usernameStr, realnameStr, emailStr, timestampStr] = do
@@ -234,7 +234,7 @@ signupInfoToCSV backuptype (SignupResetTable tbl)
       | (nonce, SignupInfo{..}) <- Map.toList tbl ]
 
 importResetInfo :: CSV -> Restore [(Nonce, SignupResetInfo)]
-importResetInfo = sequence . map fromRecord . drop 2
+importResetInfo = mapM fromRecord . drop 2
   where
     fromRecord :: Record -> Restore (Nonce, SignupResetInfo)
     fromRecord [nonceStr, useridStr, timestampStr] = do

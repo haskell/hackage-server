@@ -406,9 +406,9 @@ htmlFeature env@ServerEnv{..}
 
     packagesPage :: IO Response
     packagesPage = do
-        items <- liftIO $ getAllLists
+        items <- liftIO getAllLists
         let htmlpage =
-              toResponse $ Resource.XHtml $ hackagePage "All packages by name" $
+              toResponse $ Resource.XHtml $ hackagePage "All packages by name"
                 [ h2 << "All packages by name"
                 , ulist ! [theclass "packages"] << map renderItem (Map.elems items)
                 ]
@@ -952,7 +952,7 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
     serveUploadDocumentation dpath = do
         pkgid <- packageInPath dpath
         uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded"
           [ paragraph << [toHtml "Successfully uploaded documentation for ", packageLink pkgid, toHtml "!"]
           ]
 
@@ -960,7 +960,7 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
     serveDeleteDocumentation dpath = do
         pkgid <- packageInPath dpath
         deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted"
           [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
           ]
 
@@ -1006,7 +1006,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
               Nothing -> "Not yet tried."
               Just BR.BuildOK -> "Built successfully."
               Just (BR.BuildFailCnt 1) -> "1 consecutive failure."
-              Just (BR.BuildFailCnt c) -> show(c) ++ " consecutive failures."
+              Just (BR.BuildFailCnt c) -> show c ++ " consecutive failures."
         return $ toResponse $ template
           [ "pkgid"   $= (pkgid :: PackageIdentifier)
           , "reports" $= reports
@@ -1280,11 +1280,11 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
           [] -> [ toHtml "No candidates exist for ", packageNameLink pkgname, toHtml ". Upload one for "
                 , anchor ! [href $ renderResource candPkgUp [display pkgname]] << "this"
                 , toHtml " or "
-                , anchor ! [href $ "/packages/candidates/upload"] << "another"
+                , anchor ! [href "/packages/candidates/upload"] << "another"
                 , toHtml " package?"
                 ]
           _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg)
-                , anchor ! [href $ delUri]<< "Delete All Candidates"]
+                , anchor ! [href delUri]<< "Delete All Candidates"]
 
     servePostPublish :: DynamicPath -> ServerPartE Response
     servePostPublish dpath = do
@@ -1317,7 +1317,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
     serveCandUploadDocumentation dpath = do
         pkgid <- packageInPath dpath
         uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded"
           [ paragraph << [toHtml "Successfully uploaded documentation for ", candidateLink pkgid, toHtml "!"]
           ]
 
@@ -1325,7 +1325,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
     serveCandDeleteDocumentation dpath = do
         pkgid <- packageInPath dpath
         deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted"
           [ paragraph << [toHtml "Successfully deleted documentation for ", candidateLink pkgid, toHtml "!"]
           ]
 
@@ -1448,7 +1448,7 @@ mkHtmlPreferred HtmlUtilities{..}
     packagePrefAbout maybeEdit pkgname =
       [ paragraph <<
           [ anchor ! [href $ preferredUri versions ""] << "Preferred and deprecated versions"
-          , toHtml $ " can be used to influence Cabal's decisions about which versions of "
+          , toHtml " can be used to influence Cabal's decisions about which versions of "
           , packageNameLink pkgname
           , toHtml " to install. If a range of versions is preferred, it means that the installer won't install a non-preferred package version unless it is explicitly specified or if it's the only choice the installer has. Deprecating a version adds a range which excludes just that version. All of this information is collected in the "
           , anchor ! [href "/packages/preferred-versions"] << "preferred-versions"
@@ -1582,7 +1582,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
     serveDownloadTop :: DynamicPath -> ServerPartE Response
     serveDownloadTop _ = do
         pkgList <- sortedPackages `liftM` recentPackageDownloads
-        return $ toResponse $ Resource.XHtml $ hackagePage "Total downloads" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Total downloads"
           [ h2 << "Downloaded packages"
           , thediv << table << downTableRows pkgList
           ]
@@ -1591,7 +1591,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
             [ tr << [ th << "Package name", th << "Downloads" ] ] ++
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << packageNameLink pkgname
-                , td << [ toHtml $ (show count) ] ]
+                , td << [ toHtml $ show count ] ]
             | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
     sortedPackages :: RecentDownloads -> [(PackageName, Int)]
@@ -1657,7 +1657,7 @@ mkHtmlTags HtmlUtilities{..}
         tagList <- queryGetTagList
         let withCounts = filter ((>0) . snd) . map (\(tg, pkgs) -> (tg, Set.size pkgs)) $ tagList
             countSort = sortBy (flip compare `on` snd) withCounts
-        return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags"
           [ h2 << "Hackage tags"
           , h4 << "By name"
           , paragraph ! [theclass "toc"] << (intersperse (toHtml ", ") $ map (tagItem . fst) withCounts)

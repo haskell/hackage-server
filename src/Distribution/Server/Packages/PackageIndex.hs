@@ -99,7 +99,7 @@ instance Eq pkg => Eq (PackageIndex pkg) where
 
 
 instance Package pkg => Monoid (PackageIndex pkg) where
-  mempty  = PackageIndex (Map.empty)
+  mempty  = PackageIndex Map.empty
   mappend = (<>)
   --save one mappend with empty in the common case:
   mconcat [] = mempty

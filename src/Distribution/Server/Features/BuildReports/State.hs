@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators, TypeSynonymInstances #-}
+             TypeOperators #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.BuildReports.State where
 
@@ -67,7 +67,7 @@ setFailStatus pkgid status = do
     let reports = BuildReports.setFailStatus pkgid status buildReports
     State.put reports
 
-resetFailCount :: PackageId -> Update BuildReports (Bool)
+resetFailCount :: PackageId -> Update BuildReports Bool
 resetFailCount pkgid = do
     buildReports <- State.get
     case BuildReports.resetFailCount pkgid buildReports of
