@@ -292,7 +292,7 @@ forceLast :: BS.ByteString -> BS.ByteString
 forceLast = BS.fromChunks . forceLastBlock . BS.toChunks
   where
     forceLastBlock []     = []
-    forceLastBlock (c:[]) = c : []
+    forceLastBlock [c]    = [c]
     forceLastBlock (c:cs) = c : forceLastBlock cs
 
 --------------------------------------------------------------------------------

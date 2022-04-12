@@ -1,4 +1,4 @@
-{-# LANGUAGE BlockArguments, NamedFieldPuns, TupleSections #-}
+{-# LANGUAGE BlockArguments, NamedFieldPuns #-}
 module Distribution.Server.Features.Browse (initBrowseFeature, PaginationConfig(..), StartIndex(..), NumElems(..), paginate) where
 
 import Control.Arrow (left)

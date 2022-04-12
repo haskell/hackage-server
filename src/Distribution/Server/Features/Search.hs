@@ -159,7 +159,7 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
           ok (toResponse (toJSON (map packageNameJSON pkgnames)))
 
         _ ->
-          errBadRequest "Invalid search request" [MText $ "Empty terms query"]
+          errBadRequest "Invalid search request" [MText "Empty terms query"]
       where packageNameJSON pkgName =
               object [ Key.fromString "name" .= unPackageName pkgName ]
 

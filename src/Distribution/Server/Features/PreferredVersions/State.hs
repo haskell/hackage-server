@@ -239,7 +239,7 @@ findBestVersion info allVersions versions =
     maxVersion = Set.findMax versions
     maxAllVersion = last allVersions
 
-    newestPreferred = case filter ((==NormalVersion) . (infoMap Map.!)) $ allVersions of
+    newestPreferred = case filter ((==NormalVersion) . (infoMap Map.!)) allVersions of
         []    -> Nothing
         prefs -> Just $ last prefs
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances, DeriveDataTypeable, ScopedTypeVariables #-}
+{-# LANGUAGE FunctionalDependencies, FlexibleInstances, UndecidableInstances, DeriveDataTypeable, ScopedTypeVariables #-}
 module Distribution.Server.Util.CountingMap (
     NestedCountingMap(..)
   , SimpleCountingMap(..)

@@ -47,7 +47,7 @@ import qualified Data.Map as Map
 import qualified Data.Vector as Vec
 import Data.ByteString.Lazy (ByteString)
 import System.FilePath.Posix
-import Data.Maybe (catMaybes, mapMaybe)
+import Data.Maybe (mapMaybe)
 
 
 -- | Entries used to construct the contents of the hackage index tarball
@@ -96,7 +96,7 @@ deriveSafeCopy 0 'base ''TarIndexEntry
 
 writeIncremental :: PackageIndex PkgInfo -> [TarIndexEntry] -> ByteString
 writeIncremental pkgs =
-    Tar.write . catMaybes . map mkTarEntry
+    Tar.write . mapMaybe mkTarEntry
   where
     -- This should never return Nothing, it'd be an internal error but just
     -- in case we'll skip them

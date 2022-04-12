@@ -108,9 +108,9 @@ abstractRestoreBackup putSt = go
   where
     go RestoreBackup {..} = AbstractRestoreBackup {
         abstractRestoreEntry = \store entry ->
-          liftM go    <$> (runRestore store $ restoreEntry entry)
+          fmap go    <$> runRestore store (restoreEntry entry)
       , abstractRestoreFinalize = \store ->
-          liftM putSt <$> (runRestore store $ restoreFinalize)
+          fmap putSt <$> runRestore store restoreFinalize
       }
 
 instance Monoid AbstractRestoreBackup where

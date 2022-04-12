@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, RecordWildCards #-}
 module Distribution.Server.Features.PackageList (
     ListFeature(..),
     initListFeature,
@@ -32,7 +32,7 @@ import Distribution.PackageDescription.Configuration
 import Distribution.Utils.ShortText (fromShortText)
 
 import Control.Concurrent
-import Data.Maybe (catMaybes)
+import Data.Maybe (mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -271,7 +271,7 @@ listFeature CoreFeature{..}
     makeItemList :: [PackageName] -> IO [PackageItem]
     makeItemList pkgnames = do
         mainMap <- readMemState itemCache
-        return $ catMaybes $ map (flip Map.lookup mainMap) pkgnames
+        return $ mapMaybe (flip Map.lookup mainMap) pkgnames
 
     makeItemMap :: Map PackageName a -> IO (Map PackageName (PackageItem, a))
     makeItemMap pkgmap = do

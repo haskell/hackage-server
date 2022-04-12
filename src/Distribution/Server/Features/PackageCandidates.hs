@@ -359,7 +359,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       pkgname <- packageInPath dpath
       guardAuthorisedAsMaintainerOrTrustee pkgname
       void $ updateState candidatesState $ DeleteCandidates pkgname
-      seeOther (packageCandidatesUri candidatesResource "" $ pkgname) $ toResponse ()
+      seeOther (packageCandidatesUri candidatesResource "" pkgname) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPartE Response
     serveCandidateTarball dpath = do
@@ -507,9 +507,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         candVersion = packageVersion candidate
         candName    = packageName candidate
 
-        caseClash pkgs' = [MText $
-                         "Package(s) with the same name as this package, modulo case, already exist: "
-                         ]
+        caseClash pkgs' = [MText "Package(s) with the same name as this package, modulo case, already exist: "]
                       ++ intersperse (MText ", ") [ MLink pn ("/package/" ++ pn)
                                                   | pn <- map (display . packageName) pkgs' ]
                       ++ [MText $

@@ -186,7 +186,7 @@ finalizeLocalMirror' cache repoRoot = (`runContT` return) $ do
     copyFileAtomic src dst = ContT $ \callback -> do
       let (dir, template) = splitFileName dst
       bracket (openBinaryTempFileWithDefaultPermissions dir template)
-              (\(temp, h) -> ignoreIOErrors (hClose h >> removeFile temp)) $
+              (\(temp, h) -> ignoreIOErrors (hClose h >> removeFile temp))
               (\(temp, h) -> do
                  BS.L.hPut h =<< BS.L.readFile src
                  hClose h

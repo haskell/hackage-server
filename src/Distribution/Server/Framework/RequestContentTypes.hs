@@ -64,7 +64,7 @@ expectContentType expected = do
               ++ BS.unpack expected ++ ", rather than " ++ BS.unpack actual]
     wrongContentEncoding =
       errBadMediaType "Unexpected content-encoding"
-        [MText $ "The only content-encodings supported are gzip, or none at all."]
+        [MText "The only content-encodings supported are gzip, or none at all."]
 
 gzipDecompress :: LBS.ByteString -> ServerPartE LBS.ByteString
 gzipDecompress content = go content decompressor

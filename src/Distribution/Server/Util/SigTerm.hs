@@ -10,13 +10,10 @@ import System.Posix.Signals
 import Control.Exception
          ( AsyncException(UserInterrupt), throwTo )
 import Control.Concurrent
-         ( myThreadId )
-import Control.Concurrent
-         ( ThreadId, mkWeakThreadId )
+         ( ThreadId, mkWeakThreadId, myThreadId )
 import System.Mem.Weak
-         ( Weak )
-import System.Mem.Weak
-         ( deRefWeak )
+         ( Weak , deRefWeak)
+
 
 -- | On SIGTERM, throw 'UserInterrupt' to the calling thread.
 --

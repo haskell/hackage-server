@@ -33,7 +33,7 @@ instance MemSize TarIndexCache where
   memSize st = 2 + memSize (tarIndexCacheMap st)
 
 initialTarIndexCache :: TarIndexCache
-initialTarIndexCache = TarIndexCache (Map.empty)
+initialTarIndexCache = TarIndexCache Map.empty
 
 getTarIndexCache :: Query TarIndexCache TarIndexCache
 getTarIndexCache = ask

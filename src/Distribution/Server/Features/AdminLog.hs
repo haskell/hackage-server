@@ -14,7 +14,7 @@ import Distribution.Server.Features.Users
 
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable
-import Data.Maybe(catMaybes)
+import Data.Maybe(mapMaybe)
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Time (UTCTime)
@@ -161,7 +161,7 @@ restoreAdminLogBackup =
 
 importLogs :: AdminLog -> BS.ByteString -> AdminLog
 importLogs (AdminLog ls) =
-    AdminLog . (++ls) . catMaybes . map fromRecord . lines . unpackUTF8
+    AdminLog . (++ls) . mapMaybe fromRecord . lines . unpackUTF8
   where
     fromRecord :: String -> Maybe (UTCTime,UserId,AdminAction,BS.ByteString)
     fromRecord = readMaybe

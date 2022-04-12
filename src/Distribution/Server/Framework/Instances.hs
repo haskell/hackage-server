@@ -1,5 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, BangPatterns,
-             TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, BangPatterns, TypeFamilies #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -339,7 +338,7 @@ instance Parsec UTCTime where
       mtz <- optional (liftM2 (:) (P.satisfy (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || c == '+' || c == '-'))
                                   (P.munch (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || Char.isDigit c)))
 
-      let tstr = concat [ yyyy, "-", mm, "-", dd, " ", h, ":", m, ":", s, maybe "" id mq, maybe "" (' ':) mtz ]
+      let tstr = concat [ yyyy, "-", mm, "-", dd, " ", h, ":", m, ":", s, fromMaybe "" mq, maybe "" (' ':) mtz ]
 
       case readMaybe tstr of
         Nothing -> fail "invalid UTCTime"

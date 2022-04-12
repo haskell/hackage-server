@@ -108,7 +108,7 @@ newAsyncVar :: Int -> Bool -> Verbosity -> String
 newAsyncVar delay syncForce verbosity logname force initial = do
 
     inChan <- atomically newTChan
-    outVar <- atomically (newTVar (Right initial))
+    outVar <- newTVarIO (Right initial)
     hook   <- newHook
 
     if syncForce
@@ -152,7 +152,7 @@ newAsyncVar delay syncForce verbosity logname force initial = do
 
 readAsyncVar :: AsyncVar state -> IO state
 readAsyncVar (AsyncVar _ outVar _) =
-    atomically (readTVar outVar) >>= either E.throwIO return
+    readTVarIO outVar >>= either E.throwIO return
 
 writeAsyncVar :: AsyncVar state -> ProdReason -> state -> IO ()
 writeAsyncVar (AsyncVar inChan _ _) reason value =

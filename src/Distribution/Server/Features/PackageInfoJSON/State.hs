@@ -161,7 +161,7 @@ instance Aeson.ToJSON PackageVersions where
 instance Aeson.FromJSON PackageVersions where
   parseJSON = Aeson.withObject "PackageVersions" $ \obj ->
     fmap PackageVersions
-    $ traverse (parsePair)
+    $ traverse parsePair
     $ KeyMap.toList obj
     where
       parsePair (vStr, vStatus) =
@@ -178,9 +178,9 @@ instance Aeson.FromJSON PackageVersions where
         "normal"      -> return Preferred.NormalVersion
         "deprecated"  -> return Preferred.DeprecatedVersion
         "unpreferred" -> return Preferred.UnpreferredVersion
-        other         -> fail $ concat ["Could not parse \"" ++ other
+        other         -> fail $ "Could not parse \"" ++ other
                          ++ "\" as status. Expected \"normal\""
-                         ++ "\"deprecated\" or \"unpreferred\""]
+                         ++ "\"deprecated\" or \"unpreferred\""
       parseStatus _   = fail "Expected a string"
 
 data PackageInfoState = PackageInfoState {

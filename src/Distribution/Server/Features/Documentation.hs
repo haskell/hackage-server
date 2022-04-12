@@ -14,7 +14,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.BuildReports
-import Distribution.Version ( Version )
+import Distribution.Version (Version, nullVersion)
 
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
@@ -29,7 +29,6 @@ import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Text
 import Distribution.Package
-import Distribution.Version (nullVersion)
 import qualified Distribution.Parsec as P
 
 import qualified Data.ByteString.Char8 as C
@@ -113,7 +112,7 @@ documentationStateComponent name stateDir = do
     }
   where
     dumpBackup doc =
-        let exportFunc (pkgid, blob) = BackupBlob ([display pkgid, "documentation.tar"]) blob
+        let exportFunc (pkgid, blob) = BackupBlob [display pkgid, "documentation.tar"] blob
         in map exportFunc . Map.toList $ documentation doc
 
     updateDocumentation :: Documentation -> RestoreBackup Documentation
@@ -227,7 +226,7 @@ documentationFeature name
         parseVersion' (Just k) = P.simpleParsec k
 
         parsePkgs :: String -> [PackageIdentifier]
-        parsePkgs pkgsStr = map fromJust $ filter isJust $ map (P.simpleParsec . C.unpack) $ C.split ',' (C.pack pkgsStr)
+        parsePkgs pkgsStr = mapMaybe (P.simpleParsec . C.unpack) (C.split ',' (C.pack pkgsStr))
 
         isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
             | nullVersion == v =

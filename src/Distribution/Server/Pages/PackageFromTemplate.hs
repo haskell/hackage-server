@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE PatternGuards, RecordWildCards #-}
+{-# LANGUAGE PatternGuards #-}
 module Distribution.Server.Pages.PackageFromTemplate
   ( packagePageTemplate
   , candidatesPageTemplate
@@ -18,7 +18,7 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Features.PackageCandidates
-import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
+import Distribution.Server.Users.Types (UserInfo, userStatus, userName, isActiveAccount)
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Data.TarIndex (TarIndex)
 import Distribution.Server.Features.Distro.Types
@@ -44,7 +44,6 @@ import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 
 import qualified Distribution.Server.Pages.Package as Old
 import Data.Time.Clock (UTCTime)
-import Distribution.Server.Users.Types (UserInfo)
 
 import Distribution.Server.Features.Html.HtmlUtilities
 
@@ -161,7 +160,7 @@ packagePageTemplate render
 
     -- Fields from the .cabal file.
     -- Access via "$package.varName$"
-    packageFieldsTemplate = templateDict $
+    packageFieldsTemplate = templateDict
       [ templateVal "name"          pkgName
       , templateVal "version"       pkgVer
       , templateVal "license"       (Old.rendLicense render)
@@ -176,8 +175,8 @@ packagePageTemplate render
 
     docFieldsTemplate =
       if isCandidate
-        then templateDict $ [ templateVal "baseUrl" docURL ]
-        else templateDict $ [ templateVal "hasQuickNavV1" hasQuickNavV1
+        then templateDict [ templateVal "baseUrl" docURL ]
+        else templateDict [ templateVal "hasQuickNavV1" hasQuickNavV1
         , templateVal "baseUrl" docURL
         ]
 

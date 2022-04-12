@@ -100,7 +100,7 @@ data PkgIndexInfo = PkgIndexInfo
 downloadIndex :: URI -> FilePath -> HttpSession [PkgIndexInfo]
 downloadIndex uri | isOldHackageURI uri = downloadOldIndex uri
                   | otherwise           = downloadNewIndex uri
-  where
+
 
 isOldHackageURI :: URI -> Bool
 isOldHackageURI uri

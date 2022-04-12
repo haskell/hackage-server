@@ -753,11 +753,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     deauth _ = do
       return $ (toResponse ("<script>window.location='/'</script>"::String)) {
           rsCode = 401
-        , rsHeaders   = mkHeaders ([("Content-Type",  "text/html")])
+        , rsHeaders   = mkHeaders [("Content-Type",  "text/html")]
       }
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 -- | Whether a package exists in the given package index.
 packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)
 -- | Whether a particular package version exists in the given package index.
-packageIdExists pkgs pkg = maybe False (const True) $ PackageIndex.lookupPackageId pkgs (packageId pkg)
+packageIdExists pkgs pkg = isJust $ PackageIndex.lookupPackageId pkgs (packageId pkg)

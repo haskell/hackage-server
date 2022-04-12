@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, RecordWildCards #-}
 module Distribution.Server.Features.ReverseDependencies (
     ReverseFeature,
     reverseResource,
@@ -134,12 +134,12 @@ reverseFeature CoreFeature{..}
           }
 
     reverseResource = fix $ \r -> ReverseResource
-          { reversePackage = resourceAt ("/package/:package/reverse.:format")
-          , reversePackageOld = resourceAt ("/package/:package/reverse/old.:format")
-          , reversePackageAll = resourceAt ("/package/:package/reverse/all.:format")
-          , reversePackageStats = resourceAt ("/package/:package/reverse/summary.:format")
-          , reversePackages = resourceAt ("/packages/reverse.:format")
-          , reversePackagesAll = resourceAt ("/packages/reverse/all.:format")
+          { reversePackage = resourceAt "/package/:package/reverse.:format"
+          , reversePackageOld = resourceAt "/package/:package/reverse/old.:format"
+          , reversePackageAll = resourceAt "/package/:package/reverse/all.:format"
+          , reversePackageStats = resourceAt "/package/:package/reverse/summary.:format"
+          , reversePackages = resourceAt "/packages/reverse.:format"
+          , reversePackagesAll = resourceAt "/packages/reverse/all.:format"
 
           , reverseUri = \format pkg -> renderResource (reversePackage r) [display pkg, format]
           , reverseNameUri = \format pkg -> renderResource (reversePackage r) [display pkg, format]

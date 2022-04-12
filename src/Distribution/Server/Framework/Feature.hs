@@ -1,6 +1,6 @@
 -- | This module defines a plugin interface for Hackage features.
 --
-{-# LANGUAGE ExistentialQuantification, RankNTypes, NoMonomorphismRestriction, RecordWildCards #-}
+{-# LANGUAGE ExistentialQuantification, RankNTypes, NoMonomorphismRestriction #-}
 module Distribution.Server.Framework.Feature
   ( -- * Main datatypes
     HackageFeature(..)
