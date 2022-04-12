@@ -79,6 +79,7 @@ import qualified Distribution.Server.Pages.Recent as Pages
 import qualified Distribution.Server.Util.Paging as Paging
 import Distribution.Server.Features.RecentPackages (RecentPackagesFeature (RecentPackagesFeature, getRecentRevisions, getRecentPackages))
 import Data.Time (getCurrentTime)
+import Text.Read (readMaybe)
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -555,72 +556,60 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           }
       ]
 
+    readParamWithDefaultAnyValid :: (Read a, HasRqData m, Monad m, Functor m, Alternative m) => 
+      a -> (a -> Bool) -> String -> m a
+    readParamWithDefaultAnyValid n f queryParam = do
+        m <- optional (look queryParam)
+        let parsed = m >>= readMaybe >>= (\x -> if f x then Just x else Nothing)
+
+        return $ fromMaybe n parsed
+
+
     serveRecentPage :: DynamicPath -> ServerPartE Response
     serveRecentPage _ = do
-      -- TODO
-      -- [x] Change paginate to use custom object to prohibit messing things up
-      -- [x] Extract out revision to HTML feature
-      -- [x] Show different pagination options in HTML
-      -- [x] Remove old HTML from RecentPackages Feature
-      -- [/] Convert over RSS to use pagination with query params
-      --    Blocked due to not being able to query for query params
-      --    Maybe change RecentPackages to only return back cached packages then inject to HTML Feature
-      -- [/] Convert paginator HTML to look and act like search paginator
-      --    [] Check that Paging is done correctly
-      --    [] Make disabled state work on buttons
-      --    [] Add in Form to set pageSize
-
       recentPackages <- getRecentPackages
       users <- queryGetUserDb
-      page <- readWithDefault 1 <$> optional (look "page")
-      pageSize <- readWithDefault 25 <$> optional (look "pageSize")
-      
+      page <-  readParamWithDefaultAnyValid 1 (>= 1) "page"
+      pageSize <- readParamWithDefaultAnyValid 20 (>= 1) "pageSize"
+
       let conf = Paging.createConf page pageSize recentPackages
       
       return . toResponse $ Pages.recentPage conf users recentPackages
-        where 
-          readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
     serveRecentRSS :: DynamicPath -> ServerPartE Response
     serveRecentRSS _ = do
       recentPackages <- getRecentPackages
       users <- queryGetUserDb
-      page <- readWithDefault 1 <$> optional (look "page")
-      pageSize <- readWithDefault 25 <$> optional (look "pageSize")
+      page <-  readParamWithDefaultAnyValid 1 (>= 1) "page"
+      pageSize <- readParamWithDefaultAnyValid 20 (>= 1) "pageSize"
       now   <- liftIO getCurrentTime
       
       let conf = Paging.createConf page pageSize recentPackages
       
       return . toResponse $ Pages.recentFeed conf users serverBaseURI now recentPackages
-        where 
-          readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
     serveRevisionPage :: DynamicPath -> ServerPartE Response
     serveRevisionPage _ = do
       revisions <- getRecentRevisions
       users <- queryGetUserDb
-      page <- readWithDefault 1 <$> optional (look "page")
-      pageSize <- readWithDefault 50 <$> optional (look "pageSize")
+      page <-  readParamWithDefaultAnyValid 1 (>= 1) "page"
+      pageSize <- readParamWithDefaultAnyValid 40 (>= 1) "pageSize"
       
       let conf = Paging.createConf page pageSize revisions
 
-
       return . toResponse $ Pages.revisionsPage conf users revisions
-        where readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
     serveRevisionRSS :: DynamicPath -> ServerPartE Response
     serveRevisionRSS _ = do
       revisions <- getRecentRevisions
       users <- queryGetUserDb
-      page <- readWithDefault 1 <$> optional (look "page")
-      pageSize <- readWithDefault 40 <$> optional (look "pageSize")
+      page <-  readParamWithDefaultAnyValid 1 (>= 1) "page"
+      pageSize <- readParamWithDefaultAnyValid 40 (>= 1) "pageSize"
       now   <- liftIO getCurrentTime
       
       let conf = Paging.createConf page pageSize revisions
 
-
       return . toResponse $ Pages.recentRevisionsFeed conf users serverBaseURI now revisions
-        where readWithDefault n = fromMaybe n . fmap (read :: String -> Int)
 
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _dpath = do

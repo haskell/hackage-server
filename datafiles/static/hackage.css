@@ -1066,8 +1066,10 @@ a.deprecated[href]:visited {
   border-radius: 2px;
 }
 
+/* Targeting of href for a tags higher up makes it more cumbersome to override */
 .paginator a[href]:link, .paginator a[href]:visited {
   color: #333;
+  text-decoration: none;
 }
 
 .paginator .current,
@@ -1077,7 +1079,7 @@ a.deprecated[href]:visited {
   background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
 }
 
-.paginator a:hover {
+.paginator a[href]:hover {
   color: white;
   border: 1px solid #111;
   background: linear-gradient(to bottom, #585858 0%, #111 100%);

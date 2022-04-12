@@ -1,45 +1,80 @@
 {-# LANGUAGE NamedFieldPuns #-}
-module Distribution.Server.Util.Paging where
-import Text.XHtml (URL)
 
--- This could be designed better, perhaps turning PaginatedConf into a function that returns the paging info 
+module Distribution.Server.Util.Paging 
+(
+  totalPages,
+  createConf,
+  hasNext,
+  hasPrev,
+  paginate,
+  pageIndexStart,
+  pageIndexRange,
+  pageIndexEnd,
+  allPagedURLs,
+  nextURL,
+  prevURL,
+  toURL,
+  PaginatedConfiguration(..),
+)
+where
+import Text.XHtml (URL)
+import Data.List (genericTake, genericDrop, genericLength)
+
+-- This could be better designed, perhaps turning PaginatedConfiguration into a function that returns the paging info 
 --  and the paged data
-data PaginatedConf = PaginatedConf
+data PaginatedConfiguration = PaginatedConfiguration
   { currPage :: Int,
     pageSize :: Int,
     totalAmount :: Int
   }
 
-totalPages :: PaginatedConf -> Int
-totalPages PaginatedConf {pageSize, totalAmount} = 
+-- Assumes pageSize isn't 0, not the best design
+totalPages :: PaginatedConfiguration -> Int
+totalPages PaginatedConfiguration {pageSize, totalAmount} = 
     case totalAmount `quotRem` pageSize of
       (x,r)
         | r == 0 -> x
         | otherwise -> succ x
 
-createConf :: Int -> Int -> [a] -> PaginatedConf
-createConf page pageSize xs = PaginatedConf page pageSize (length xs)
+createConf :: Int -> Int -> [a] -> PaginatedConfiguration
+createConf page pageSize xs = PaginatedConfiguration page pageSize (genericLength xs)
 
-paginate :: PaginatedConf -> [a] -> [a]
-paginate PaginatedConf {currPage, pageSize} = take pageSize . drop toDrop
+paginate :: PaginatedConfiguration -> [a] -> [a]
+paginate PaginatedConfiguration {currPage, pageSize} = genericTake pageSize . genericDrop  toDrop
   where
-    toDrop = pageSize * pred currPage
+    toDrop =  pageSize * pred currPage
 
-hasNext,hasPrev :: PaginatedConf -> Bool
-hasNext pc@PaginatedConf{currPage} = currPage < totalPages pc
-hasPrev PaginatedConf {currPage} = currPage > 1
+hasNext,hasPrev :: PaginatedConfiguration -> Bool
+hasNext pc@PaginatedConfiguration{currPage} =  currPage < totalPages pc
+hasPrev PaginatedConfiguration {currPage} =  currPage > 1
 
 -- | Returns the index positions that the current PaginatedConfiguration would show (Starts at 1)
-pageIndexRange :: PaginatedConf -> (Int, Int)
-pageIndexRange conf@PaginatedConf{currPage, pageSize, totalAmount} = (start, end)
-  where start = succ $ (currPage * pageSize) - pageSize
-        end = if currPage == totalPages conf then totalAmount else currPage * pageSize
+pageIndexRange :: PaginatedConfiguration -> (Int, Int)
+pageIndexRange conf@PaginatedConfiguration{currPage, pageSize, totalAmount} = (start, end)
+  where start = succ $  currPage *  pageSize -  pageSize
+        end = if  currPage == totalPages conf then totalAmount else  currPage *  pageSize
 
-pageIndexStart, pageIndexEnd ::  PaginatedConf -> Int
+pageIndexStart, pageIndexEnd ::  PaginatedConfiguration -> Int
 pageIndexStart = fst . pageIndexRange
 pageIndexEnd = snd . pageIndexRange
 
 
-allPagedURLS :: URL -> PaginatedConf -> [URL]
-allPagedURLS base pc = (\p -> base ++ "?page=" ++ show p ++ "&pageSize=" ++ (show . pageSize) pc) 
-    <$> [1..totalPages pc]
+allPagedURLs :: URL -> PaginatedConfiguration -> [URL]
+allPagedURLs base pc = toURL base . (\x -> pc{currPage=x}) <$> [1..totalPages pc]
+
+
+-- | Converts the PaginatedConfiguration to a URL, Assumes no query params in url
+toURL :: URL -> PaginatedConfiguration -> URL
+toURL base PaginatedConfiguration{currPage, pageSize} = base ++ "?page=" ++ show currPage ++ "&pageSize=" ++ show pageSize
+
+nextURL :: URL -> PaginatedConfiguration -> Maybe URL
+nextURL base conf@PaginatedConfiguration {currPage}
+  |  page > totalPages conf = Nothing
+  | otherwise = Just $ toURL base conf{currPage = page}
+  where page = succ currPage 
+
+prevURL :: URL -> PaginatedConfiguration -> Maybe URL
+prevURL base conf@PaginatedConfiguration {currPage}
+  | page < 1 = Nothing
+  | otherwise = Just $ toURL base conf{currPage=page}
+  where page = pred currPage 
