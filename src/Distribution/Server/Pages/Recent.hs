@@ -73,12 +73,9 @@ paginator pc@PaginatedConfiguration{currPage,totalAmount} baseUrl =
     infoText = "Showing " ++ show start ++ " to " ++ show end ++ " of " ++ show totalAmount ++ " entries"
     info = XHtml.thediv << infoText
 
-    next = if hasNext pc 
-      then XHtml.anchor ! [XHtml.href (fromMaybe "" (nextURL baseUrl pc))] << "Next" 
-      else XHtml.noHtml
-    prev = if hasPrev pc 
-      then XHtml.anchor ! [XHtml.href (fromMaybe "" (prevURL baseUrl pc)) ] << "Previous" 
-      else XHtml.noHtml 
+    next = XHtml.anchor ! [XHtml.href (fromMaybe "" (nextURL baseUrl pc)) | hasNext pc] << "Next" 
+    prev = XHtml.anchor ! [XHtml.href (fromMaybe "" (prevURL baseUrl pc)) | hasPrev pc] << "Previous"
+      
 
     pagedURLS = zip [1..] (allPagedURLs baseUrl pc)
     pagedLinks = (\(x,y) -> XHtml.anchor ! [XHtml.href y, 
@@ -90,7 +87,6 @@ paginator pc@PaginatedConfiguration{currPage,totalAmount} baseUrl =
 
   in XHtml.thediv ! [XHtml.identifier "paginatorContainer"] << mconcat [info, wrapper]
 
--- | Results in a empty attr, kinda hackish but surprisingly XHtml.HtmlAttr has no concept of a mempty
 noAttr :: XHtml.HtmlAttr
 noAttr = XHtml.theclass ""
 
@@ -205,7 +201,7 @@ recentFeed conf users hostURI now pkgs = RSS
   (map (releaseItem users hostURI) pkgList)
   where
     (start,end) = pageIndexRange conf
-    desc = "Showing" ++ show start ++ " - " ++ show end ++ " most recent additions to Hackage, the Haskell package database."
+    desc = "Showing " ++ show start ++ " - " ++ show end ++ " most recent additions to Hackage, the Haskell package database."
     pkgList = paginate conf pkgs
     updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
 
@@ -218,12 +214,12 @@ recentRevisionsFeed conf users hostURI now pkgs = RSS
   (map (revisionItem users hostURI) pkgList)
   where
     (start, end) = pageIndexRange conf
-    desc = "Showing" ++ show start ++ " - " ++ show end ++ " most recent revisions to cabal metadata in Hackage, the Haskell package database."
+    desc = "Showing " ++ show start ++ " - " ++ show end ++ " most recent revisions to cabal metadata in Hackage, the Haskell package database."
     pkgList = paginate conf pkgs
     updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
 
 channel :: UTCTime -> [RSS.ChannelElem]
-channel updated =
+channel updated = 
   [ RSS.Language "en"
   , RSS.ManagingEditor email
   , RSS.WebMaster email

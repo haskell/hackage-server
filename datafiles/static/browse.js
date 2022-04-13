@@ -248,13 +248,16 @@ const createPageLink = (num) => {
   return a;
 };
 
-const createPrevNext = (prevNextNum, txt) => {
+const createPrevNext = (prevNextNum, hasLink, txt) => {
   const el = d.createElement("a");
-  el.setAttribute("href", "#");
-  el.addEventListener('click', (evt) => {
-    evt.preventDefault();
-    changePage(prevNextNum);
-  });
+
+  if(hasLink) {
+    el.setAttribute("href", "#");
+    el.addEventListener('click', (evt) => {
+      evt.preventDefault();
+      changePage(prevNextNum);
+    });
+  }
   
   el.appendChild(d.createTextNode(txt));
   return el;
@@ -271,7 +274,7 @@ const createPaginator = () => {
 
   const pag = d.createElement("div");
   pag.classList.add("paginator");
-  if (state.page !== 0) pag.appendChild(createPrevNext(state.page - 1, "Previous"));
+  pag.appendChild(createPrevNext(state.page - 1, state.page !== 0, "Previous"));
   // note that page is zero-indexed
   if (maxPage <= 4) {
     // No ellipsis
@@ -304,7 +307,7 @@ const createPaginator = () => {
   }
   const isNowOnLastPage = state.page === maxPage;
   
-  if(!isNowOnLastPage) pag.appendChild(createPrevNext(state.page + 1, "Next"));
+  pag.appendChild(createPrevNext(state.page + 1, !isNowOnLastPage, "Next"));
 
   return pag;
 };
