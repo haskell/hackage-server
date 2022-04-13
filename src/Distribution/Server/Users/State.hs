@@ -102,8 +102,8 @@ $(makeAcidic ''Users.Users [ 'addUserEnabled
 
 -----------------------------------------------------
 
-newtype HackageAdmins = HackageAdmins {
-    adminList :: Group.UserIdSet
+data HackageAdmins = HackageAdmins {
+    adminList :: !Group.UserIdSet
 } deriving (Typeable, Eq, Show)
 
 $(deriveSafeCopy 0 'base ''HackageAdmins)

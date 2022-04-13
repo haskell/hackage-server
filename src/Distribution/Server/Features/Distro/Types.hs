@@ -41,8 +41,8 @@ instance Parsec DistroName where
   parsec = DistroName <$> P.munch1 (\c -> Char.isAlphaNum c || c `elem` "-_()[]{}=$,;")
 
 -- | Listing of known distributions and their maintainers
-newtype Distributions = Distributions {
-    nameMap :: Map.Map DistroName UserIdSet
+data Distributions = Distributions {
+    nameMap :: !(Map.Map DistroName UserIdSet)
 }
  deriving (Eq, Typeable, Show)
 
