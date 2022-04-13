@@ -89,8 +89,8 @@ data PkgBuildReports = PkgBuildReports {
     buildStatus :: !BuildStatus
 } deriving (Eq, Typeable, Show)
 
-data BuildReports = BuildReports {
-    reportsIndex :: !(Map.Map PackageId PkgBuildReports)
+newtype BuildReports = BuildReports {
+    reportsIndex :: Map.Map PackageId PkgBuildReports
 } deriving (Eq, Typeable, Show)
 
 emptyPkgReports :: PkgBuildReports
@@ -331,8 +331,8 @@ instance Serialize BuildReports_v0 where
     put (BuildReports_v0 index) = Serialize.put index
     get = BuildReports_v0 <$> Serialize.get
 
-data BuildReports_v2 = BuildReports_v2
-  { reportsIndex_v2 :: !(Map.Map PackageId PkgBuildReports_v2)
+newtype BuildReports_v2 = BuildReports_v2
+  { reportsIndex_v2 :: Map.Map PackageId PkgBuildReports_v2
   } deriving (Eq, Typeable, Show)
 
 instance Migrate BuildReports_v2 where

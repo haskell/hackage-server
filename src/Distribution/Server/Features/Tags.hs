@@ -288,7 +288,6 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
                                     let addTags = Set.fromList aliases `Set.difference` calcTags
                                         delTags = Set.fromList del `Set.intersection` calcTags
                                     void $ updateState tagsState $ InsertReviewTags pkgname addTags delTags
-                                    return ()
                                 else errBadRequest "Authorization Error" [MText "You need to be logged in to propose tags"]
                     _ -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
           Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]

@@ -82,7 +82,7 @@ blobETag :: BlobId -> ETag
 blobETag = ETag . blobMd5
 
 readBlobId :: String -> Either String BlobId
-readBlobId = either Left (Right . BlobId) . readDigest
+readBlobId = fmap BlobId . readDigest
 
 instance SafeCopy BlobId where
   version = 2

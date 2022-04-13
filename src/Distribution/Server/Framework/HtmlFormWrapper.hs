@@ -149,7 +149,7 @@ requestFormDataAsJSON = do
     let keyvals = [ (k, v)
                   | (k, Input { inputValue = Right v }) <- fromMaybe [] mbody
                   , case k of '_':_ -> False; _ -> True ]
-        paths   = [ (parsePathTmpl (BS8.unpack v) k)
+        paths   = [ parsePathTmpl (BS8.unpack v) k
                   | (k, v) <- keyvals ]
     case accumJPaths paths of
       Nothing -> return $ Left (zip keyvals paths )

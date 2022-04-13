@@ -85,8 +85,8 @@ htmlUtilities CoreFeature{coreResource}
             addns = toStr $ fst revTags
             delns = toStr $ snd revTags
             disp = thediv ! [theclass "box"] << [ paragraph << [bold $ toHtml "Current Tags: ", toHtml tagsStr, br]
-                                                , paragraph << [bold $ toHtml "Additions to be reviewed: ", toHtml $ if (addns /= "") then addns else "None", br]
-                                                , paragraph << [bold $ toHtml "Deletions to be reviewed: ", toHtml $ if (delns /= "") then delns else "None", br]
+                                                , paragraph << [bold $ toHtml "Additions to be reviewed: ", toHtml $ if addns /= "" then addns else "None", br]
+                                                , paragraph << [bold $ toHtml "Deletions to be reviewed: ", toHtml $ if delns /= "" then delns else "None", br]
                                                 ]
         in
             [ big $ bold $ toHtml $ display pkgname

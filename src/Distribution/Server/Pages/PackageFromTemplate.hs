@@ -111,8 +111,8 @@ packagePageTemplate render
     , "executables"       $= (commaList . map toHtml $ rendExecNames render)
     , "downloadSection"   $= Old.downloadSection render
     , "stability"         $= renderStability desc
-    , "isDeprecated"      $= (if deprs == Nothing then False else True)
-    , "deprecatedMsg"     $= (deprHtml deprs)
+    , "isDeprecated"      $= isJust deprs
+    , "deprecatedMsg"     $= deprHtml deprs
     ]
   where
     -- Access via "$hackage.varName$"

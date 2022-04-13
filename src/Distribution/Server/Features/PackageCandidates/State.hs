@@ -26,8 +26,8 @@ data CandidatePackages = CandidatePackages {
   , candidateMigratedPkgTarball :: Bool
   } deriving (Typeable, Show, Eq)
 
-data CandidatePackages_v0 = CandidatePackages_v0 {
-    candidateList_v0 :: !(PackageIndex.PackageIndex CandPkgInfo)
+newtype CandidatePackages_v0 = CandidatePackages_v0 {
+    candidateList_v0 :: PackageIndex.PackageIndex CandPkgInfo
   } deriving (Typeable, Show, Eq)
 
 deriveSafeCopy 0 'base ''CandidatePackages_v0

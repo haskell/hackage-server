@@ -1,6 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, BangPatterns,
-             StandaloneDeriving, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.AdminFrontend (
     initAdminFrontendFeature
   ) where

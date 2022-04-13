@@ -452,7 +452,7 @@ explainTarError (FutureTimeError entryname time serverTime) =
  ++ "with cabal-install-1.18.0.2 or older have this problem)."
 explainTarError (PermissionsError entryname mode) =
     "The tarball entry " ++ quote entryname ++ " has file permissions that are "
- ++ "broken: " ++ (showMode mode) ++ ". Permissions must be 644 at a minimum "
+ ++ "broken: " ++ showMode mode ++ ". Permissions must be 644 at a minimum "
  ++ "for files and 755 for directories."
   where
     showMode :: Tar.Permissions -> String

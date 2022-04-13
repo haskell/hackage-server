@@ -352,7 +352,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                          else return Nothing
 
                 (False,PackageIndex.Ambiguous mps) -> do
-                      let matchingPackages = concat . map (take 1) $ mps
+                      let matchingPackages = concatMap (take 1) mps
                       groups <- mapM (queryUserGroup . maintainersGroup . packageName) matchingPackages
                       if not . any (uid `Group.member`) $ groups
                          then uploadError (caseClash matchingPackages)

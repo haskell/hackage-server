@@ -16,8 +16,8 @@ import qualified Control.Monad.State as State
 import qualified Data.Map as Map
 
 ---------------------------------- Documentation
-data Documentation = Documentation {
-     documentation :: !(Map.Map PackageIdentifier BlobId)
+newtype Documentation = Documentation {
+     documentation :: Map.Map PackageIdentifier BlobId
    } deriving (Typeable, Show, Eq)
 
 deriveSafeCopy 0 'base ''Documentation

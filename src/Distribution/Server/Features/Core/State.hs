@@ -312,7 +312,7 @@ data TarIndexEntry_v0 =
 
 deriveSafeCopy 0 'base ''TarIndexEntry_v0
 
-data PackagesState_v0 = PackagesState_v0 !(PackageIndex PkgInfo)
+newtype PackagesState_v0 = PackagesState_v0 (PackageIndex PkgInfo)
 
 deriveSafeCopy 0 'base ''PackagesState_v0
 

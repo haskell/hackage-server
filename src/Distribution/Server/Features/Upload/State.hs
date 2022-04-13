@@ -102,8 +102,8 @@ makeAcidic ''HackageTrustees ['getHackageTrustees
                              ]
 
 -------------------------------- Uploader list
-data HackageUploaders = HackageUploaders {
-    uploaderList :: !UserIdSet
+newtype HackageUploaders = HackageUploaders {
+    uploaderList :: UserIdSet
 } deriving (Show, Typeable, Eq)
 
 $(deriveSafeCopy 0 'base ''HackageUploaders)

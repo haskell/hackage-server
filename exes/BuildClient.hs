@@ -396,7 +396,7 @@ getDocumentationStats :: Verbosity
 getDocumentationStats verbosity opts config pkgs = do
     notice verbosity "Downloading documentation index"
     httpSession verbosity "hackage-build" version $ do
-      curGhcVersion <- liftIO $ case (bo_buildOlderGHC opts) of
+      curGhcVersion <- liftIO $ case bo_buildOlderGHC opts of
                                   True -> getGHCversion
                                   False -> return Nothing
       mPackages   <- fmap parseJsonStats <$> requestGET' (packagesUri False curGhcVersion)

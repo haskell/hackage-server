@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, BangPatterns #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module Distribution.Server.Features.StaticFiles (
     initStaticFilesFeature
   ) where
