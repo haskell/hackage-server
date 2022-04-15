@@ -494,7 +494,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           PackageIndex.Unambiguous [] -> return Nothing -- can this ever occur?
 
           PackageIndex.Ambiguous mps -> do
-            let matchingPackages = concat . map (take 1) $ mps
+            let matchingPackages = concatMap (take 1) mps
             groups <- mapM (liftIO . Group.queryUserGroup . maintainersGroup . packageName) matchingPackages
             if not . any (uid `Group.member`) $ groups
               then return $ Just $ ErrorResponse 403 [] "Publish failed" (caseClash matchingPackages)

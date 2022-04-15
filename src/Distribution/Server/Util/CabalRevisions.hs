@@ -690,7 +690,6 @@ changesOkSet what render old new = do
         logChange (Change Normal ("removed " ++ what) (renderSet removed) "")
     unless (Set.null added) $
         logChange (Change Normal ("added " ++ what) "" (renderSet added))
-    return ()
   where
     added   = new Set.\\ old
     removed = old Set.\\ new

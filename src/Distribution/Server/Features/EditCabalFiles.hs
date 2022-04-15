@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, BangPatterns #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.EditCabalFiles (
     initEditCabalFilesFeature
 

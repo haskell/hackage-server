@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Features.Search.DocFeatVals (
     DocFeatVals,
     featureValue,

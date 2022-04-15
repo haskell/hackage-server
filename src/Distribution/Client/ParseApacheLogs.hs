@@ -26,8 +26,7 @@ logToDownloadCounts =
   . map formatOutput
   . Map.toList
   . accumHist
-  . catMaybes
-  . map ((packageGET >=> parseGET) . parseLine . SBS.concat . LBS.toChunks)
+  . mapMaybe ((packageGET >=> parseGET) . parseLine . SBS.concat . LBS.toChunks)
   . LBS.lines
 
 data LogLine = LogLine {

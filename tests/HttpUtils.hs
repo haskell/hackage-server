@@ -136,7 +136,7 @@ execPostFile expectedCode auth req field (filename, fileContents) =
     req'     = setRequestBody req
                               ("multipart/form-data; boundary=" ++ boundary,
                                body)
-    unlines' = concat . map (++ "\r\n")
+    unlines' = concatMap (++ "\r\n")
     body     = unlines' [
         "--" ++ boundary
       , "Content-Disposition: form-data; name=" ++ show field ++ "; filename=" ++ show filename

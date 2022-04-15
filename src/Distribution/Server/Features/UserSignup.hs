@@ -361,16 +361,14 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
 
     querySignupInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     querySignupInfo nonce =
-            queryState signupResetState (LookupSignupResetInfo nonce)
-        >>= return . justSignupInfo
+        justSignupInfo <$> queryState signupResetState (LookupSignupResetInfo nonce)
       where
         justSignupInfo (Just info@SignupInfo{}) = Just info
         justSignupInfo _                        = Nothing
 
     queryResetInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     queryResetInfo nonce =
-            queryState signupResetState (LookupSignupResetInfo nonce)
-        >>= return . justResetInfo
+        justResetInfo <$> queryState signupResetState (LookupSignupResetInfo nonce)
       where
         justResetInfo (Just info@ResetInfo{}) = Just info
         justResetInfo _                       = Nothing

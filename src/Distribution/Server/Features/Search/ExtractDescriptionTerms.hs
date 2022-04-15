@@ -1,5 +1,3 @@
-{-# LANGUAGE BangPatterns, NamedFieldPuns, GeneralizedNewtypeDeriving #-}
-
 module Distribution.Server.Features.Search.ExtractDescriptionTerms (
     extractSynopsisTerms,
     extractDescriptionTerms,
@@ -50,7 +48,7 @@ splitTok tok =
         ([],      _:trailing) -> go trailing
         (leading, _:trailing) -> leading : go trailing
         ([],      [])         -> []
-        (leading, [])         -> leading : []
+        (leading, [])         -> [leading]
 
 
 extractDescriptionTerms :: [Text] -> Set Text -> String -> [Text]

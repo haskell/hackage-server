@@ -303,7 +303,7 @@ instance Migrate PkgInfo_v1 where
     migrate (PkgInfo_v0 a b c d e) =
       PkgInfo_v1 (migrate a) b
                  [ (migrate (migrate pt), migrateUploadInfo ui) | (pt, ui) <- c ]
-                 [ (cf, (migrateUploadInfo ui)) | (cf, ui) <- d ]
+                 [ (cf, migrateUploadInfo ui) | (cf, ui) <- d ]
                  (migrateUploadInfo e)
       where
         migrateUploadInfo (UTCTime_v0 ts, UserId_v0 uid) = (ts, UserId uid)

@@ -140,7 +140,7 @@ apiDocPageHtml serverFeatures = hackagePage title content
         renderComponents (StaticBranch sdir:cs) =
           let (rest, url) = renderComponents cs
           in ("/" +++ sdir +++ rest, liftM (("/" ++ sdir) ++) url)
-        renderComponents (DynamicBranch leaf:[])
+        renderComponents [DynamicBranch leaf]
           | ResourceFormat _ (Just (StaticBranch _)) <- resourceFormat resource =
               ("/" +++ leaf, Just ("/" ++ leaf))
         renderComponents (DynamicBranch ddir:cs) =
@@ -228,7 +228,7 @@ apiDocJSON serverFeatures = featureList
 
         renderComponents (StaticBranch  sdir:cs) = "/" ++ sdir
                                                        ++ renderComponents cs
-        renderComponents (DynamicBranch leaf:[])
+        renderComponents [DynamicBranch leaf]
           | ResourceFormat _ (Just (StaticBranch _)) <- resourceFormat resource
                                                  = "/" ++ leaf
         renderComponents (DynamicBranch ddir:cs) = "/" ++ ":" ++ ddir

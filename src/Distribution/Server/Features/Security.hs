@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE BangPatterns    #-}
 
 -- | TUF security features

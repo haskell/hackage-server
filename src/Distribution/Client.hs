@@ -140,8 +140,7 @@ downloadOldIndex uri cacheDir = do
     logFile   = cacheDir </> "log"
 
     mergeLogInfo pkgids theLog =
-        catMaybes
-      . map selectDetails
+        mapMaybe selectDetails
       $ mergeBy (\pkgid entry -> compare pkgid (entryPkgId entry))
                 (sort pkgids)
                 ( map (maximumBy (comparing entryTime))

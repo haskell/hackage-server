@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 -- | See:
 --
 -- * \"The Probabilistic Relevance Framework: BM25 and Beyond\"
