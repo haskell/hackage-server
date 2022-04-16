@@ -3,7 +3,7 @@
 -- We authenticate clients using HTTP Basic or Digest authentication and we
 -- authorise users based on membership of particular user groups.
 --
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE LambdaCase, PatternGuards #-}
 module Distribution.Server.Framework.Auth (
     -- * Checking authorisation
     guardAuthorised,
@@ -429,9 +429,10 @@ data AuthError = NoAuthError
 authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
 authErrorResponse realm autherr = do
     digestHeader <- liftIO (headerDigestAuthChallenge realm)
+
     let
       toErrorResponse :: AuthError -> ErrorResponse
-      toErrorResponse ae = case ae of
+      toErrorResponse = \case
         NoAuthError ->
           ErrorResponse 401 [digestHeader] "No authorization provided" []
 
@@ -448,7 +449,7 @@ authErrorResponse realm autherr = do
         BadApiKeyError ->
           ErrorResponse 401 [digestHeader] "Bad auth token" []
 
-      -- we don't want to leak info for the other cases, so same message for them all:
+        -- we don't want to leak info for the other cases, so same message for them all:
         _ ->
           ErrorResponse 401 [digestHeader] "Username or password incorrect" []
 
