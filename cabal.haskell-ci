@@ -1,4 +1,14 @@
-irc-channels: irc.libera.chat#hackage
+installed: +all -Cabal -text -parsec
 
--- allow failures with ghc-7.6 and ghc-7.8
-allow-failures: <7.9
+-- -- irc-channels works with GHA, but why send to a channel
+-- -- when one can subscribe to github notifications?
+-- irc-channels: irc.libera.chat#hackage
+
+-- Does not work with GHA:
+-- -- allow failures with ghc-7.6 and ghc-7.8
+-- allow-failures: <7.9
+
+-- Use Ubuntu 20.04
+distribution: focal
+
+apt: libbrotli-dev

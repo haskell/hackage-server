@@ -59,6 +59,10 @@ extra-source-files:
   tests/unpack-checks/bad-specver-package-0/Main.hs
   tests/unpack-checks/bad-specver-package-0/Setup.hs
   tests/unpack-checks/bad-specver-package-0/bad-specver-package.cabal
+  tests/unpack-checks/LANGUAGE-GHC-9.2/LICENSE
+  tests/unpack-checks/LANGUAGE-GHC-9.2/Main.hs
+  tests/unpack-checks/LANGUAGE-GHC-9.2/Setup.hs
+  tests/unpack-checks/LANGUAGE-GHC-9.2/LANGUAGE-GHC.cabal
 
 source-repository head
   type: git
