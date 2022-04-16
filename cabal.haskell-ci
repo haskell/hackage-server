@@ -1,4 +1,4 @@
-installed: +all -Cabal
+installed: +all -Cabal -text
 
 -- -- irc-channels works with GHA, but why send to a channel
 -- -- when one can subscribe to github notifications?
