@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, RecordWildCards #-}
 {-|
 
 Functions and combinators to expose functioanlity buiding
@@ -172,14 +172,14 @@ enableGZip compressParams modifyETag = do
   where
     gzipFilter :: Response -> Response
     gzipFilter r@SendFile{} = r -- Leave files alone
-    gzipFilter r@Response{} =
+    gzipFilter Response{..} =
         chunked
       . setHeader "Content-Encoding" "gzip"
       . setHeader "Vary" "Accept-Encoding"
       . removeResponseHeader "Content-Length"
       . removeResponseHeader "Content-MD5"
       . alterResponseHeader "ETag" (map modifyETag)
-      $ r { rsBody = GZip.compressWith compressParams $ rsBody r }
+      $ Response { rsBody = GZip.compressWith compressParams rsBody, .. }
 
 -- | Variation on 'enableGZip' with sensible defaults
 --
@@ -215,12 +215,15 @@ enableRange = do
     -- awkward; we'd have to parse the original Content-Length header to find
     -- out the original length.
     rangeFilter :: (Int64, Int64) -> Response -> Response
-    rangeFilter (fr, to) r =
+    rangeFilter _ r@SendFile{} = r
+    rangeFilter (fr, to) r@Response{..} =
         setHeader "Content-Length" (show rangeLen)
       . setHeaderBS (BS.C8.pack "Content-Range") (contentRange fr to fullLen)
       . removeResponseHeader "Content-MD5"
-      $ r { rsBody = BS.Lazy.take rangeLen $ BS.Lazy.drop fr $ rsBody r
+      $ Response
+          { rsBody = BS.Lazy.take rangeLen $ BS.Lazy.drop fr rsBody
           , rsCode = 206
+          , ..
           }
       where
         rangeLen = to - fr + 1

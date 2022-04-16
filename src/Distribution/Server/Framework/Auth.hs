@@ -428,26 +428,28 @@ data AuthError = NoAuthError
 
 authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
 authErrorResponse realm autherr = do
-    digestHeader   <- liftIO (headerDigestAuthChallenge realm)
-    return $! (toErrorResponse autherr) { errorHeaders = [digestHeader] }
-  where
-    toErrorResponse :: AuthError -> ErrorResponse
-    toErrorResponse NoAuthError =
-      ErrorResponse 401 [] "No authorization provided" []
+    digestHeader <- liftIO (headerDigestAuthChallenge realm)
+    let
+      toErrorResponse :: AuthError -> ErrorResponse
+      toErrorResponse ae = case ae of
+        NoAuthError ->
+          ErrorResponse 401 [digestHeader] "No authorization provided" []
 
-    toErrorResponse UnrecognizedAuthError =
-      ErrorResponse 400 [] "Authorization scheme not recognized" []
+        UnrecognizedAuthError ->
+          ErrorResponse 400 [digestHeader] "Authorization scheme not recognized" []
 
-    toErrorResponse InsecureAuthError =
-      ErrorResponse 400 [] "Authorization scheme not allowed over plain http"
-        [ MText $ "HTTP Basic and X-ApiKey authorization methods leak "
-               ++ "information when used over plain HTTP. Either use HTTPS "
-               ++ "or if you must use plain HTTP for authorised requests then "
-               ++ "use HTTP Digest authentication." ]
+        InsecureAuthError ->
+          ErrorResponse 400 [digestHeader] "Authorization scheme not allowed over plain http"
+            [ MText $ "HTTP Basic and X-ApiKey authorization methods leak "
+                   ++ "information when used over plain HTTP. Either use HTTPS "
+                   ++ "or if you must use plain HTTP for authorised requests then "
+                   ++ "use HTTP Digest authentication." ]
 
-    toErrorResponse BadApiKeyError =
-      ErrorResponse 401 [] "Bad auth token" []
+        BadApiKeyError ->
+          ErrorResponse 401 [digestHeader] "Bad auth token" []
 
-    -- we don't want to leak info for the other cases, so same message for them all:
-    toErrorResponse _ =
-      ErrorResponse 401 [] "Username or password incorrect" []
+      -- we don't want to leak info for the other cases, so same message for them all:
+        _ ->
+          ErrorResponse 401 [digestHeader] "Username or password incorrect" []
+
+    return $! toErrorResponse autherr

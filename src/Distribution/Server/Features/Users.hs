@@ -495,7 +495,9 @@ userFeature templates usersState adminsState
           overrideResponse <- msum <$> runHook authFailHook err
           let resp' = fromMaybe defaultResponse overrideResponse
               -- reset authn to "0" on auth failures
-              resp'' = resp' { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders resp' }
+              resp'' = case resp' of
+                ErrorResponse{..} -> ErrorResponse { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders, .. }
+                GenericErrorResponse -> GenericErrorResponse
           throwError resp''
 
     -- Check if there is an authenticated userid, and return info, if so.
