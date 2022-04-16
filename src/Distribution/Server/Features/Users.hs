@@ -496,7 +496,7 @@ userFeature templates usersState adminsState
           let resp' = fromMaybe defaultResponse overrideResponse
               -- reset authn to "0" on auth failures
               resp'' = case resp' of
-                ErrorResponse{..} -> ErrorResponse { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders, .. }
+                r@ErrorResponse{} -> r { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders r }
                 GenericErrorResponse -> GenericErrorResponse
           throwError resp''
 

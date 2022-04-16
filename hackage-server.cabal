@@ -129,7 +129,7 @@ common defaults
     , vector                ^>= 0.12
     , zlib                  ^>= 0.6.2
 
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags -fwarn-incomplete-record-updates -funbox-strict-fields
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags -funbox-strict-fields
 
   if impl(ghc >= 8.2)
     ghc-options: -Werror=incomplete-patterns -Werror=missing-methods
