@@ -14,14 +14,15 @@ module Distribution.Server.Util.Paging
   nextURL,
   prevURL,
   toURL,
+  pagingInfo,
   PaginatedConfiguration(..),
 )
 where
 import Text.XHtml (URL)
 import Data.List (genericTake, genericDrop, genericLength)
 
--- This could be better designed, perhaps turning PaginatedConfiguration into a function that returns the paging info 
---  and the paged data
+-- This could be better designed, perhaps turning PaginatedConfiguration into a 
+-- function that returns the paging info and the paged data
 data PaginatedConfiguration = PaginatedConfiguration
   { currPage :: Int,
     pageSize :: Int,
@@ -78,3 +79,11 @@ prevURL base conf@PaginatedConfiguration {currPage}
   | page < 1 = Nothing
   | otherwise = Just $ toURL base conf{currPage=page}
   where page = pred currPage 
+
+
+pagingInfo :: PaginatedConfiguration -> String
+pagingInfo pc@PaginatedConfiguration{totalAmount} = "Showing " ++ show start ++ " to " 
+  ++ show end ++ " of " ++ show totalAmount ++ endingText
+  where (start, end) = pageIndexRange pc
+        endingText = if pageAmount > 0 then " entries" else " entry"
+        pageAmount = end - start -- Starts Indexing at 1

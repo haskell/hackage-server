@@ -32,7 +32,7 @@ import Data.Time.Clock ( UTCTime )
 import Data.Time.Format ( defaultTimeLocale, formatTime )
 import Data.Maybe ( listToMaybe, fromMaybe)
 import Distribution.Server.Util.Paging (PaginatedConfiguration(..), hasNext,
-  hasPrev, nextURL, pageIndexRange, paginate, prevURL, toURL, allPagedURLs)
+  hasPrev, nextURL, pageIndexRange, paginate, prevURL, toURL, allPagedURLs, pagingInfo)
 
 -- | Takes a list of package info, in reverse order by timestamp.
 
@@ -67,11 +67,9 @@ pageSizeForm base =
 
 
 paginator :: PaginatedConfiguration -> URL -> Html 
-paginator pc@PaginatedConfiguration{currPage,totalAmount} baseUrl = 
+paginator pc@PaginatedConfiguration{currPage} baseUrl = 
   let 
-    (start, end) = pageIndexRange pc
-    infoText = "Showing " ++ show start ++ " to " ++ show end ++ " of " ++ show totalAmount ++ " entries"
-    info = XHtml.thediv << infoText
+    info = XHtml.thediv << pagingInfo pc
 
     next = XHtml.anchor ! [XHtml.href (fromMaybe "" (nextURL baseUrl pc)) | hasNext pc] << "Next" 
     prev = XHtml.anchor ! [XHtml.href (fromMaybe "" (prevURL baseUrl pc)) | hasPrev pc] << "Previous"
@@ -93,9 +91,9 @@ noAttr = XHtml.theclass ""
 -- | Generates a list of links of the current possible paging links, recreates the functionality of the paging links on the search page
 reducePagedLinks :: PaginatedConfiguration -> [Html] -> Html
 reducePagedLinks PaginatedConfiguration{currPage} xs
-  | currPage >= (length xs - 3) = mconcat  . keepLastPages .fillFirst $ xs -- Beginning ellipses
-  | length xs > 5 && currPage < 5 = mconcat . keepFirstPages . fillLast $ xs -- Ending ellipses
   | length xs <= 5 = mconcat xs -- Do Nothing
+  | currPage >= (length xs - 3) = mconcat  . keepLastPages .fillFirst $ xs -- Beginning ellipses
+  | currPage < 5 = mconcat . keepFirstPages . fillLast $ xs -- Ending ellipses
   | otherwise = mconcat . keepMiddlePages . fillLast . fillFirst $ xs -- Begin and End ellipses
   where filler = XHtml.thespan << "..."
         fillFirst x = insertAt 1 filler x
