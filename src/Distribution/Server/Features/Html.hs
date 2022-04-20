@@ -556,21 +556,28 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           }
       ]
 
-    readParamWithDefaultAnyValid :: (Read a, HasRqData m, Monad m, Functor m, Alternative m) => 
+    readParamWithDefaultAndValid :: (Read a, HasRqData m, Monad m, Functor m, Alternative m) => 
       a -> (a -> Bool) -> String -> m a
-    readParamWithDefaultAnyValid n f queryParam = do
+    readParamWithDefaultAndValid n f queryParam = do
         m <- optional (look queryParam)
         let parsed = m >>= readMaybe >>= (\x -> if f x then Just x else Nothing)
 
         return $ fromMaybe n parsed
 
+    lookupPageSize :: (HasRqData m, Monad m, Functor m, Alternative m) => Int -> m Int
+    lookupPageSize def = readParamWithDefaultAndValid def validPageSize "pageSize"
+      where validPageSize x = x > 1 && x <= 200
+
+    lookupPage :: (HasRqData m, Monad m, Functor m, Alternative m) => Int -> m Int
+    lookupPage def = readParamWithDefaultAndValid def validPage "page"
+      where validPage = (>= 1)
 
     serveRecentPage :: DynamicPath -> ServerPartE Response
     serveRecentPage _ = do
       recentPackages <- getRecentPackages
       users <- queryGetUserDb
-      page <-  readParamWithDefaultAnyValid 1 (>= 1) "page"
-      pageSize <- readParamWithDefaultAnyValid 20 (>= 1) "pageSize"
+      page <-  lookupPage 1
+      pageSize <- lookupPageSize 20
 
       let conf = Paging.createConf page pageSize recentPackages
       
@@ -580,8 +587,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveRecentRSS _ = do
       recentPackages <- getRecentPackages
       users <- queryGetUserDb
-      page <-  readParamWithDefaultAnyValid 1 (>= 1) "page"
-      pageSize <- readParamWithDefaultAnyValid 20 (>= 1) "pageSize"
+      page <-  lookupPage 1
+      pageSize <- lookupPageSize 20
       now   <- liftIO getCurrentTime
       
       let conf = Paging.createConf page pageSize recentPackages
@@ -592,8 +599,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveRevisionPage _ = do
       revisions <- getRecentRevisions
       users <- queryGetUserDb
-      page <-  readParamWithDefaultAnyValid 1 (>= 1) "page"
-      pageSize <- readParamWithDefaultAnyValid 40 (>= 1) "pageSize"
+      page <-  lookupPage 1
+      pageSize <- lookupPageSize 40
       
       let conf = Paging.createConf page pageSize revisions
 
@@ -603,8 +610,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveRevisionRSS _ = do
       revisions <- getRecentRevisions
       users <- queryGetUserDb
-      page <-  readParamWithDefaultAnyValid 1 (>= 1) "page"
-      pageSize <- readParamWithDefaultAnyValid 40 (>= 1) "pageSize"
+      page <-  lookupPage 1
+      pageSize <- lookupPageSize 40
       now   <- liftIO getCurrentTime
       
       let conf = Paging.createConf page pageSize revisions
