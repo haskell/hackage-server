@@ -10,13 +10,12 @@ import Data.List (isInfixOf)
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Compression.GZip as GZip
-import qualified Test.HUnit as HUnit
 
 import Distribution.Server.Packages.Unpack
 import Distribution.Server.Packages.UnpackTest
 
 import Test.Tasty (defaultMain, TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, Assertion, HasCallStack)
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, Assertion, HasCallStack)
 
 main :: IO ()
 main = defaultMain allTests
@@ -81,9 +80,9 @@ missingConfigureScriptTest =
   do tar <- tarGzFile "missing-configure-0.1.0.0"
      now <- getCurrentTime
      case unpackPackage now "missing-configure-0.1.0.0.tar.gz" tar of
-       Right _ -> HUnit.assertFailure "error: unexpected success"
+       Right _ -> assertFailure "error: unexpected success"
        Left err ->
-         HUnit.assertBool
+         assertBool
            ("Error found, but not about missing ./configure: " ++ err)
            ("The 'build-type' is 'Configure'" `isInfixOf` err)
 
@@ -94,9 +93,9 @@ badSpecVer =
   do tar <- tarGzFile "bad-specver-package-0"
      now <- getCurrentTime
      case unpackPackage now "bad-specver-package-0.tar.gz" tar of
-       Right _ -> HUnit.assertFailure "error: unexpected success"
+       Right _ -> assertFailure "error: unexpected success"
        Left err ->
-         HUnit.assertBool
+         assertBool
            ("Error found, but not about invalid spec version: " ++ err)
            ("cabal spec version" `isInfixOf` err)
 
@@ -146,7 +145,7 @@ successTestTGZ pkg tar = do
   case unpackPackage now (pkg ++ ".tar.gz") tar of
     Right _ -> return ()
     Left err ->
-      HUnit.assertFailure $ "Expected success, but got: " ++ show err
+      assertFailure $ "Expected success, but got: " ++ show err
 
 ---------------------------------------------------------------------------
 -- * Tar utilities
