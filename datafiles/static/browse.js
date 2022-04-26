@@ -399,4 +399,7 @@ export const appendRating = async (evt) => {
   await submitSearch();
 };
 
-await refresh();
+// Avoid top-level await since as of Apr 2022 it only has 84% penetration:
+// https://caniuse.com/?search=top%20level%20await
+// We don't need the result anyway.
+refresh();
