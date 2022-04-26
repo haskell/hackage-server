@@ -1,5 +1,5 @@
 {-# LANGUAGE BlockArguments, LambdaCase, OverloadedStrings #-}
-module Distribution.Server.Features.Browse.Options (BrowseOptions(..), Column(..), Direction(..), IsSearch(..), NormalColumn(..), Sort(..)) where
+module Distribution.Server.Features.Browse.Options (BrowseOptions(..), Column(..), Direction(..), IsSearch(..), NormalColumn(..), columnToTemplateName, directionToTemplateName, parseSearchQuery) where
 
 import Data.Aeson ((.:), FromJSON(parseJSON), withObject, withText)
 import Data.Attoparsec.Text (parseOnly)
@@ -18,17 +18,11 @@ data Column = DefaultColumn | NormalColumn NormalColumn
 data Direction = Ascending | Descending
   deriving (Show, Eq)
 
-data Sort = Sort
-  { sortColumn :: Column
-  , sortDirection :: Direction
-  }
-  deriving (Show, Eq)
-
 data BrowseOptions = BrowseOptions
   { boPage :: Word
-  , boSort :: Sort
-  , boFilters :: [Filter]
-  , boSearchTerms :: [String]
+  , boSortColumn :: Column
+  , boSortDirection :: Direction
+  , boSearchQuery :: T.Text
   }
 
 instance FromJSON Column where
@@ -45,6 +39,17 @@ instance FromJSON Column where
         "maintainers" -> pure $ NormalColumn Maintainers
         t -> fail $ "Column invalid: " ++ T.unpack t
 
+columnToTemplateName :: Column -> String
+columnToTemplateName = \case
+  DefaultColumn -> "default"
+  NormalColumn Name -> "name"
+  NormalColumn Downloads -> "downloads"
+  NormalColumn Rating -> "rating"
+  NormalColumn Description -> "description"
+  NormalColumn Tags -> "tags"
+  NormalColumn LastUpload -> "lastUpload"
+  NormalColumn Maintainers -> "maintainers"
+
 instance FromJSON Direction where
   parseJSON =
     withText "Direction"
@@ -53,26 +58,21 @@ instance FromJSON Direction where
         "descending" -> pure Descending
         t -> fail $ "Direction invalid: " ++ T.unpack t
 
-instance FromJSON Sort where
-  parseJSON = withObject "Sort" \o ->
-    Sort
-      <$> o .: "column"
-      <*> o .: "direction"
+directionToTemplateName :: Direction -> String
+directionToTemplateName = \case
+  Ascending -> "ascending"
+  Descending -> "descending"
 
-parse :: MonadFail m => T.Text -> m ([Filter], [String])
-parse searchQuery = do
+parseSearchQuery :: MonadFail m => T.Text -> m ([Filter], [String])
+parseSearchQuery searchQuery = do
   -- Search query parsing should never fail
   Right conds <- pure (parseOnly conditions searchQuery)
   pure (condsToFiltersAndTerms conds)
 
 instance FromJSON BrowseOptions where
-  parseJSON = withObject "BrowseOptions" \o -> do
-    (page, sort, searchQuery) <-
-      (,,)
-        <$> o .: "page"
-        <*> o .: "sort"
-        <*> o .: "searchQuery"
-    -- The use of monad here won't make us suffer from
-    -- sequentiality since the parse should never fail.
-    (filters, terms) <- parse searchQuery
-    pure (BrowseOptions page sort filters terms)
+  parseJSON = withObject "BrowseOptions" \o ->
+    BrowseOptions
+      <$> o .: "page"
+      <*> o .: "sortColumn"
+      <*> o .: "sortDirection"
+      <*> o .: "searchQuery"

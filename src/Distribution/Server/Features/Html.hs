@@ -55,7 +55,7 @@ import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
 import Distribution.Server.Util.DocMeta (loadTarDocMeta)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
-import Distribution.Simple.Utils ( cabalVersion )
+import Distribution.Simple.Utils ( cabalVersion, toUTF8LBS )
 
 import Distribution.Package
 import Distribution.Version
@@ -130,6 +130,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "candidate-page.html"
                    , "candidate-index.html"
                    , "browse.html"
+                   , "noscript-search-form.html"
                    ]
 
 
@@ -540,8 +541,26 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _dpath = do
       template <- getTemplate templates "browse.html"
+      noscriptForm <- getTemplate templates "noscript-search-form.html"
+      terms <- optional (lookText' "terms")
+      let
+        noscriptFormRendered =
+          renderTemplate $ noscriptForm
+            [ "ascending" $= True
+            , "default" $= True
+            , "pageNumber" $= "0"
+            , "searchQuery" $= terms
+            ]
+        pleaseSubmitFragment =
+          if terms == mempty
+             then ""
+             else "<p>To view the search results, please submit this form with your desired sorting preferences.</p>"
       return $ toResponse $ template
-          [ "heading" $= "Browse and search packages" ]
+          [ "heading" $= "Browse and search packages"
+          , templateUnescaped "formFragment" $
+              toUTF8LBS pleaseSubmitFragment
+              <> noscriptFormRendered
+          ]
 
     -- Currently the main package page is thrown together by querying a bunch
     -- of features about their attributes for the given package. It'll need

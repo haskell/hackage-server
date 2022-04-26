@@ -340,7 +340,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                        listFeature
                        searchFeature
                        distroFeature
-                       
+                       candidatesFeature
+
     packageInfoJSONFeature <- mkPackageJSONFeature
                                 coreFeature
                                 versionsFeature
