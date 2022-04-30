@@ -14,6 +14,7 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Users
+import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Users.Types
@@ -251,6 +252,7 @@ userDetailsToCSV backuptype (UserDetailsTable tbl)
 initUserDetailsFeature :: ServerEnv
                        -> IO (UserFeature
                            -> CoreFeature
+                           -> UploadFeature
                            -> IO UserDetailsFeature)
 initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
     -- Canonical state
@@ -263,8 +265,8 @@ initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTempl
       [serverTemplatesDir, serverTemplatesDir </> "UserDetails"]
       [ "user-details-form.html" ]
 
-    return $ \users core -> do
-      let feature = userDetailsFeature templates usersDetailsState users core
+    return $ \users core upload -> do
+      let feature = userDetailsFeature templates usersDetailsState users core upload
       return feature
 
 
@@ -272,8 +274,9 @@ userDetailsFeature :: Templates
                    -> StateComponent AcidState UserDetailsTable
                    -> UserFeature
                    -> CoreFeature
+                   -> UploadFeature
                    -> UserDetailsFeature
-userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..}
+userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} UploadFeature{uploadersGroup}
   = UserDetailsFeature {..}
 
   where
@@ -366,6 +369,7 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..}
     handlerPutUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+        void $ guardAuthorisedWhenInAnyGroup [uploadersGroup, adminGroup]
         NameAndContact name email <- expectAesonContent
         updateState userDetailsState (SetUserNameContact uid name email)
         noContent $ toResponse ()

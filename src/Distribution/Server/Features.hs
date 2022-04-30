@@ -197,6 +197,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     userDetailsFeature <- mkUserDetailsFeature
                             usersFeature
                             coreFeature
+                            uploadFeature
 
     userSignupFeature <- mkUserSignupFeature
                            usersFeature
