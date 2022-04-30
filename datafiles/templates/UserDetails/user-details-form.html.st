@@ -27,7 +27,7 @@ $endif$
   <input type="hidden" name="_return" value="/user/$username$/name-contact?showConfirmationOfSave=True"/>
   <input type="hidden" name="_transform" value="form2json"/>
   <label>New full name: <input name="name=%s" value="$name$" /></label><br />
-  <label>New e-mail address: <input type="email" name="contactEmailAddress=%s" value="$contactEmailAddress$" /></label><br />
+  <label>New e-mail address: <input type="email" name="contactEmailAddress=%s" value="$contactEmailAddress$" required="required" /></label><br />
   <input type="submit" value="Save user details" />
 </form>
 </div>

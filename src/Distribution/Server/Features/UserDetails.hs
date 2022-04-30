@@ -18,6 +18,7 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Users.Types
+import Distribution.Server.Util.Validators (guardValidLookingEmail, guardValidLookingName)
 
 import Data.SafeCopy (base, deriveSafeCopy)
 
@@ -371,6 +372,8 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
         void $ guardAuthorisedWhenInAnyGroup [uploadersGroup, adminGroup]
         NameAndContact name email <- expectAesonContent
+        guardValidLookingName name
+        guardValidLookingEmail email
         updateState userDetailsState (SetUserNameContact uid name email)
         noContent $ toResponse ()
 
