@@ -34,7 +34,7 @@ guardValidLookingEmail str = either errBadEmail return $ do
       let (before, after) = T.span (/= '@') str
        in T.length before >= 1
        && T.length after  >  1
-       && T.length (T.filter (== '@') str) == 1
+       && not ('@' `T.elem` after)
 
 errBadUserName, errBadRealName, errBadEmail :: String -> ServerPartE a
 errBadUserName err = errBadRequest "Problem with login name" [MText err]
