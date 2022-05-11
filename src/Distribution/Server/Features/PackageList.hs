@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, RecordWildCards, NamedFieldPuns #-}
 module Distribution.Server.Features.PackageList (
     ListFeature(..),
     initListFeature,
@@ -9,7 +9,7 @@ module Distribution.Server.Features.PackageList (
 import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
--- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
+import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.Votes
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
@@ -23,7 +23,6 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Util.CountingMap (cmFind)
 
 import Distribution.Server.Packages.Types
--- [reverse index disabled] import Distribution.Server.Packages.Reverse
 import Distribution.Server.Users.Types
 
 import Distribution.Package
@@ -75,7 +74,7 @@ data PackageItem = PackageItem {
     itemDownloads :: !Int,
     -- The number of direct revdeps. (Likewise.)
     -- also: distinguish direct/flat?
-    -- [reverse index disabled] itemRevDepsCount :: !Int,
+    itemRevDepsCount :: !Int,
     -- Whether there's a library here.
     itemHasLibrary :: !Bool,
     -- How many executables (>=0) this package has.
@@ -85,23 +84,23 @@ data PackageItem = PackageItem {
     -- How many benchmarks (>=0) this package has.
     itemNumBenchmarks :: !Int,
     -- Last upload date
-    itemLastUpload :: !UTCTime
+    itemLastUpload :: !UTCTime,
     -- Hotness: a more heuristic way to sort packages. presently non-existent.
-  --itemHotness :: Int
+    itemHotness :: !Float
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k l) = memSize12 a b c d e f g h i j k l
+    memSize (PackageItem a b c d e f g h i j k l m n) = memSize11 a b c d e f g h i j (k, l, m, n)
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" []
-                                   0 0 False 0 0 0 (UTCTime (toEnum 0) 0)
+                                   0 0 0 False 0 0 0 (UTCTime (toEnum 0) 0) 0
 
 
 initListFeature :: ServerEnv
                 -> IO (CoreFeature
-                    -- [reverse index disabled] -> ReverseFeature
+                    -> ReverseFeature
                     -> DownloadFeature
                     -> VotesFeature
                     -> TagsFeature
@@ -114,7 +113,7 @@ initListFeature _env = do
     itemUpdate <- newHook
 
     return $ \core@CoreFeature{..}
-              -- [reverse index disabled] revs
+              revs@ReverseFeature{revPackageStats, reverseHook}
               download
               votesf@VotesFeature{..}
               tagsf@TagsFeature{..}
@@ -123,7 +122,7 @@ initListFeature _env = do
               uploads@UploadFeature{..} -> do
 
       let (feature, modifyItem, updateDesc) =
-            listFeature core download votesf tagsf versions users uploads
+            listFeature core revs download votesf tagsf versions users uploads
                         itemCache itemUpdate
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
@@ -143,15 +142,12 @@ initListFeature _env = do
                    runHook_ itemUpdate (Set.singleton pkgname)
               Nothing -> return ()
 
-      {- [reverse index disabled]
-              votesf@VotesFeature{..}
-      registerHook (reverseUpdateHook revs) $ \mrev -> do
-          let pkgs = Map.keys mrev
+      registerHook reverseHook $ \pkgids -> do
+          let pkgs = map pkgName pkgids
           forM_ pkgs $ \pkgname -> do
-              revCount <- query . GetReverseCount $ pkgname
+              revCount <- revPackageStats pkgname
               modifyItem pkgname (updateReverseItem revCount)
-          runHook' itemUpdate $ Set.fromDistinctAscList pkgs
-      -}
+          runHook_ itemUpdate $ Set.fromDistinctAscList pkgs
 
       registerHook votesUpdated $ \(pkgname, _) -> do
           votes <- pkgNumScore pkgname
@@ -172,6 +168,7 @@ initListFeature _env = do
 
 
 listFeature :: CoreFeature
+            -> ReverseFeature
             -> DownloadFeature
             -> VotesFeature
             -> TagsFeature
@@ -185,6 +182,7 @@ listFeature :: CoreFeature
                 PackageName -> IO ())
 
 listFeature CoreFeature{..}
+            ReverseFeature{revPackageStats}
             DownloadFeature{..}
             VotesFeature{..}
             TagsFeature{..}
@@ -249,7 +247,7 @@ listFeature CoreFeature{..}
     constructItem :: PkgInfo -> IO (PackageName, PackageItem)
     constructItem pkg = do
         let pkgname = packageName pkg
-        -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
+        revCount <- revPackageStats pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
         downs <- recentPackageDownloads
@@ -262,9 +260,10 @@ listFeature CoreFeature{..}
           , itemMaintainer = map (userIdToName users) (UserIdSet.toList maintainers)
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
-            -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
           , itemVotes      = votes
           , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
+          , itemRevDepsCount = directCount revCount
+          , itemHotness = votes + fromIntegral (cmFind pkgname downs) + fromIntegral (directCount revCount)*2
           }
 
     ------------------------------
@@ -308,7 +307,8 @@ updateTagItem tags item =
 updateVoteItem :: Float -> PackageItem -> PackageItem
 updateVoteItem score item =
     item {
-        itemVotes = score
+        itemVotes = score,
+        itemHotness = fromIntegral (itemRevDepsCount item)*2 + score + fromIntegral (itemDownloads item)
     }
 
 updateDeprecation :: Maybe [PackageName] -> PackageItem -> PackageItem
@@ -317,13 +317,13 @@ updateDeprecation pkgs item =
         itemDeprecated = pkgs
     }
 
-{- [reverse index disabled]
 updateReverseItem :: ReverseCount -> PackageItem -> PackageItem
 updateReverseItem revCount item =
     item {
-        itemRevDepsCount = directReverseCount revCount
+        itemRevDepsCount = directCount revCount,
+        itemDownloads = directCount revCount,
+        itemHotness = fromIntegral (itemRevDepsCount item)*2 + itemVotes item + fromIntegral (itemDownloads item)
     }
--}
 
 updateDownload :: Int -> PackageItem -> PackageItem
 updateDownload count item =

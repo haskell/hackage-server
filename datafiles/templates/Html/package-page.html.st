@@ -213,6 +213,20 @@
             </tr>
             $endif$
 
+            $if(hasrdeps)$
+            <tr>
+              <th>ReverseDependencies</th>
+              <td>$rdeps$</td>
+            </tr>
+            <script>
+              \$('.revdepdetails').click(function(e) {
+                e.preventDefault();
+                var html = '$rdepsummary$'
+                modal.open({ content: html});
+              });
+            </script>
+            $endif$
+
             $if(hasexecs)$
             <tr>
               <th>Executables</th>
