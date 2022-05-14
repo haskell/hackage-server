@@ -14,8 +14,8 @@ $hackagePageHeader()$
 
 <p> 
   Configure an analytics pixel to be automatically loaded on your package’s page on Hackage. 
-  You’ll need an image URL from any external analytics provider, which is provided 
-  for free and can surface information about web traffic to your package including geographic 
+  You’ll need an image URL from any external analytics provider. This can be used to
+  surface information about web traffic to your package including geographic 
   distribution, version distribution, and companies.
 </p>
 
