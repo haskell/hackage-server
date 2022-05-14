@@ -157,6 +157,8 @@ data UserResource = UserResource {
     userPage :: Resource,
     -- | A user's password.
     passwordResource :: Resource,
+    -- | A user's package tracking pixels.
+    analyticsPixelsResource :: Resource,
     -- | A user's enabled status.
     enabledResource  :: Resource,
     -- | The admin group.
@@ -362,6 +364,7 @@ userFeature templates usersState adminsState
               , resourceGet  = [ ("", const (redirectUserManagement r)) ]
               }
       , passwordResource = resourceAt "/user/:username/password.:format"
+      , analyticsPixelsResource = resourceAt "/user/:username/analytics-pixels.:format"
                            --TODO: PUT
       , enabledResource  = (resourceAt "/user/:username/enabled.:format") {
             resourceDesc = [ (GET, "return if the user is enabled")

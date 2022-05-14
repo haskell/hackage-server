@@ -95,6 +95,11 @@
                 edit package information
               </a>
             </li>
+            <li>
+              <a href="$baseurl$/package/$package.name$/analytics-pixels">
+                edit package analytics pixels
+              </a>
+            </li>
           </ul>
           <p>Candidates</p>
           <ul>
@@ -272,5 +277,10 @@
   <script src="$doc.baseUrl$/quick-jump.min.js" type="text/javascript"></script>
   <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function(toggle) {var t = document.getElementById('quickjump-trigger');if (t) {t.onclick = function(e) { e.preventDefault(); toggle(); };}}); </script>
   $endif$
+
+  $analyticsPixels:{analyticsPixelUrl|
+  <img referrerpolicy="no-referrer-when-downgrade" src="$analyticsPixelUrl$" />
+  }; separator=""$
+
 </body>
 </html>

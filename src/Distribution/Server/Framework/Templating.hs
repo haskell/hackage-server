@@ -52,6 +52,7 @@ import qualified Data.Aeson as JSON
 
 import Distribution.Package (PackageName, PackageIdentifier)
 import Distribution.Version (Version)
+import Distribution.Server.Users.Types (UserName)
 import Distribution.Text    (display)
 
 import Control.Monad (when)
@@ -120,6 +121,7 @@ instance ToSElem XHtml.Html where
 
 instance ToSElem URI               where toSElem = toSElem . show
 instance ToSElem PackageName       where toSElem = toSElem . display
+instance ToSElem UserName          where toSElem = toSElem . display
 instance ToSElem Version           where toSElem = toSElem . display
 instance ToSElem PackageIdentifier where toSElem = toSElem . display
 
