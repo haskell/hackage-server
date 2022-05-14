@@ -19,7 +19,7 @@ import System.Directory (
   , createDirectoryIfMissing
   )
 import qualified Data.ByteString.Lazy as BSL
-import System.IO (withFile, IOMode (..), hPutStr)
+import System.IO (withFile, IOMode (..))
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Text.CSV (printCSV)
 import Control.Exception (evaluate)
@@ -59,7 +59,7 @@ newtype OnDiskStats = OnDiskStats {
   deriving (Show, Eq, MemSize)
 
 instance CountingMap (PackageName, (Day, Version)) OnDiskStats where
-  cmEmpty                            = OnDiskStats $ cmEmpty
+  cmEmpty                            = OnDiskStats cmEmpty
   cmTotal  (OnDiskStats ncm)         = cmTotal ncm
   cmInsert kl n (OnDiskStats ncm)    = OnDiskStats $ cmInsert kl n ncm
   cmFind   k (OnDiskStats ncm)       = cmFind k ncm
@@ -75,7 +75,7 @@ newtype OnDiskPerPkg = OnDiskPerPkg {
   deriving (Show, Eq, Ord, MemSize)
 
 instance CountingMap (Day, Version) OnDiskPerPkg where
-  cmEmpty  = OnDiskPerPkg $ cmEmpty
+  cmEmpty  = OnDiskPerPkg cmEmpty
   cmTotal  (OnDiskPerPkg ncm) = cmTotal ncm
   cmInsert kl n (OnDiskPerPkg ncm) = OnDiskPerPkg $ cmInsert kl n ncm
   cmFind   k (OnDiskPerPkg ncm) = cmFind k ncm
@@ -90,7 +90,7 @@ newtype RecentDownloads = RecentDownloads {
   deriving (Show, Eq, MemSize)
 
 instance CountingMap PackageName RecentDownloads where
-  cmEmpty  = RecentDownloads $ cmEmpty
+  cmEmpty  = RecentDownloads cmEmpty
   cmTotal  (RecentDownloads ncm) = cmTotal ncm
   cmInsert kl n (RecentDownloads ncm) = RecentDownloads $ cmInsert kl n ncm
   cmFind   k (RecentDownloads ncm) = cmFind k ncm
@@ -105,7 +105,7 @@ newtype TotalDownloads = TotalDownloads {
   deriving (Show, Eq, MemSize)
 
 instance CountingMap PackageName TotalDownloads where
-  cmEmpty  = TotalDownloads $ cmEmpty
+  cmEmpty  = TotalDownloads cmEmpty
   cmTotal  (TotalDownloads ncm) = cmTotal ncm
   cmInsert kl n (TotalDownloads ncm) = TotalDownloads $ cmInsert kl n ncm
   cmFind   k (TotalDownloads ncm) = cmFind k ncm
@@ -233,13 +233,11 @@ writeOnDiskStats stateDir (OnDiskStats (NCM _ onDisk)) = do
 
 appendToLog :: FilePath -> InMemStats -> IO ()
 appendToLog stateDir (InMemStats _ inMemStats) =
-  withFile (stateDir </> "log") AppendMode $ \h ->
-    hPutStr h $ printCSV (cmToCSV inMemStats)
+  appendFile (stateDir </> "log") $ printCSV (cmToCSV inMemStats)
 
 reconstructLog :: FilePath -> OnDiskStats -> IO ()
 reconstructLog stateDir onDisk =
-  withFile (stateDir </> "log") WriteMode $ \h ->
-    hPutStr h $ printCSV (cmToCSV onDisk)
+  writeFile (stateDir </> "log") $ printCSV (cmToCSV onDisk)
 
 {------------------------------------------------------------------------------
   ACID stuff

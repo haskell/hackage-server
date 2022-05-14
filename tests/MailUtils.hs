@@ -16,6 +16,7 @@ module MailUtils (
   ) where
 
 import Control.Concurrent (threadDelay)
+import Data.Foldable (find)
 import Data.Maybe
 import Network.URI
 import Network.HTTP hiding (user)
@@ -65,7 +66,7 @@ checkEmail user = do
 emailWithSubject :: String -> String -> IO (Maybe Email)
 emailWithSubject user subject = do
   emails <- checkEmail user
-  return . listToMaybe . filter ((== subject) . emailTitle) $ emails
+  return . find ((== subject) . emailTitle) $ emails
 
 waitForEmailWithSubject :: String -> String -> IO Email
 waitForEmailWithSubject user subject = f 10

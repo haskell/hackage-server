@@ -67,6 +67,16 @@ You'll need to do the following to get `hackage-server`'s dependency `text-icu` 
         sudo apt update
         sudo apt install libbrotli-dev
 
+  - Fedora/CentOS
+
+        sudo dnf install brotli-devel
+
+#### openssl
+
+  - Fedora/CentOS
+
+      sudo dnf install openssl-devel
+
 #### zlib
 
   - Mac OS X

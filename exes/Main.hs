@@ -1,5 +1,3 @@
-{-# LANGUAGE PatternGuards #-}
-
 module Main where
 
 import qualified Distribution.Server as Server
@@ -44,8 +42,8 @@ import Data.Maybe
          ( isNothing )
 import Data.List
          ( intercalate, isInfixOf )
-import Data.Traversable
-         ( forM )
+import Data.Foldable
+         ( forM_ )
 import Data.Version
          ( showVersion )
 import Control.Monad
@@ -377,7 +375,7 @@ runAction opts = do
           fail $ "Sorry, the server assumes it will be served (or proxied) "
               ++ " via http or https, so cannot use uri scheme " ++ uriScheme uri
         | isNothing (uriAuthority uri) ->
-          fail $ "The base-uri has to include the full host name"
+          fail "The base-uri has to include the full host name"
         | uriPath uri `notElem` ["", "/"] ->
           fail $ "Sorry, the server assumes the base-uri to be at the root of "
               ++ " the domain, so cannot use " ++ uriPath uri
@@ -689,7 +687,7 @@ testBackupCommand =
           flagTestBackupScrubbed (\v flags -> flags { flagTestBackupScrubbed = v })
           (noArg (Flag True))
       , option [] ["features"]
-          ("Only test the specified features")
+          "Only test the specified features"
           flagTestBackupFeatures (\v flags -> flags { flagTestBackupFeatures = v })
           (reqArgFlag "FEATURES")
       ]
@@ -920,7 +918,7 @@ withServer config doTemp = bracket initialise shutdown
       loginfo verbosity "Initializing happstack-state..."
       server <- Server.initialise config
       loginfo verbosity "Server data loaded into memory"
-      void $ forM mtemp $ \temp -> do
+      forM_ mtemp $ \temp -> do
         loginfo verbosity "Tearing down temp server"
         Server.tearDownTemp temp
       return server

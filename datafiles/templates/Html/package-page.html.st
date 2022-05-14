@@ -271,5 +271,10 @@
   <script src="$doc.baseUrl$/quick-jump.min.js" type="text/javascript"></script>
   <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function(toggle) {var t = document.getElementById('quickjump-trigger');if (t) {t.onclick = function(e) { e.preventDefault(); toggle(); };}}); </script>
   $endif$
+
+  $analyticsPixels:{analyticsPixelUrl|
+  <img referrerpolicy="no-referrer-when-downgrade" src="$analyticsPixelUrl$" />
+  }; separator=""$
+
 </body>
 </html>

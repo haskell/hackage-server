@@ -27,6 +27,7 @@ import Distribution.Server.Features.PreferredVersions
 import Distribution.Server.Features.PackageContents (PackageContentsFeature(..))
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
+import Distribution.Server.Features.AnalyticsPixels
 import Distribution.Server.Features.Mirror
 import Distribution.Server.Features.Distro
 import Distribution.Server.Features.Documentation
@@ -55,7 +56,7 @@ import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
 import Distribution.Server.Util.DocMeta (loadTarDocMeta)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
-import Distribution.Simple.Utils ( cabalVersion )
+import Distribution.Simple.Utils ( cabalVersion, toUTF8LBS )
 
 import Distribution.Package
 import Distribution.Version
@@ -102,7 +103,9 @@ initHtmlFeature :: ServerEnv
                     -> UploadFeature -> PackageCandidatesFeature
                     -> VersionsFeature
                     -- [reverse index disabled] -> ReverseFeature
-                    -> TagsFeature -> DownloadFeature
+                    -> TagsFeature
+                    -> AnalyticsPixelsFeature
+                    -> DownloadFeature
                     -> VotesFeature
                     -> ListFeature -> SearchFeature
                     -> MirrorFeature -> DistroFeature
@@ -130,6 +133,9 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "candidate-page.html"
                    , "candidate-index.html"
                    , "browse.html"
+                   , "noscript-search-form.html"
+                   , "analytics-pixels-page.html"
+                   , "user-analytics-pixels-page.html"
                    ]
 
 
@@ -137,7 +143,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
               packages upload
               candidates versions
               -- [reverse index disabled] reverse
-              tags download
+              tags analyticsPixels download
               rank
               list@ListFeature{itemUpdate}
               names mirror
@@ -151,7 +157,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                 htmlFeature env user core
                             packages upload
                             candidates versions
-                            tags download
+                            tags analyticsPixels download
                             rank
                             list names
                             mirror distros
@@ -196,6 +202,7 @@ htmlFeature :: ServerEnv
             -> PackageCandidatesFeature
             -> VersionsFeature
             -> TagsFeature
+            -> AnalyticsPixelsFeature
             -> DownloadFeature
             -> VotesFeature
             -> ListFeature
@@ -219,7 +226,7 @@ htmlFeature env@ServerEnv{..}
             packages upload
             candidates versions
             -- [reverse index disabled] ReverseFeature{..}
-            tags download
+            tags analyticsPixels download
             rank
             list@ListFeature{getAllLists}
             names
@@ -257,6 +264,7 @@ htmlFeature env@ServerEnv{..}
                                       versions
                                       upload
                                       tags
+                                      analyticsPixels
                                       docsCore
                                       tarIndexCache
                                       reportsCore
@@ -278,9 +286,11 @@ htmlFeature env@ServerEnv{..}
     htmlReports    = mkHtmlReports    utilities core reportsCore templates
     htmlCandidates = mkHtmlCandidates utilities core versions upload
                                       docsCandidates tarIndexCache
-                                      candidates templates
+                                      candidates user templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core upload user list tags templates
+
+    htmlAnalyticsPixels = mkHtmlAnalyticsPixels utilities core user upload analyticsPixels templates
 
     htmlResources = concat [
         htmlCoreResources       htmlCore
@@ -292,6 +302,7 @@ htmlFeature env@ServerEnv{..}
       , htmlPreferredResources  htmlPreferred
       , htmlDownloadsResources  htmlDownloads
       , htmlTagsResources       htmlTags
+      , htmlAnalyticsPixelsResources htmlAnalyticsPixels
       -- and user groups. package maintainers, trustees, admins
       , htmlGroupResource user (maintainersGroupResource . uploadResource $ upload)
       , htmlGroupResource user (trusteesGroupResource    . uploadResource $ upload)
@@ -406,9 +417,9 @@ htmlFeature env@ServerEnv{..}
 
     packagesPage :: IO Response
     packagesPage = do
-        items <- liftIO $ getAllLists
+        items <- liftIO getAllLists
         let htmlpage =
-              toResponse $ Resource.XHtml $ hackagePage "All packages by name" $
+              toResponse $ Resource.XHtml $ hackagePage "All packages by name"
                 [ h2 << "All packages by name"
                 , ulist ! [theclass "packages"] << map renderItem (Map.elems items)
                 ]
@@ -448,6 +459,7 @@ mkHtmlCore :: ServerEnv
            -> VersionsFeature
            -> UploadFeature
            -> TagsFeature
+           -> AnalyticsPixelsFeature
            -> DocumentationFeature
            -> TarIndexCacheFeature
            -> ReportsFeature
@@ -465,15 +477,16 @@ mkHtmlCore :: ServerEnv
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
-           UserFeature{queryGetUserDb, checkAuthenticated}
+           UserFeature{queryGetUserDb, checkAuthenticated, guardAuthorised_, adminGroup}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
                           , withPackagePreferred
                           }
-           UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
+           UploadFeature{..}
            TagsFeature{queryTagsForPackage}
+           AnalyticsPixelsFeature{getPackageAnalyticsPixels}
            documentationFeature@DocumentationFeature{documentationResource, queryDocumentation}
            TarIndexCacheFeature{cachedTarIndex}
            reportsFeature
@@ -540,8 +553,26 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _dpath = do
       template <- getTemplate templates "browse.html"
+      noscriptForm <- getTemplate templates "noscript-search-form.html"
+      terms <- optional (lookText' "terms")
+      let
+        noscriptFormRendered =
+          renderTemplate $ noscriptForm
+            [ "ascending" $= True
+            , "default" $= True
+            , "pageNumber" $= "0"
+            , "searchQuery" $= terms
+            ]
+        pleaseSubmitFragment =
+          if terms == mempty
+             then ""
+             else "<p>To view the search results, please submit this form with your desired sorting preferences.</p>"
       return $ toResponse $ template
-          [ "heading" $= "Browse and search packages" ]
+          [ "heading" $= "Browse and search packages"
+          , templateUnescaped "formFragment" $
+              toUTF8LBS pleaseSubmitFragment
+              <> noscriptFormRendered
+          ]
 
     -- Currently the main package page is thrown together by querying a bunch
     -- of features about their attributes for the given package. It'll need
@@ -579,6 +610,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           documentationFeature reportsFeature realpkg
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
+        analyticsPixels <- getPackageAnalyticsPixels pkgname
         let
           idAndReport = fmap (\(rptId, rpt, _) -> (rptId, rpt)) rptStats
           install = getInstall $ fmap (fst &&& BR.installOutcome . snd) idAndReport
@@ -609,6 +641,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "sbaseurl"          $= show (serverBaseURI { URI.uriScheme = "https:" })
           , "cabalVersion"      $= display cabalVersion
           , "tags"              $= (renderTags tags)
+          , "analyticsPixels"   $= map analyticsPixelUrl (Set.toList analyticsPixels)
           , "versions"          $= (PagesNew.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
           , "totalDownloads"    $= totalDown
@@ -684,7 +717,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveMaintainPage dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
-      guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup, InGroup adminGroup]
       cacheControl [Public, NoCache] (etagFromHash (length pkgs))
       template <- getTemplate templates "maintain.html"
       return $ toResponse $ template
@@ -952,7 +985,7 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
     serveUploadDocumentation dpath = do
         pkgid <- packageInPath dpath
         uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded"
           [ paragraph << [toHtml "Successfully uploaded documentation for ", packageLink pkgid, toHtml "!"]
           ]
 
@@ -960,7 +993,7 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
     serveDeleteDocumentation dpath = do
         pkgid <- packageInPath dpath
         deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted"
           [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
           ]
 
@@ -1006,7 +1039,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
               Nothing -> "Not yet tried."
               Just BR.BuildOK -> "Built successfully."
               Just (BR.BuildFailCnt 1) -> "1 consecutive failure."
-              Just (BR.BuildFailCnt c) -> show(c) ++ " consecutive failures."
+              Just (BR.BuildFailCnt c) -> show c ++ " consecutive failures."
         return $ toResponse $ template
           [ "pkgid"   $= (pkgid :: PackageIdentifier)
           , "reports" $= reports
@@ -1057,6 +1090,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> DocumentationFeature
                  -> TarIndexCacheFeature
                  -> PackageCandidatesFeature
+                 -> UserFeature
                  -> Templates
                  -> HtmlCandidates
 mkHtmlCandidates utilities@HtmlUtilities{..}
@@ -1064,10 +1098,11 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
-                 UploadFeature{ guardAuthorisedAsMaintainer, guardAuthorisedAsMaintainerOrTrustee }
+                 UploadFeature{..}
                  DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
+                 UserFeature{ guardAuthorised, guardAuthorised_ }
                  templates = HtmlCandidates{..}
   where
     candidates     = candidatesResource
@@ -1175,6 +1210,9 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                 ]
           ]
 
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+
     serveCandidateMaintain :: DynamicPath -> ServerPartE Response
     serveCandidateMaintain dpath = do
       pkgid <- packageInPath dpath
@@ -1241,6 +1279,8 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       let render = candPackageRender candRender
       return $ toResponse $ dependenciesPage True render "docs"
 
+    guardAuthorisedAsMaintainer pkgName = guardAuthorised [InGroup . maintainersGroup $ pkgName]
+
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
@@ -1273,11 +1313,11 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
           [] -> [ toHtml "No candidates exist for ", packageNameLink pkgname, toHtml ". Upload one for "
                 , anchor ! [href $ renderResource candPkgUp [display pkgname]] << "this"
                 , toHtml " or "
-                , anchor ! [href $ "/packages/candidates/upload"] << "another"
+                , anchor ! [href "/packages/candidates/upload"] << "another"
                 , toHtml " package?"
                 ]
           _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg)
-                , anchor ! [href $ delUri]<< "Delete All Candidates"]
+                , anchor ! [href delUri]<< "Delete All Candidates"]
 
     servePostPublish :: DynamicPath -> ServerPartE Response
     servePostPublish dpath = do
@@ -1310,7 +1350,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
     serveCandUploadDocumentation dpath = do
         pkgid <- packageInPath dpath
         uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded"
           [ paragraph << [toHtml "Successfully uploaded documentation for ", candidateLink pkgid, toHtml "!"]
           ]
 
@@ -1318,7 +1358,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
     serveCandDeleteDocumentation dpath = do
         pkgid <- packageInPath dpath
         deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted"
           [ paragraph << [toHtml "Successfully deleted documentation for ", candidateLink pkgid, toHtml "!"]
           ]
 
@@ -1441,7 +1481,7 @@ mkHtmlPreferred HtmlUtilities{..}
     packagePrefAbout maybeEdit pkgname =
       [ paragraph <<
           [ anchor ! [href $ preferredUri versions ""] << "Preferred and deprecated versions"
-          , toHtml $ " can be used to influence Cabal's decisions about which versions of "
+          , toHtml " can be used to influence Cabal's decisions about which versions of "
           , packageNameLink pkgname
           , toHtml " to install. If a range of versions is preferred, it means that the installer won't install a non-preferred package version unless it is explicitly specified or if it's the only choice the installer has. Deprecating a version adds a range which excludes just that version. All of this information is collected in the "
           , anchor ! [href "/packages/preferred-versions"] << "preferred-versions"
@@ -1575,7 +1615,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
     serveDownloadTop :: DynamicPath -> ServerPartE Response
     serveDownloadTop _ = do
         pkgList <- sortedPackages `liftM` recentPackageDownloads
-        return $ toResponse $ Resource.XHtml $ hackagePage "Total downloads" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Total downloads"
           [ h2 << "Downloaded packages"
           , thediv << table << downTableRows pkgList
           ]
@@ -1584,7 +1624,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
             [ tr << [ th << "Package name", th << "Downloads" ] ] ++
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << packageNameLink pkgname
-                , td << [ toHtml $ (show count) ] ]
+                , td << [ toHtml $ show count ] ]
             | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
     sortedPackages :: RecentDownloads -> [(PackageName, Int)]
@@ -1650,7 +1690,7 @@ mkHtmlTags HtmlUtilities{..}
         tagList <- queryGetTagList
         let withCounts = filter ((>0) . snd) . map (\(tg, pkgs) -> (tg, Set.size pkgs)) $ tagList
             countSort = sortBy (flip compare `on` snd) withCounts
-        return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags"
           [ h2 << "Hackage tags"
           , h4 << "By name"
           , paragraph ! [theclass "toc"] << (intersperse (toHtml ", ") $ map (tagItem . fst) withCounts)
@@ -1776,6 +1816,134 @@ mkHtmlTags HtmlUtilities{..}
 -- | Find a TagName inside a path.
 tagInPath :: forall m a. (MonadPlus m, FromReqURI a) => DynamicPath -> m a
 tagInPath dpath = maybe mzero return (lookup "tag" dpath >>= fromReqURI)
+
+{-------------------------------------------------------------------------------
+  Tracking pixels
+-------------------------------------------------------------------------------}
+
+newtype HtmlAnalyticsPixels = HtmlAnalyticsPixels {
+    htmlAnalyticsPixelsResources :: [Resource]
+  }
+
+mkHtmlAnalyticsPixels :: HtmlUtilities -> CoreFeature -> UserFeature -> UploadFeature -> AnalyticsPixelsFeature -> Templates -> HtmlAnalyticsPixels
+mkHtmlAnalyticsPixels HtmlUtilities{..} CoreFeature{..} UserFeature{..} UploadFeature{..} AnalyticsPixelsFeature{..} templates = HtmlAnalyticsPixels{..}
+  where
+    CoreResource{..} = coreResource
+
+    htmlAnalyticsPixelsResources = [
+        (extendResource analyticsPixelsResource) {
+            resourceGet = [("html", servePackageAnalyticsPixels)]
+          , resourcePost = [("html", serveAddPackageAnalyticsPixel)]
+          , resourceDelete = [("html", serveRemovePackageAnalyticsPixel)]
+        },
+        (extendResource userAnalyticsPixelsResource) {
+            resourceGet = [("html", serveUserPackageAnalyticsPixels)]
+          , resourcePost = [("html", serveAddUserPackageAnalyticsPixel)]
+          , resourceDelete = [("html", serveRemoveUserPackageAnalyticsPixel)]
+        }
+      ]
+
+    serveUserPackageAnalyticsPixels :: DynamicPath -> ServerPartE Response
+    serveUserPackageAnalyticsPixels dpath = do
+        uname <- userNameInPath dpath
+        userPackagesAnalyticsPixelsHtml uname
+
+    serveAddUserPackageAnalyticsPixel :: DynamicPath -> ServerPartE Response
+    serveAddUserPackageAnalyticsPixel =
+      serveModifyUserPackageAnalyticsPixel $ \pkgname pixel -> do
+        _ <- addPackageAnalyticsPixel pkgname pixel
+        pure ()
+
+    serveRemoveUserPackageAnalyticsPixel :: DynamicPath -> ServerPartE Response
+    serveRemoveUserPackageAnalyticsPixel =
+      serveModifyUserPackageAnalyticsPixel removePackageAnalyticsPixel
+
+    serveModifyUserPackageAnalyticsPixel
+      :: (PackageName -> AnalyticsPixel -> ServerPartE ())
+      -> DynamicPath
+      -> ServerPartE Response
+    serveModifyUserPackageAnalyticsPixel modifyPixel dpath = do
+        uname   <- userNameInPath dpath
+        request <-
+            getDataFn $ (,)
+                <$> look "package"
+                <*> look "analytics-pixel"
+        case request of
+            Left errs ->
+                errBadRequest "Error adding new tracking pixel"
+                    ((MText "Tracking pixel url missing.") : map MText errs)
+            Right (pkgnameStr, analyticsPixel) -> do
+                let pkgname = mkPackageName pkgnameStr
+                    pixel   = AnalyticsPixel (T.pack analyticsPixel)
+                guardAuthorisedAsMaintainerOrTrustee pkgname
+                modifyPixel pkgname pixel
+                userPackagesAnalyticsPixelsHtml uname
+
+    servePackageAnalyticsPixels :: DynamicPath -> ServerPartE Response
+    servePackageAnalyticsPixels dpath = do
+        pkgname <- packageInPath dpath
+        packageAnalyticsPixelsHtml pkgname
+
+    serveAddPackageAnalyticsPixel :: DynamicPath -> ServerPartE Response
+    serveAddPackageAnalyticsPixel = do
+        serveModifyPackageAnalyticsPixel $ \pkgname pixel -> do
+            _ <- addPackageAnalyticsPixel pkgname pixel
+            pure ()
+
+    serveRemovePackageAnalyticsPixel :: DynamicPath -> ServerPartE Response
+    serveRemovePackageAnalyticsPixel =
+      serveModifyPackageAnalyticsPixel removePackageAnalyticsPixel
+
+    serveModifyPackageAnalyticsPixel
+      :: (PackageName -> AnalyticsPixel -> ServerPartE ())
+      -> DynamicPath
+      -> ServerPartE Response
+    serveModifyPackageAnalyticsPixel modifyPixel dpath = do
+        pkgname <- packageInPath dpath
+        guardValidPackageName pkgname
+        guardAuthorisedAsMaintainerOrTrustee pkgname
+        request <- getDataFn (look "analytics-pixel")
+        case request of
+            Left errs ->
+                errBadRequest "Error adding new tracking pixel"
+                    ((MText "Tracking pixel url missing.") : map MText errs)
+            Right analyticsPixel -> do
+              let pixel = AnalyticsPixel (T.pack analyticsPixel)
+              modifyPixel pkgname pixel
+              packageAnalyticsPixelsHtml pkgname
+
+    packageAnalyticsPixelsHtml :: PackageName -> ServerPartE Response
+    packageAnalyticsPixelsHtml pkgname = do
+        analyticsPixels <- getPackageAnalyticsPixels pkgname
+        template <- getTemplate templates "analytics-pixels-page.html"
+        return $ toResponse $ template
+            [ "pkgname" $= pkgname,
+              "AnalyticsPixels" $= map analyticsPixelUrl (Set.toList analyticsPixels)
+            ]
+
+    userPackagesAnalyticsPixelsHtml :: UserName -> ServerPartE Response
+    userPackagesAnalyticsPixelsHtml uname = do
+        uid  <- lookupUserName uname
+        -- Get all the packages the user has access to
+        uris <- getGroupIndex uid
+        pkgs <- foldMap (\uri -> do
+            groupDesc <- getIndexDesc uri
+            let mpackageName = fmap fst (Group.groupEntity groupDesc)
+            pure $ maybeToList (fmap mkPackageName mpackageName)
+          )
+          uris
+        pkgpixels <- forM pkgs $ \pkgname -> do
+            pixels <- getPackageAnalyticsPixels pkgname
+            pure (pkgname, map analyticsPixelUrl (Set.toList pixels))
+        template <- getTemplate templates "user-analytics-pixels-page.html"
+        return $ toResponse $ template
+            [   "username"  $= uname,
+                "pkgs"      $= pkgs,
+                "pkgpixels" $= filter (not . null . snd) pkgpixels
+            ]
+
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
 
 {-------------------------------------------------------------------------------
   Groups

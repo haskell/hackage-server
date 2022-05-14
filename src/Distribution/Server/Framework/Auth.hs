@@ -3,7 +3,7 @@
 -- We authenticate clients using HTTP Basic or Digest authentication and we
 -- authorise users based on membership of particular user groups.
 --
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE LambdaCase, PatternGuards #-}
 module Distribution.Server.Framework.Auth (
     -- * Checking authorisation
     guardAuthorised,
@@ -22,6 +22,7 @@ module Distribution.Server.Framework.Auth (
     -- ** Special cases
     guardAuthenticated, checkAuthenticated,
     guardPriviledged,   checkPriviledged,
+    guardInAnyGroup,
     PrivilegeCondition(..),
 
     -- ** Errors
@@ -127,6 +128,17 @@ data AuthType = BasicAuth | DigestAuth | AuthToken
 data PrivilegeCondition = InGroup    Group.UserGroup
                         | IsUserId   UserId
                         | AnyKnownUser
+
+guardInAnyGroup :: Users.Users -> UserId -> [Group.UserGroup] -> ServerPartE ()
+guardInAnyGroup _ _ [] =
+  fail "Group list is empty, this is not meant to happen"
+guardInAnyGroup users uid groups = do
+  allok <- checkPriviledged users uid (map InGroup groups)
+  let groupTitles = map (Group.groupTitle . Group.groupDesc) groups
+      errMsg = "Access denied, you must be member of either of the following groups: "
+               <> show groupTitles
+  when (not allok) $
+    errForbidden "Missing group membership" [MText errMsg]
 
 -- | Check that a given user is permitted to perform certain privileged
 -- actions.
@@ -416,26 +428,29 @@ data AuthError = NoAuthError
 
 authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
 authErrorResponse realm autherr = do
-    digestHeader   <- liftIO (headerDigestAuthChallenge realm)
-    return $! (toErrorResponse autherr) { errorHeaders = [digestHeader] }
-  where
-    toErrorResponse :: AuthError -> ErrorResponse
-    toErrorResponse NoAuthError =
-      ErrorResponse 401 [] "No authorization provided" []
+    digestHeader <- liftIO (headerDigestAuthChallenge realm)
 
-    toErrorResponse UnrecognizedAuthError =
-      ErrorResponse 400 [] "Authorization scheme not recognized" []
+    let
+      toErrorResponse :: AuthError -> ErrorResponse
+      toErrorResponse = \case
+        NoAuthError ->
+          ErrorResponse 401 [digestHeader] "No authorization provided" []
 
-    toErrorResponse InsecureAuthError =
-      ErrorResponse 400 [] "Authorization scheme not allowed over plain http"
-        [ MText $ "HTTP Basic and X-ApiKey authorization methods leak "
-               ++ "information when used over plain HTTP. Either use HTTPS "
-               ++ "or if you must use plain HTTP for authorised requests then "
-               ++ "use HTTP Digest authentication." ]
+        UnrecognizedAuthError ->
+          ErrorResponse 400 [digestHeader] "Authorization scheme not recognized" []
 
-    toErrorResponse BadApiKeyError =
-      ErrorResponse 401 [] "Bad auth token" []
+        InsecureAuthError ->
+          ErrorResponse 400 [digestHeader] "Authorization scheme not allowed over plain http"
+            [ MText $ "HTTP Basic and X-ApiKey authorization methods leak "
+                   ++ "information when used over plain HTTP. Either use HTTPS "
+                   ++ "or if you must use plain HTTP for authorised requests then "
+                   ++ "use HTTP Digest authentication." ]
 
-    -- we don't want to leak info for the other cases, so same message for them all:
-    toErrorResponse _ =
-      ErrorResponse 401 [] "Username or password incorrect" []
+        BadApiKeyError ->
+          ErrorResponse 401 [digestHeader] "Bad auth token" []
+
+        -- we don't want to leak info for the other cases, so same message for them all:
+        _ ->
+          ErrorResponse 401 [digestHeader] "Username or password incorrect" []
+
+    return $! toErrorResponse autherr

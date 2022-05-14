@@ -502,7 +502,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- Queries
     --
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
-    queryGetPackageIndex = return . packageIndex =<< queryState packagesState GetPackagesState
+    queryGetPackageIndex = packageIndex <$> queryState packagesState GetPackagesState
 
     queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
     queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball
@@ -683,8 +683,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     servePackageList :: DynamicPath -> ServerPartE Response
     servePackageList _ = do
       pkgIndex <- queryGetPackageIndex
-      let pkgs = PackageIndex.allPackagesByName pkgIndex
-          list = [display . pkgName . pkgInfoId $ pkg | pkg <- map head pkgs]
+      let pkgNames = PackageIndex.allPackageNames pkgIndex
+          list = map display pkgNames
       -- We construct the JSON manually so that we control what it looks like;
       -- in particular, we use objects for the packages so that we can add
       -- additional fields later without (hopefully) breaking clients
@@ -753,11 +753,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     deauth _ = do
       return $ (toResponse ("<script>window.location='/'</script>"::String)) {
           rsCode = 401
-        , rsHeaders   = mkHeaders ([("Content-Type",  "text/html")])
+        , rsHeaders   = mkHeaders [("Content-Type",  "text/html")]
       }
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 -- | Whether a package exists in the given package index.
 packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)
 -- | Whether a particular package version exists in the given package index.
-packageIdExists pkgs pkg = maybe False (const True) $ PackageIndex.lookupPackageId pkgs (packageId pkg)
+packageIdExists pkgs pkg = isJust $ PackageIndex.lookupPackageId pkgs (packageId pkg)

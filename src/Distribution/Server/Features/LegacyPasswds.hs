@@ -152,7 +152,7 @@ updatePasswdsBackup upasswds = RestoreBackup {
   }
 
 importHtPasswds :: CSV -> Restore [(UserId, LegacyAuth.HtPasswdHash)]
-importHtPasswds = sequence . map fromRecord . drop 2
+importHtPasswds = mapM fromRecord . drop 2
   where
     fromRecord :: Record -> Restore (UserId, LegacyAuth.HtPasswdHash)
     fromRecord [idStr, htpasswdStr] = do

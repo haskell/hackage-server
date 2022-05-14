@@ -129,9 +129,9 @@ loadTarEntry tarfile off = do
 serveTarEntry :: FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
 serveTarEntry tarfile off fname = do
     Right (size, body) <- loadTarEntry tarfile off
-    return . ((setHeader "Content-Length" (show size)) .
-              (setHeader "Content-Type" mimeType)) $
-              resultBS 200 body
+    return . setHeader "Content-Length" (show size)
+           . setHeader "Content-Type" mimeType
+           $ resultBS 200 body
   where mimeType = mime fname
 
 constructTarIndexFromFile :: FilePath -> IO TarIndex

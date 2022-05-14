@@ -73,10 +73,10 @@ instance MemSize (Some Sec.Key) where
 instance MemSize (Sec.Key typ) where
   memSize (Sec.KeyEd25519 pub pri) = memSize pub + memSize pri
 
-instance MemSize (Ed25519.PublicKey) where
+instance MemSize Ed25519.PublicKey where
   memSize = memSize . Ed25519.unPublicKey
 
-instance MemSize (Ed25519.SecretKey) where
+instance MemSize Ed25519.SecretKey where
   memSize = memSize . Ed25519.unSecretKey
 
 instance MemSize Sec.FileVersion where

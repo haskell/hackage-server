@@ -236,7 +236,7 @@ renderDetailedDependencies pkgRender =
     list :: [Html] -> Html
     list items = thediv ! [identifier "detailed-dependencies"] << unordList items
 
-    renderComponent :: (CondBranch ConfVar [Dependency] IsBuildable)
+    renderComponent :: CondBranch ConfVar [Dependency] IsBuildable
                     -> Maybe Html
     renderComponent (CondBranch condition then' else')
         | Just thenHtml <- render then' =

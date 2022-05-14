@@ -1,5 +1,3 @@
-{-# LANGUAGE PatternGuards #-}
-
 module Distribution.Server.Features.Upload.Backup (
     maintainerBackup,
     maintToExport,
@@ -39,7 +37,7 @@ updateMaintainers mains = RestoreBackup {
         _ ->
           return (updateMaintainers mains)
   , restoreFinalize =
-      return $ PackageMaintainers (mains)
+      return $ PackageMaintainers mains
   }
 
 importMaintainers :: CSV -> Map PackageName UserIdSet -> Restore (Map PackageName UserIdSet)

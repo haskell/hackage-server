@@ -3,10 +3,12 @@
 
     <head>
         $hackageCssTheme()$
+        $if(!noDatatable)$
         <script src="/static/jquery.min.js"></script>
         <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.11.4/sp-1.4.0/datatables.min.css"/>
 
         <script type="text/javascript" src="https://cdn.datatables.net/v/dt/dt-1.11.4/sp-1.4.0/datatables.min.js"></script>
+        $endif$
         <title>All packages by name | Hackage</title>
     </head>
 
@@ -24,7 +26,7 @@
                         <th><div style="width:50px"><span title="(0-3)">Rating</span></div></th>
                         <th><div style="min-width:160px">Description</div></th>
                         <th><div style="width:140px">Tags</div></th>
-                        <th><div style="width:80px">Last U/L</th>
+                        <th><div style="width:80px">Last U/L</div></th>
                         <th><div style="width:100px">Maintainer</div></th>
                     </tr>
                 </thead>
@@ -34,6 +36,7 @@
             </table>
             $footer$
         </div>
+        $if(!noDatatable)$
         <script>
             function filterGlobal() {
                 \$('#table').DataTable().search(
@@ -76,6 +79,7 @@
             });
 
         </script>
+        $endif$
     </body>
 
 </html>

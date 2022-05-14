@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
-             ScopedTypeVariables, TypeFamilies, BangPatterns, CPP,
+             ScopedTypeVariables, TypeFamilies, CPP,
              RecordWildCards #-}
 -----------------------------------------------------------------------------
 -- |
@@ -43,7 +43,7 @@ import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize
 import System.FilePath ((</>))
-import Control.Exception (handle, throwIO, evaluate, bracket)
+import Control.Exception (handle, throwIO, evaluate)
 import Data.SafeCopy
 import System.Directory
 import System.IO
@@ -82,7 +82,7 @@ blobETag :: BlobId -> ETag
 blobETag = ETag . blobMd5
 
 readBlobId :: String -> Either String BlobId
-readBlobId = either Left (Right . BlobId) . readDigest
+readBlobId = fmap BlobId . readDigest
 
 instance SafeCopy BlobId where
   version = 2
@@ -160,7 +160,7 @@ hBlobId :: Handle -> IO BlobId
 hBlobId hnd = evaluate . BlobId . md5 =<< BSL.hGetContents hnd
 
 fileBlobId :: FilePath -> IO BlobId
-fileBlobId file = bracket (openBinaryFile file ReadMode) hClose hBlobId
+fileBlobId file = withBinaryFile file ReadMode hBlobId
 
 withIncoming :: BlobStorage -> BSL.ByteString
               -> (FilePath -> BlobId -> IO (a, Bool))

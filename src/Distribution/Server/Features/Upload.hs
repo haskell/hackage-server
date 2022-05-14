@@ -59,11 +59,6 @@ data UploadFeature = UploadFeature {
     -- | The group of maintainers for a given package.
     maintainersGroup   :: PackageName -> UserGroup,
 
-    -- | Requiring being logged in as the maintainer of a package.
-    guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE Users.UserId,
-    -- | Requiring being logged in as the maintainer of a package or a trustee.
-    guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
-
     -- | Takes an upload request and, depending on the result of the
     -- passed-in function, either commits the uploaded tarball to the blob
     -- storage or throws it away and yields an error.
@@ -295,15 +290,6 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploaderDescription :: GroupDescription
     uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders are allowed to upload packages. Note that if a package already exists then you also need to be in the maintainer group for that package." }
 
-    guardAuthorisedAsMaintainer :: PackageName -> ServerPartE Users.UserId
-    guardAuthorisedAsMaintainer pkgname =
-      guardAuthorised [InGroup (maintainersGroup pkgname)]
-
-    guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE ()
-    guardAuthorisedAsMaintainerOrTrustee pkgname =
-      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
-
-
     ----------------------------------------------------
 
     -- This is the upload function. It returns a generic result for multiple formats.
@@ -366,7 +352,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                          else return Nothing
 
                 (False,PackageIndex.Ambiguous mps) -> do
-                      let matchingPackages = concat . map (take 1) $ mps
+                      let matchingPackages = concatMap (take 1) mps
                       groups <- mapM (queryUserGroup . maintainersGroup . packageName) matchingPackages
                       if not . any (uid `Group.member`) $ groups
                          then uploadError (caseClash matchingPackages)
@@ -405,7 +391,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                         "You are not an authorized package uploader. Please contact the server "
                      ++ "trustees at hackage-trustees@haskell.org to request to be added to the Uploaders group."
                      ]
-        caseClash pkgs = [MText $
+        caseClash pkgs = [MText
                          "Package(s) with the same name as this package, modulo case, already exist: "
                          ]
                       ++ intersperse (MText ", ") [ MLink pn ("/package/" ++ pn)

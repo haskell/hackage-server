@@ -59,6 +59,10 @@ extra-source-files:
   tests/unpack-checks/bad-specver-package-0/Main.hs
   tests/unpack-checks/bad-specver-package-0/Setup.hs
   tests/unpack-checks/bad-specver-package-0/bad-specver-package.cabal
+  tests/unpack-checks/LANGUAGE-GHC-9.2/LICENSE
+  tests/unpack-checks/LANGUAGE-GHC-9.2/Main.hs
+  tests/unpack-checks/LANGUAGE-GHC-9.2/Setup.hs
+  tests/unpack-checks/LANGUAGE-GHC-9.2/LANGUAGE-GHC.cabal
 
 source-repository head
   type: git
@@ -242,6 +246,7 @@ library lib-server
     Distribution.Server.Util.DocMeta
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
+    Distribution.Server.Util.Validators
     -- [unused] Distribution.Server.Util.TarIndex
     Distribution.Server.Util.GZip
     Distribution.Server.Util.ContentType
@@ -343,6 +348,8 @@ library lib-server
       Distribution.Server.Features.Tags
       Distribution.Server.Features.Tags.Backup
       Distribution.Server.Features.Tags.State
+      Distribution.Server.Features.AnalyticsPixels
+      Distribution.Server.Features.AnalyticsPixels.State
       Distribution.Server.Features.UserDetails
       Distribution.Server.Features.UserSignup
       Distribution.Server.Features.StaticFiles

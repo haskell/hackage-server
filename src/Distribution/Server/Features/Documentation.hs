@@ -10,10 +10,11 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.Documentation.State
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.BuildReports
-import Distribution.Version ( Version )
+import Distribution.Version (Version, nullVersion)
 
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
@@ -28,7 +29,6 @@ import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Text
 import Distribution.Package
-import Distribution.Version (nullVersion)
 import qualified Distribution.Parsec as P
 
 import qualified Data.ByteString.Char8 as C
@@ -81,6 +81,7 @@ initDocumentationFeature :: String
                              -> UploadFeature
                              -> TarIndexCacheFeature
                              -> ReportsFeature
+                             -> UserFeature
                              -> IO DocumentationFeature)
 initDocumentationFeature name
                          env@ServerEnv{serverStateDir} = do
@@ -90,9 +91,9 @@ initDocumentationFeature name
     -- Hooks
     documentationChangeHook <- newHook
 
-    return $ \core getPackages upload tarIndexCache reportsCore -> do
+    return $ \core getPackages upload tarIndexCache reportsCore user -> do
       let feature = documentationFeature name env
-                                         core getPackages upload tarIndexCache reportsCore
+                                         core getPackages upload tarIndexCache reportsCore user
                                          documentationState
                                          documentationChangeHook
       return feature
@@ -111,7 +112,7 @@ documentationStateComponent name stateDir = do
     }
   where
     dumpBackup doc =
-        let exportFunc (pkgid, blob) = BackupBlob ([display pkgid, "documentation.tar"]) blob
+        let exportFunc (pkgid, blob) = BackupBlob [display pkgid, "documentation.tar"] blob
         in map exportFunc . Map.toList $ documentation doc
 
     updateDocumentation :: Documentation -> RestoreBackup Documentation
@@ -137,6 +138,7 @@ documentationFeature :: String
                      -> UploadFeature
                      -> TarIndexCacheFeature
                      -> ReportsFeature
+                     -> UserFeature
                      -> StateComponent AcidState Documentation
                      -> Hook PackageId ()
                      -> DocumentationFeature
@@ -153,6 +155,7 @@ documentationFeature name
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      ReportsFeature{..}
+                     UserFeature{ guardAuthorised_ }
                      documentationState
                      documentationChangeHook
   = DocumentationFeature{..}
@@ -223,7 +226,7 @@ documentationFeature name
         parseVersion' (Just k) = P.simpleParsec k
 
         parsePkgs :: String -> [PackageIdentifier]
-        parsePkgs pkgsStr = map fromJust $ filter isJust $ map (P.simpleParsec . C.unpack) $ C.split ',' (C.pack pkgsStr)
+        parsePkgs pkgsStr = mapMaybe (P.simpleParsec . C.unpack) (C.split ',' (C.pack pkgsStr))
 
         isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
             | nullVersion == v =
@@ -292,6 +295,9 @@ documentationFeature name
       -- for old documentation if we're going to throw it away anyway.
       | t > 3600*24*4 = maxAgeDays 1
       | otherwise = maxAgeSeconds $ 60*10 + ceiling (exp (3.28697e-5 * fromInteger (ceiling t) :: Double))
+
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
 
     uploadDocumentation :: DynamicPath -> ServerPartE Response
     uploadDocumentation dpath = do

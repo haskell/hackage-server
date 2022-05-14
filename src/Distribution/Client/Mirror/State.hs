@@ -11,7 +11,7 @@ module Distribution.Client.Mirror.State (
 -- stdlib
 import Control.Exception
 import Control.Monad
-import Data.Maybe (catMaybes)
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import Network.URI
 import System.Directory
@@ -115,7 +115,7 @@ readPkgProblemFile file = do
   exists <- doesFileExist file
   if exists
     then evaluate . Set.fromList
-                  . catMaybes . map simpleParse . lines
+                  . mapMaybe simpleParse . lines
                 =<< readFile file
     else return Set.empty
 

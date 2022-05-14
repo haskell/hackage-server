@@ -19,6 +19,7 @@ import Distribution.Server.Features.PreferredVersions.Backup
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.Users
 import Distribution.Server.Features.Tags
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -33,7 +34,7 @@ import           Control.Applicative        (optional)
 import           Data.Aeson                 (Value(..))
 import           Data.Function              (fix)
 import           Data.List                  (intercalate, find)
-import           Data.Maybe                 (isJust, fromMaybe, catMaybes)
+import           Data.Maybe                 (isJust, fromMaybe, catMaybes, mapMaybe)
 import           Data.Time.Clock            (getCurrentTime)
 import qualified Data.Aeson.Key             as Key
 import qualified Data.Aeson.KeyMap          as KeyMap
@@ -91,15 +92,16 @@ initVersionsFeature :: ServerEnv
                     -> IO (CoreFeature
                         -> UploadFeature
                         -> TagsFeature
+                        -> UserFeature
                         -> IO VersionsFeature)
 initVersionsFeature env@ServerEnv{serverStateDir} = do
     preferredState <- preferredStateComponent False serverStateDir
     deprecatedHook <- newHook
 
-    return $ \core upload tags -> do
+    return $ \core upload tags user -> do
 
       let feature = versionsFeature env
-                                    core upload tags
+                                    core upload tags user
                                     preferredState deprecatedHook
       return feature
 
@@ -121,6 +123,7 @@ versionsFeature :: ServerEnv
                 -> CoreFeature
                 -> UploadFeature
                 -> TagsFeature
+                -> UserFeature
                 -> StateComponent AcidState PreferredVersions
                 -> Hook (PackageName, Maybe [PackageName]) ()
                 -> VersionsFeature
@@ -128,6 +131,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
                 CoreFeature{..}
                 UploadFeature{..}
                 TagsFeature{..}
+                UserFeature{ guardAuthorised_ }
                 preferredState
                 deprecatedHook
   = VersionsFeature{..}
@@ -199,7 +203,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
         versionType DeprecatedVersion = "deprecated-version"
         versionType UnpreferredVersion = "unpreferred-version"
       return . toResponse . object
-        $ map (\(i, vs) -> (versionType $ i, array $ map (string . display) vs))
+        $ map (\(i, vs) -> (versionType i, array $ map (string . display) vs))
           $ Map.toList classifiedVersions
 
     handlePackagesDeprecatedGet :: DynamicPath -> ServerPartE Response
@@ -224,6 +228,9 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
             , ("in-favour-of", array [ string $ display pkg
                                      | pkg <- fromMaybe [] mdep ])
             ]
+
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
 
     handlePackageDeprecatedPut :: DynamicPath -> ServerPartE Response
     handlePackageDeprecatedPut dpath = do
@@ -265,7 +272,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     withPackagePreferred pkgid func = do
       pkgIndex <- queryGetPackageIndex
       case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
-            []   ->  packageError [MText $ "No such package in package index. ", MLink "Search for related terms instead?" $ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
+            []   ->  packageError [MText "No such package in package index. ", MLink "Search for related terms instead?" $ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
             pkgs  | pkgVersion pkgid == nullVersion -> queryState preferredState (GetPreferredInfo $ packageName pkgid) >>= \info -> do
                 let rangeToCheck = sumRange info
                 case maybe id (\r -> filter (flip withinRange r . packageVersion)) rangeToCheck pkgs of
@@ -312,7 +319,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     updateIndexPackagePreferredVersions :: MonadIO m => PackageName -> PreferredInfo -> m ()
     updateIndexPackagePreferredVersions pkgname prefinfo = do
-      now <- liftIO $ getCurrentTime
+      now <- liftIO getCurrentTime
       let prefEntryName = display pkgname </> "preferred-versions"
           prefContent   = fromMaybe "" $
                           formatSinglePreferredVersions pkgname prefinfo
@@ -327,10 +334,10 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
       case isDepr of
           Just {} -> do
               depr <- optional $ fmap words $ look "by"
-              case sequence . map simpleParse =<< depr of
+              case mapM simpleParse =<< depr of
                   Just deprs -> case filter (null . PackageIndex.lookupPackageName index) deprs of
-                      [] -> case any (== pkgname) deprs of
-                              True -> deprecatedError $ "You can not deprecate a package in favor of itself!"
+                      [] -> case pkgname `elem` deprs of
+                              True -> deprecatedError "You can not deprecate a package in favor of itself!"
                               _ -> do
                                 doUpdates (Just deprs)
                                 return True
@@ -344,7 +351,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
         doUpdates deprs = do
             void $ updateState preferredState $ SetDeprecatedFor pkgname deprs
             runHook_ deprecatedHook (pkgname, deprs)
-            liftIO $ updateDeprecatedTags
+            liftIO updateDeprecatedTags
 
     renderPrefInfo :: PreferredInfo -> PreferredRender
     renderPrefInfo pref = PreferredRender {
@@ -384,7 +391,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     formatGlobalPreferredVersions :: [(PackageName, PreferredInfo)] -> String
     formatGlobalPreferredVersions =
         unlines . (topText++)
-                . catMaybes . map (uncurry formatSinglePreferredVersions)
+                . mapMaybe (uncurry formatSinglePreferredVersions)
       where
         topText =
           [ "-- A global set of preferred versions."

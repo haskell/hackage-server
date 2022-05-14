@@ -215,7 +215,8 @@ enableRange = do
     -- awkward; we'd have to parse the original Content-Length header to find
     -- out the original length.
     rangeFilter :: (Int64, Int64) -> Response -> Response
-    rangeFilter (fr, to) r =
+    rangeFilter _ r@SendFile{} = r
+    rangeFilter (fr, to) r@Response{} =
         setHeader "Content-Length" (show rangeLen)
       . setHeaderBS (BS.C8.pack "Content-Range") (contentRange fr to fullLen)
       . removeResponseHeader "Content-MD5"

@@ -89,7 +89,6 @@ import Text.StringTemplate ()
 import Text.StringTemplate.Classes
          ( SElem(..), ToSElem(..) )
 
-import Data.String (fromString)
 import Data.Aeson
 import Data.Functor.Identity (Identity)
 import Data.List
@@ -607,10 +606,10 @@ data BuildFiles = BuildFiles {
 instance Data.Aeson.FromJSON BuildFiles where
   parseJSON = withObject "buildFiles" $ \o ->
     BuildFiles
-      <$> o .:? fromString "report"
-      <*> o .:? fromString "log"
-      <*> o .:? fromString "coverage"
-      <*> o .: fromString "buildFail"
+      <$> o .:? "report"
+      <*> o .:? "log"
+      <*> o .:? "coverage"
+      <*> o .: "buildFail"
 
 instance Data.Aeson.ToJSON BuildFiles where
   toJSON p = object [
@@ -631,9 +630,9 @@ instance Data.Aeson.ToJSON PkgDetails where
   toJSON p = object [
     "pkgid"      .= (DT.display $ pkid p::String),
     "docs"       .= docs p,
-    "failCnt"    .= failCnt  p,
-    "buildTime"  .= buildTime  p,
-    "ghcId"     .= (k $ ghcId p) ]
+    "failCnt"    .= failCnt p,
+    "buildTime"  .= buildTime p,
+    "ghcId"      .= k (ghcId p) ]
     where
       k (Just a) = Just $ DT.display a
       k Nothing = Nothing
@@ -641,11 +640,11 @@ instance Data.Aeson.ToJSON PkgDetails where
 instance Data.Aeson.FromJSON PkgDetails where
   parseJSON = withObject "pkgDetails" $ \o ->
     PkgDetails
-      <$> ((\k -> maybe (fail $ "failed to parse "<>k) pure $ P.simpleParsec k) =<< (o .: (fromString "pkgid")))
-      <*> o .: fromString "docs"
-      <*> o .:? fromString "failCnt"
-      <*> o .:? fromString "buildTime"
-      <*> fmap parseVersion (o .:? (fromString "ghcId"))
+      <$> ((\k -> maybe (fail $ "failed to parse "<>k) pure $ P.simpleParsec k) =<< (o .: "pkgid"))
+      <*> o .: "docs"
+      <*> o .:? "failCnt"
+      <*> o .:? "buildTime"
+      <*> fmap parseVersion (o .:? "ghcId")
     where
       parseVersion :: Maybe String -> Maybe Version
       parseVersion Nothing = Nothing

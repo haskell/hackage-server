@@ -36,14 +36,18 @@ addEventListener('popstate', async (evt) => {
 });
 
 const get = () => new Promise((resolve,reject) => {
-    const formData = new FormData();
     const obj =
       {   page: state.page
-        , sort: {column: state.column, direction: state.direction}
+        , sortColumn: state.column
+        , sortDirection: state.direction
         , searchQuery: state.searchQuery
       };
-    formData.append('browseOptions', JSON.stringify(obj));
-    fetch('/packages/search', {method:'POST', body: formData}).then(async (response) => {
+    const fetchOptions =
+      {   method: 'POST'
+        , headers: {'content-type': 'application/json'}
+        , body: JSON.stringify(obj)
+      };
+    fetch('/packages/search', fetchOptions).then(async (response) => {
       if (!response.ok) {
         const el = d.querySelector("#fatalError");
         el.style.display = "block";
@@ -395,4 +399,7 @@ export const appendRating = async (evt) => {
   await submitSearch();
 };
 
-await refresh();
+// Avoid top-level await since as of Apr 2022 it only has 84% penetration:
+// https://caniuse.com/?search=top%20level%20await
+// We don't need the result anyway.
+refresh();

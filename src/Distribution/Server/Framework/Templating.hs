@@ -52,6 +52,7 @@ import qualified Data.Aeson as JSON
 
 import Distribution.Package (PackageName, PackageIdentifier)
 import Distribution.Version (Version)
+import Distribution.Server.Users.Types (UserName)
 import Distribution.Text    (display)
 
 import Control.Monad (when)
@@ -120,6 +121,7 @@ instance ToSElem XHtml.Html where
 
 instance ToSElem URI               where toSElem = toSElem . show
 instance ToSElem PackageName       where toSElem = toSElem . display
+instance ToSElem UserName          where toSElem = toSElem . display
 instance ToSElem Version           where toSElem = toSElem . display
 instance ToSElem PackageIdentifier where toSElem = toSElem . display
 
@@ -245,7 +247,7 @@ checkTemplates templateGroup templateDirs expectedTemplates = do
 
     when (not (null missing)) $
       fail $ "Missing template files: " ++ intercalate ", " (map (<.> "st") missing)
-         ++ ". Search path was: " ++ intercalate " " templateDirs
+         ++ ". Search path was: " ++ unwords templateDirs
 
     when (not (null problems)) $
       fail $ reportTemplateProblems problems

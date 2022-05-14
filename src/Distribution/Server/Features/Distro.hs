@@ -115,10 +115,10 @@ distroFeature UserFeature{..}
 
     textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (queryState distrosState EnumerateDistros)
     textDistroPkgs dpath = withDistroPath dpath $ \dname pkgs -> do
-        let pkglines = map (\(name, info) -> display name ++ " at " ++ display (distroVersion info) ++ ": " ++ distroUrl info) $ pkgs
+        let pkglines = map (\(name, info) -> display name ++ " at " ++ display (distroVersion info) ++ ": " ++ distroUrl info) pkgs
         return $ toResponse (unlines $ ("Packages for " ++ display dname):pkglines)
     csvDistroPackageList dpath = withDistroPath dpath $ \_dname pkgs -> do
-        return $ toResponse $ packageListToCSV $ pkgs
+        return $ toResponse $ packageListToCSV pkgs
     textDistroPkg dpath = withDistroPackagePath dpath $ \_ _ info -> return . toResponse $ show info
 
     -- result: see-other uri, or an error: not authenticated or not found (todo)
@@ -127,7 +127,7 @@ distroFeature UserFeature{..}
         guardAuthorised_ [InGroup adminGroup] --TODO: use the per-distro maintainer groups
         -- should also check for existence here of distro here
         void $ updateState distrosState $ RemoveDistro distro
-        seeOther ("/distros/") (toResponse ())
+        seeOther "/distros/" (toResponse ())
 
     -- result: ok response or not-found error
     distroPackageDelete dpath =

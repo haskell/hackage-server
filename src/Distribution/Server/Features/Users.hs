@@ -58,6 +58,8 @@ data UserFeature = UserFeature {
     groupChangedHook :: Hook (GroupDescription, Bool, UserId, UserId, String) (),
 
     -- Authorisation
+    -- | Require any of a set of groups, with a friendly error message
+    guardAuthorisedWhenInAnyGroup :: [Group.UserGroup] -> ServerPartE UserId,
     -- | Require any of a set of privileges.
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
     -- | Require any of a set of privileges, giving the id of the current user.
@@ -155,6 +157,8 @@ data UserResource = UserResource {
     userPage :: Resource,
     -- | A user's password.
     passwordResource :: Resource,
+    -- | A user's package tracking pixels.
+    analyticsPixelsResource :: Resource,
     -- | A user's enabled status.
     enabledResource  :: Resource,
     -- | The admin group.
@@ -360,6 +364,7 @@ userFeature templates usersState adminsState
               , resourceGet  = [ ("", const (redirectUserManagement r)) ]
               }
       , passwordResource = resourceAt "/user/:username/password.:format"
+      , analyticsPixelsResource = resourceAt "/user/:username/analytics-pixels.:format"
                            --TODO: PUT
       , enabledResource  = (resourceAt "/user/:username/enabled.:format") {
             resourceDesc = [ (GET, "return if the user is enabled")
@@ -405,6 +410,15 @@ userFeature templates usersState adminsState
     --
     -- Authorisation: authentication checks and privilege checks
     --
+
+    guardAuthorisedWhenInAnyGroup :: [Group.UserGroup] -> ServerPartE UserId
+    guardAuthorisedWhenInAnyGroup [] =
+        fail "Group list is empty, this is not meant to happen"
+    guardAuthorisedWhenInAnyGroup groups = do
+        users <- queryGetUserDb
+        uid   <- guardAuthenticatedWithErrHook users
+        Auth.guardInAnyGroup users uid groups
+        return uid
 
     -- High level, all in one check that the client is authenticated as a
     -- particular user and has an appropriate privilege, but then ignore the
@@ -484,7 +498,9 @@ userFeature templates usersState adminsState
           overrideResponse <- msum <$> runHook authFailHook err
           let resp' = fromMaybe defaultResponse overrideResponse
               -- reset authn to "0" on auth failures
-              resp'' = resp' { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders resp' }
+              resp'' = case resp' of
+                r@ErrorResponse{} -> r { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders r }
+                GenericErrorResponse -> GenericErrorResponse
           throwError resp''
 
     -- Check if there is an authenticated userid, and return info, if so.

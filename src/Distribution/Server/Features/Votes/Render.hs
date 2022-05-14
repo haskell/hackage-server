@@ -20,13 +20,13 @@ renderVotesAnon numVotes pkgname =
   form  ! [ action $ "/package/" ++ unPackageName pkgname ++ "/votes"
           , method      "POST" ]
   << thespan <<
-  [ toHtml $  show numVotes ++ " "
-  , toHtml $  ("[" +++
-      hidden  "_method" "PUT" +++
+  [ toHtml $ show numVotes ++ " "
+  , toHtml $ "[" +++
+      hidden "_method" "PUT" +++
       input ! [ thetype     "submit"
               , value       "Vote for this package"
               , theclass    "text-button" ]
-      +++ "]")
+      +++ "]"
   ]
 
 -- A page that confirms a package was successfully voted for and

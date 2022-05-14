@@ -1,5 +1,3 @@
-{-# LANGUAGE BangPatterns, NamedFieldPuns, GeneralizedNewtypeDeriving #-}
-
 module Distribution.Server.Features.Search.ExtractDescriptionTerms (
     extractSynopsisTerms,
     extractDescriptionTerms,
@@ -16,7 +14,6 @@ import Data.Char
 import qualified NLP.Tokenize as NLP
 import qualified NLP.Snowball as NLP
 import qualified Data.Foldable as F
-import Data.List (intercalate)
 
 import qualified Documentation.Haddock.Markup as Haddock
 import Documentation.Haddock.Types
@@ -51,7 +48,7 @@ splitTok tok =
         ([],      _:trailing) -> go trailing
         (leading, _:trailing) -> leading : go trailing
         ([],      [])         -> []
-        (leading, [])         -> leading : []
+        (leading, [])         -> [leading]
 
 
 extractDescriptionTerms :: [Text] -> Set Text -> String -> [Text]
@@ -64,7 +61,7 @@ extractDescriptionTerms ss stopWords =
         [] --TODO: something here
         (  filter (not . ignoreTok)
          . NLP.tokenize
-         . intercalate " " . Haddock.markup termsMarkup)
+         . unwords . Haddock.markup termsMarkup)
     . Haddock.parse
 
 termsMarkup :: DocMarkupH () String [String]

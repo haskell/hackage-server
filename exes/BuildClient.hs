@@ -40,7 +40,7 @@ import System.Directory (canonicalizePath, createDirectoryIfMissing,
                          doesFileExist, doesDirectoryExist, getDirectoryContents,
                          renameFile, removeFile, getAppUserDataDirectory,
                          createDirectory, removeDirectoryRecursive,
-                         createDirectoryIfMissing)
+                         createDirectoryIfMissing, makeAbsolute)
 import System.Console.GetOpt
 import System.Process
 import System.IO
@@ -109,7 +109,7 @@ main = topHandler $ do
                        "       hackage-build build [packages] [options]",
                        "       hackage-build stats",
                        "Options:"]
-               mapM_ putStrLn $ strs
+               mapM_ putStrLn strs
                putStrLn $ usageInfo usageHeader buildFlagDescrs
                unless (null strs) exitFailure
         Init uri auxUris -> initialise opts uri auxUris
@@ -220,11 +220,17 @@ configFile opts = bo_stateDir opts </> "hackage-build-config"
 writeCabalConfig :: BuildOpts -> BuildConfig -> IO ()
 writeCabalConfig opts config = do
     let tarballsDir  = bo_stateDir opts </> "cached-tarballs"
+    createDirectoryIfMissing False tarballsDir
+
+    -- Because we call runProcess with installDirectory as the cwd,
+    -- this relative path won't be valid when cabal is running.
+    -- An absolute path remains valid independently of cwd.
+    absTarballsDir <- makeAbsolute tarballsDir
+
     writeFile (bo_stateDir opts </> "cabal-config") . unlines $
         [ "remote-repo: " ++ srcName uri ++ ":" ++ show uri
         | uri <- bc_srcURI config : bc_auxURIs config ]
-     ++ [ "remote-repo-cache: " ++ tarballsDir ]
-    createDirectoryIfMissing False tarballsDir
+     ++ [ "remote-repo-cache: " ++ absTarballsDir ]
 
 
 ----------------------
@@ -333,18 +339,18 @@ infoStats verbosity mDetailedStats pkgIdsHaveDocs = do
 -- NOTE: Expects the same number of columns in every row!
 printTable :: [[String]] -> String
 printTable xss = intercalate "\n"
-               . map (intercalate " ")
+               . map unwords
                . map padCols
                $ xss
   where
     colWidths :: [[Int]]
-    colWidths = map (map length) $ xss
+    colWidths = map (map length) xss
 
     maxColWidths :: [Int]
-    maxColWidths = foldr1 (\xs ys -> map (uncurry max) (zip xs ys)) colWidths
+    maxColWidths = map maximum (transpose colWidths)
 
     padCols :: [String] -> [String]
-    padCols cols = map (uncurry padTo) (zip maxColWidths cols)
+    padCols cols = zipWith padTo maxColWidths cols
 
     padTo :: Int -> String -> String
     padTo len str = str ++ replicate (len - length str) ' '
@@ -390,12 +396,12 @@ getDocumentationStats :: Verbosity
 getDocumentationStats verbosity opts config pkgs = do
     notice verbosity "Downloading documentation index"
     httpSession verbosity "hackage-build" version $ do
-      curGhcVersion <- liftIO $ case (bo_buildOlderGHC opts) of
+      curGhcVersion <- liftIO $ case bo_buildOlderGHC opts of
                                   True -> getGHCversion
                                   False -> return Nothing
       mPackages   <- fmap parseJsonStats <$> requestGET' (packagesUri False curGhcVersion)
       mCandidates <- fmap parseJsonStats <$> requestGET' (packagesUri True curGhcVersion)
-      liftIO $ putStrLn $ show curGhcVersion
+      liftIO $ print curGhcVersion
       case (mPackages, mCandidates) of
         -- Download failure
         (Nothing, _) -> fail $ "Could not download " ++ show (packagesUri False curGhcVersion)
@@ -420,9 +426,9 @@ getDocumentationStats verbosity opts config pkgs = do
       hClose moutput
       handler <- openFile dirloc ReadWriteMode
       contents <- hGetContents handler
-      let res     = read contents :: [(String, String)]
-          version' = fmap (\(_,b) -> b) $ find (\(a,_)-> a=="Project version") res
-      return $ version'
+      let res      = read contents :: [(String, String)]
+          version' = lookup "Project version" res
+      return version'
 
     getQry :: [PackageIdentifier] -> String
     getQry [] = ""
@@ -570,7 +576,7 @@ processPkg verbosity opts config docInfo = do
     coverageFile <- mapM (coveragePackage verbosity opts docInfo) hpcLoc
 
     -- Modify test-outcome and rewrite report file.
-    mapM (setTestStatus mRpt buildReport) testOutcome
+    mapM_ (setTestStatus mRpt buildReport) testOutcome
 
     case bo_dryRun opts of
       True -> return ()
@@ -604,7 +610,7 @@ processPkg verbosity opts config docInfo = do
         let buildReport' = fmap (unlines.setTestOutcome testOutcome) $ fmap lines buildReport
         rewriteRpt mRpt buildReport'
 
-coveragePackage :: Verbosity -> BuildOpts -> DocInfo -> FilePath -> IO (FilePath)
+coveragePackage :: Verbosity -> BuildOpts -> DocInfo -> FilePath -> IO FilePath
 coveragePackage verbosity opts docInfo loc = do
   let pkgid = docInfoPackage docInfo
       dir = takeDirectory loc
@@ -798,6 +804,7 @@ cabal opts cmd args moutput = do
                  : verbosityArgs
                 ++ args
     info verbosity $ unwords ("cabal":all_args)
+    createDirectoryIfMissing False $ installDirectory opts
     ph <- runProcess "cabal" all_args (Just $ installDirectory opts)
                         Nothing Nothing moutput moutput
     waitForProcess ph
@@ -879,7 +886,7 @@ putBuildFiles config docInfo reportFile buildLogFile coverageFile installOk = do
     (_, response) <- request Request {
       rqURI     = uri,
       rqMethod  = PUT,
-      rqHeaders = [Header HdrContentType   ("application/json"),
+      rqHeaders = [Header HdrContentType "application/json",
                    Header HdrContentLength (show (BS.length body))],
       rqBody    = body
     }

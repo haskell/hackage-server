@@ -242,10 +242,8 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
 
     -- tags on merging
     constructMergedTagIndex :: forall m. (Functor m, MonadIO m) => Tag -> Tag -> PackageIndex PkgInfo -> m PackageTags
-    constructMergedTagIndex orig depr = foldM addToTags emptyPackageTags . PackageIndex.allPackagesByName
-      where addToTags calcTags pkgList = do
-                let info = pkgDesc $ last pkgList
-                    !pn = packageName info
+    constructMergedTagIndex orig depr = foldM addToTags emptyPackageTags . PackageIndex.allPackageNames
+      where addToTags calcTags pn = do
                 pkgTags <- queryTagsForPackage pn
                 if Set.member depr pkgTags
                     then do
@@ -290,7 +288,6 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
                                     let addTags = Set.fromList aliases `Set.difference` calcTags
                                         delTags = Set.fromList del `Set.intersection` calcTags
                                     void $ updateState tagsState $ InsertReviewTags pkgname addTags delTags
-                                    return ()
                                 else errBadRequest "Authorization Error" [MText "You need to be logged in to propose tags"]
                     _ -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
           Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]

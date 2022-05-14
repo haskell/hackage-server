@@ -190,7 +190,7 @@ unregisterPackage getVersions (PackageIdentifier name version) ranges revs =
         let revPackage = Map.fromList $ map (\v -> (v, pkgMap)) versions
             revRange   = Map.singleton pkgname (Map.fromList $ map (\v -> (v, range)) versions)
         -- there are possibly better ways to go about this
-        in  Map.differenceWith (\(a, b) (c, d) -> keepMaps $
+        in  Map.differenceWith (\(a, b) (c, d) -> keepMaps
               ( Map.differenceWith (\e f ->
                     keepMap $ Map.differenceWith (\g h ->
                         keepSet $ Set.difference g h)
@@ -317,7 +317,7 @@ updatePackageReverse indexFunc updated deps revs nameMap =
     foldl' (\revd pkg -> Map.alter (alterRevDisplay pkg . fromMaybe Map.empty) pkg revd) nameMap deps
   where
     lookupVersions :: PackageName -> Set Version
-    lookupVersions pkgname = maybe Set.empty (Set.unions . map (Map.findWithDefault Set.empty $ updated) . Map.elems . fst) $ Map.lookup pkgname revs
+    lookupVersions pkgname = maybe Set.empty (Set.unions . map (Map.findWithDefault Set.empty updated) . Map.elems . fst) $ Map.lookup pkgname revs
     alterRevDisplay :: PackageName -> ReverseDisplay -> Maybe ReverseDisplay
     alterRevDisplay pkgname rev = keepMap $ updateReverseDisplay indexFunc updated (lookupVersions pkgname) rev
 

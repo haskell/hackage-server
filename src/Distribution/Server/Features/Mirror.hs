@@ -159,6 +159,8 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         groupsAllowedToAdd    = [adminGroup]
     }
 
+    guardMirrorGroup = guardAuthorisedWhenInAnyGroup [mirrorGroup]
+    guardMirrorGroup_ = void guardMirrorGroup
 
     -- result: error from unpacking, bad request error, or warning lines
     --
@@ -169,7 +171,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     --      http://localhost:8080/package/$PACKAGENAME/$PACKAGEID.tar.gz
     tarballPut :: DynamicPath -> ServerPartE Response
     tarballPut dpath = do
-        uid         <- guardAuthorised [InGroup mirrorGroup]
+        uid         <- guardMirrorGroup
         pkgid       <- packageTarballInPath dpath
         fileContent <- expectCompressedTarball
         time        <- liftIO getCurrentTime
@@ -202,7 +204,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
 
     uploaderPut :: DynamicPath -> ServerPartE Response
     uploaderPut dpath = do
-        guardAuthorised_ [InGroup mirrorGroup]
+        guardMirrorGroup_
         pkgid <- packageInPath dpath
         nameContent <- expectTextPlain
         let uname = UserName (unpackUTF8 nameContent)
@@ -225,7 +227,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                 parseTimeMaybe "%c" timeStr
                 <|>  parseTimeMaybe "%Y-%m-%dT%H:%M:%SZ" timeStr
                 )
-        guardAuthorised_ [InGroup mirrorGroup]
+        guardMirrorGroup_
         pkgid <- packageInPath dpath
         timeContent <- expectTextPlain
         case altParseTimeMaybe (unpackUTF8 timeContent) of
@@ -239,14 +241,14 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     -- return: error from parsing, bad request error, or warning lines
     cabalPut :: DynamicPath -> ServerPartE Response
     cabalPut dpath = do
-        uid <- guardAuthorised [InGroup mirrorGroup]
+        uid <- guardMirrorGroup
         pkgid :: PackageId <- packageInPath dpath
         fileContent <- expectTextPlain
         time <- liftIO getCurrentTime
         let uploadData = (time, uid)
             filename = display pkgid <.> "cabal"
 
-        case runParseResult $ parseGenericPackageDescription $ BS.L.toStrict $ fileContent of
+        case runParseResult $ parseGenericPackageDescription $ BS.L.toStrict fileContent of
             (_, Left (_, err NE.:| _)) -> badRequest (toResponse $ showPError filename err)
             (_, Right pkg) | pkgid /= packageId pkg ->
                 errBadRequest "Wrong package Id"

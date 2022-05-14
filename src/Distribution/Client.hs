@@ -100,7 +100,7 @@ data PkgIndexInfo = PkgIndexInfo
 downloadIndex :: URI -> FilePath -> HttpSession [PkgIndexInfo]
 downloadIndex uri | isOldHackageURI uri = downloadOldIndex uri
                   | otherwise           = downloadNewIndex uri
-  where
+
 
 isOldHackageURI :: URI -> Bool
 isOldHackageURI uri
@@ -140,8 +140,7 @@ downloadOldIndex uri cacheDir = do
     logFile   = cacheDir </> "log"
 
     mergeLogInfo pkgids theLog =
-        catMaybes
-      . map selectDetails
+        mapMaybe selectDetails
       $ mergeBy (\pkgid entry -> compare pkgid (entryPkgId entry))
                 (sort pkgids)
                 ( map (maximumBy (comparing entryTime))

@@ -42,6 +42,7 @@ module Distribution.Server.Packages.PackageIndex (
     searchByNameSubstring,
 
     -- ** Bulk queries
+    allPackageNames,
     allPackages,
     allPackagesByName
   ) where
@@ -98,7 +99,7 @@ instance Eq pkg => Eq (PackageIndex pkg) where
 
 
 instance Package pkg => Monoid (PackageIndex pkg) where
-  mempty  = PackageIndex (Map.empty)
+  mempty  = PackageIndex Map.empty
   mappend = (<>)
   --save one mappend with empty in the common case:
   mconcat [] = mempty
@@ -256,6 +257,9 @@ allPackages (PackageIndex m) = concat (Map.elems m)
 --
 allPackagesByName :: Package pkg => PackageIndex pkg -> [[pkg]]
 allPackagesByName (PackageIndex m) = Map.elems m
+
+allPackageNames :: PackageIndex pkg -> [PackageName]
+allPackageNames (PackageIndex m) = Map.keys m
 
 --
 -- * Lookups

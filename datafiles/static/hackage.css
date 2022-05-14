@@ -321,8 +321,11 @@ table.properties td, table.properties th {
        * = (100% - 40%                  ) * 60vw                - 2em
        * = 60%                            * 60vw                - 2em
        * = 36vw - 2em
+       *
+       * The 36vw only applies if the #content max-width of 1450px isn't hit.
+       * So we use min(...) for this special case.
        */
-      width: calc(36vw - 2em);
+      width: calc(min(36vw, .6 * 1450px) - 2em);
   }
 }
 
@@ -350,6 +353,7 @@ table.properties td, table.properties th {
   }
 
   #content {
+    /* keep this in sync with the calculation above */
     max-width: 1450px;
   }
 }

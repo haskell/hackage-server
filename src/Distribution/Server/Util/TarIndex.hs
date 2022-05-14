@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, DeriveDataTypeable, TypeFamilies, TemplateHaskell,
+{-# LANGUAGE TemplateHaskell, DeriveDataTypeable, TypeFamilies,
       MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
 
 -- This is presently unused: features provide their own BlobId-to-TarIndex

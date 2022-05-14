@@ -42,11 +42,11 @@ legacyRedirectsFeature upload = (emptyHackageFeature "legacy") {
 serveLegacyPosts :: UploadFeature -> ServerPartE Response
 serveLegacyPosts upload = msum
   [ dir "packages" $ msum
-      [ dir "upload" $ movedUpload
+      [ dir "upload" movedUpload
     --, postedMove "check"  "/check"
       ]
   , dir "cgi-bin" $ dir "hackage-scripts" $ msum
-      [ dir "protected" $ dir "upload-pkg" $ movedUpload
+      [ dir "protected" $ dir "upload-pkg" movedUpload
     --, postedMove "check"  "/check"
       ]
   , dir "upload" movedUpload
@@ -67,7 +67,7 @@ serveLegacyGets = msum
   [ simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
   , simpleMove "00-index.tar" "/packages/index.tar"
   , dir "packages" $ msum
-      [ dir "archive" $ serveArchiveTree
+      [ dir "archive" serveArchiveTree
       , simpleMove "hackage.html"    "/"
       , simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
         --also search.html, advancedsearch.html, accounts.html, and admin.html

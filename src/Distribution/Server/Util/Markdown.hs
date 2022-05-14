@@ -47,7 +47,7 @@ instance ToPlainText (HHtml a) where
   toPlainText (HHtml x) = toPlainText x
 
 instance Rangeable (Html a) => Rangeable (HHtml a) where
-  ranged sr (HHtml x) = (HHtml $ ranged sr x)
+  ranged sr (HHtml x) = HHtml $ ranged sr x
 
 instance (Rangeable (Html a), Rangeable (HHtml a)) => IsInline (HHtml a) where
   lineBreak = HHtml lineBreak

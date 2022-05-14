@@ -9,7 +9,7 @@ import Distribution.Package
 import Distribution.Version
 
 import Data.Acid  (Query, Update, makeAcidic)
-import Data.Maybe (isJust, fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Typeable (Typeable)
 import Control.Arrow (second)
 import Control.Monad (ap)
@@ -46,18 +46,17 @@ consolidateRanges ranges depr =
 data VersionStatus = NormalVersion | DeprecatedVersion | UnpreferredVersion deriving (Show, Typeable, Eq, Ord, Enum)
 
 getVersionStatus :: PreferredInfo -> Version -> VersionStatus
-getVersionStatus info version = case version `elem` deprecatedVersions info of
-    True  -> DeprecatedVersion
-    False -> case maybe True (withinRange version) (sumRange info) of
-        True  -> NormalVersion
-        False -> UnpreferredVersion
+getVersionStatus info version
+    | version `elem` deprecatedVersions info = DeprecatedVersion
+    | maybe True (withinRange version) (sumRange info) = NormalVersion
+    | otherwise = UnpreferredVersion
 
 classifyVersions :: PreferredInfo -> [Version] -> [(Version, VersionStatus)]
 classifyVersions (PreferredInfo [] [] _) = map (flip (,) NormalVersion)
 classifyVersions info = map ((,) `ap` getVersionStatus info)
 
 partitionVersions :: PreferredInfo -> [Version] -> ([Version], [Version], [Version])
-partitionVersions info versions = if (not . isJust $ sumRange info) then (versions, [], []) else go versions
+partitionVersions info versions = if isNothing $ sumRange info then (versions, [], []) else go versions
   where go :: [Version] -> ([Version], [Version], [Version]) -- foldr-type approach
         go (v:vs) = let ~(norm, depr, unpref) = go vs in case getVersionStatus info v of
             NormalVersion -> (v:norm, depr, unpref)
@@ -239,7 +238,7 @@ findBestVersion info allVersions versions =
     maxVersion = Set.findMax versions
     maxAllVersion = last allVersions
 
-    newestPreferred = case filter ((==NormalVersion) . (infoMap Map.!)) $ allVersions of
+    newestPreferred = case filter ((==NormalVersion) . (infoMap Map.!)) allVersions of
         []    -> Nothing
         prefs -> Just $ last prefs
 

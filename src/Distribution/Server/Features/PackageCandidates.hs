@@ -343,6 +343,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       pkgInfo <- uploadCandidate (==pkgid)
       seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = do
@@ -356,7 +359,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       pkgname <- packageInPath dpath
       guardAuthorisedAsMaintainerOrTrustee pkgname
       void $ updateState candidatesState $ DeleteCandidates pkgname
-      seeOther (packageCandidatesUri candidatesResource "" $ pkgname) $ toResponse ()
+      seeOther (packageCandidatesUri candidatesResource "" pkgname) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPartE Response
     serveCandidateTarball dpath = do
@@ -442,7 +445,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       packages <- queryGetPackageIndex
       candidate <- packageInPath dpath >>= lookupCandidateId
       -- check authorization to upload - must already be a maintainer
-      uid <- guardAuthorisedAsMaintainer (packageName candidate)
+      uid <- guardAuthorised [InGroup . maintainersGroup $ packageName candidate]
       -- check if package or later already exists
       checkPublish uid packages candidate >>= \case
         Just failed -> throwError failed
@@ -491,7 +494,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           PackageIndex.Unambiguous [] -> return Nothing -- can this ever occur?
 
           PackageIndex.Ambiguous mps -> do
-            let matchingPackages = concat . map (take 1) $ mps
+            let matchingPackages = concatMap (take 1) mps
             groups <- mapM (liftIO . Group.queryUserGroup . maintainersGroup . packageName) matchingPackages
             if not . any (uid `Group.member`) $ groups
               then return $ Just $ ErrorResponse 403 [] "Publish failed" (caseClash matchingPackages)
@@ -504,9 +507,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         candVersion = packageVersion candidate
         candName    = packageName candidate
 
-        caseClash pkgs' = [MText $
-                         "Package(s) with the same name as this package, modulo case, already exist: "
-                         ]
+        caseClash pkgs' = [MText "Package(s) with the same name as this package, modulo case, already exist: "]
                       ++ intersperse (MText ", ") [ MLink pn ("/package/" ++ pn)
                                                   | pn <- map (display . packageName) pkgs' ]
                       ++ [MText $

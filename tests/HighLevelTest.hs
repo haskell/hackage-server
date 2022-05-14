@@ -61,7 +61,7 @@ doit root
                                      runUserTests
                                      runPackageUploadTests
                                      runPackageTests
-         withServerRunning root $ runPackageTests
+         withServerRunning root runPackageTests
          info "Making database backup"
          tarGz1 <- createBackup testName root "1"
          info "Removing old state"
@@ -82,7 +82,7 @@ doit root
          db2 <- LBS.readFile tarGz2
          unless (db1 == db2) $ die "Databases don't match"
          info "Checking server still works, and data is intact"
-         withServerRunning root $ runPackageTests
+         withServerRunning root runPackageTests
 
 
 runUserTests :: IO ()

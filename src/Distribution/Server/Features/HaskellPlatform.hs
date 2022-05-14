@@ -110,7 +110,7 @@ platformFeature platformState
     platformVersions pkgname = liftM Set.toList $ queryState platformState $ GetPlatformPackage pkgname
 
     platformPackageLatest :: MonadIO m => m [(PackageName, Version)]
-    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ queryState platformState $ GetPlatformPackages
+    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ queryState platformState GetPlatformPackages
 
     setPlatform :: MonadIO m => PackageName -> [Version] -> m ()
     setPlatform pkgname versions = updateState platformState $ SetPlatformPackage pkgname (Set.fromList versions)

@@ -21,6 +21,7 @@ import Distribution.Server.Features.UserDetails
 import Distribution.Server.Users.Group
 import Distribution.Server.Users.Types
 import Distribution.Server.Util.Nonce
+import Distribution.Server.Util.Validators
 import qualified Distribution.Server.Users.Users as Users
 
 import Data.Map (Map)
@@ -28,7 +29,6 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS -- Only used for ASCII data
-import Data.Char (isSpace, isPrint)
 
 import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
@@ -202,7 +202,7 @@ signupResetBackup = go []
      }
 
 importSignupInfo :: CSV -> Restore [(Nonce, SignupResetInfo)]
-importSignupInfo = sequence . map fromRecord . drop 2
+importSignupInfo = mapM fromRecord . drop 2
   where
     fromRecord :: Record -> Restore (Nonce, SignupResetInfo)
     fromRecord [nonceStr, usernameStr, realnameStr, emailStr, timestampStr] = do
@@ -234,7 +234,7 @@ signupInfoToCSV backuptype (SignupResetTable tbl)
       | (nonce, SignupInfo{..}) <- Map.toList tbl ]
 
 importResetInfo :: CSV -> Restore [(Nonce, SignupResetInfo)]
-importResetInfo = sequence . map fromRecord . drop 2
+importResetInfo = mapM fromRecord . drop 2
   where
     fromRecord :: Record -> Restore (Nonce, SignupResetInfo)
     fromRecord [nonceStr, useridStr, timestampStr] = do
@@ -361,16 +361,14 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
 
     querySignupInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     querySignupInfo nonce =
-            queryState signupResetState (LookupSignupResetInfo nonce)
-        >>= return . justSignupInfo
+        justSignupInfo <$> queryState signupResetState (LookupSignupResetInfo nonce)
       where
         justSignupInfo (Just info@SignupInfo{}) = Just info
         justSignupInfo _                        = Nothing
 
     queryResetInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     queryResetInfo nonce =
-            queryState signupResetState (LookupSignupResetInfo nonce)
-        >>= return . justResetInfo
+        justResetInfo <$> queryState signupResetState (LookupSignupResetInfo nonce)
       where
         justResetInfo (Just info@ResetInfo{}) = Just info
         justResetInfo _                       = Nothing
@@ -476,32 +474,6 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
           guardValidLookingEmail    useremail
 
           return (username, realname, useremail)
-
-        guardValidLookingName str = either errBadUserName return $ do
-          guard (T.length str <= 70) ?! "Sorry, we didn't expect names to be longer than 70 characters."
-          guard (T.all isPrint str)  ?! "Unexpected character in name, please use only printable Unicode characters."
-
-        guardValidLookingUserName str = either errBadRealName return $ do
-          guard (T.length str <= 50)    ?! "Sorry, we didn't expect login names to be longer than 50 characters."
-          guard (T.all isValidUserNameChar str) ?! "Sorry, login names have to be ASCII characters only or _, no spaces or other symbols."
-
-        guardValidLookingEmail str = either errBadEmail return $ do
-          guard (T.length str <= 100)     ?! "Sorry, we didn't expect email addresses to be longer than 100 characters."
-          guard (T.all isPrint str)       ?! "Unexpected character in email address, please use only printable Unicode characters."
-          guard hasAtSomewhere            ?! "Oops, that doesn't look like an email address."
-          guard (T.all (not.isSpace) str) ?! "Oops, no spaces in email addresses please."
-          guard (T.all (not.isAngle) str) ?! "Please use just the email address, not \"name\" <person@example.com> style."
-          where
-            isAngle c = c == '<' || c == '>'
-            hasAtSomewhere =
-              let (before, after) = T.span (/= '@') str
-               in T.length before >= 1
-               && T.length after  >  1
-
-        errBadUserName err = errBadRequest "Problem with login name" [MText err]
-        errBadRealName err = errBadRequest "Problem with name"[MText err]
-        errBadEmail    err = errBadRequest "Problem with email address" [MText err]
-
 
     handlerGetSignupRequestOutstanding :: DynamicPath -> ServerPartE Response
     handlerGetSignupRequestOutstanding dpath = do

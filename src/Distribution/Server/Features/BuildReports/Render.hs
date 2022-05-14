@@ -7,7 +7,6 @@ module Distribution.Server.Features.BuildReports.Render
 import Distribution.Server.Framework
 
 import Distribution.Server.Features.BuildReports
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId)
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..), InstallOutcome(..), Outcome(..))
 import Distribution.Server.Features.Documentation
 

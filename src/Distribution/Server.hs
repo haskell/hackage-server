@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module Distribution.Server (
     -- * Server control
     Server(..),
@@ -287,7 +287,7 @@ initState server (admin, pass) = do
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of
         Right uid -> Group.addUserToGroup adminGroup uid
-        Left Users.ErrUserNameClash -> fail $ "Inconceivable!! failed to create admin user"
+        Left Users.ErrUserNameClash -> fail "Inconceivable!! failed to create admin user"
 
 -- The top-level server part.
 -- It collects resources from Distribution.Server.Features, collects
@@ -341,7 +341,7 @@ setUpTemp sconf secs = do
         -- cost to it
         threadDelay $ secs*1000000
         -- could likewise specify a mirror to redirect to for tarballs, and 503 for everything else
-        runServer listenOn $ (resp 503 $ setHeader "Content-Type" "text/html" $ toResponse html503)
+        runServer listenOn $ resp 503 $ setHeader "Content-Type" "text/html" $ toResponse html503
     return (TempServer tid)
   where listenOn = confListenOn sconf
 
@@ -362,4 +362,4 @@ tearDownTemp :: TempServer -> IO ()
 tearDownTemp (TempServer tid) = do
     killThread tid
     -- give the server enough time to release the bind
-    threadDelay $ 1000000
+    threadDelay 1000000
