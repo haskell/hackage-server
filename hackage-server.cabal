@@ -246,6 +246,7 @@ library lib-server
     Distribution.Server.Util.DocMeta
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
+    Distribution.Server.Util.Validators
     -- [unused] Distribution.Server.Util.TarIndex
     Distribution.Server.Util.GZip
     Distribution.Server.Util.ContentType

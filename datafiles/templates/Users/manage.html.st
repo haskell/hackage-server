@@ -12,6 +12,9 @@ $hackagePageHeader(deauthUser="1")$
 <h2>Manage user account $username$</h2>
 <p>This site collects operations you can do to manage your user account</p>
 
+<h3>Change full name or e-mail address</h3>
+<p>You can <a href="/user/$username$/name-contact">change your full name or e-mail address</a>.</p>
+
 <h3>Authentication Tokens</h3>
 <p>
   You can register API authentication token to use them to for example have services like continuous integration upload packages on your behalf without providing them your username and/or password.

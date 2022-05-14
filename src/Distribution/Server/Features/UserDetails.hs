@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, RankNTypes,
-    NamedFieldPuns, RecordWildCards, RecursiveDo, BangPatterns #-}
+    NamedFieldPuns, RecordWildCards, RecursiveDo, BangPatterns, OverloadedStrings #-}
 module Distribution.Server.Features.UserDetails (
     initUserDetailsFeature,
     UserDetailsFeature(..),
@@ -11,11 +11,14 @@ module Distribution.Server.Features.UserDetails (
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Users
+import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Users.Types
+import Distribution.Server.Util.Validators (guardValidLookingEmail, guardValidLookingName)
 
 import Data.SafeCopy (base, deriveSafeCopy)
 
@@ -250,23 +253,31 @@ userDetailsToCSV backuptype (UserDetailsTable tbl)
 initUserDetailsFeature :: ServerEnv
                        -> IO (UserFeature
                            -> CoreFeature
+                           -> UploadFeature
                            -> IO UserDetailsFeature)
-initUserDetailsFeature ServerEnv{serverStateDir} = do
+initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
     -- Canonical state
     usersDetailsState <- userDetailsStateComponent serverStateDir
 
     --TODO: link up to user feature to delete
 
-    return $ \users core -> do
-      let feature = userDetailsFeature usersDetailsState users core
+    templates <-
+      loadTemplates serverTemplatesMode
+      [serverTemplatesDir, serverTemplatesDir </> "UserDetails"]
+      [ "user-details-form.html" ]
+
+    return $ \users core upload -> do
+      let feature = userDetailsFeature templates usersDetailsState users core upload
       return feature
 
 
-userDetailsFeature :: StateComponent AcidState UserDetailsTable
+userDetailsFeature :: Templates
+                   -> StateComponent AcidState UserDetailsTable
                    -> UserFeature
                    -> CoreFeature
+                   -> UploadFeature
                    -> UserDetailsFeature
-userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
+userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} UploadFeature{uploadersGroup}
   = UserDetailsFeature {..}
 
   where
@@ -286,7 +297,9 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
                          , (PUT,    "set the name and contact details of a user account")
                          , (DELETE, "delete the name and contact details of a user account")
                          ]
-      , resourceGet    = [ ("json", handlerGetUserNameContact) ]
+      , resourceGet    = [ ("json", handlerGetUserNameContact)
+                         , ("html", handlerGetUserNameContactHtml)
+                         ]
       , resourcePut    = [ ("json", handlerPutUserNameContact) ]
       , resourceDelete = [ ("",     handlerDeleteUserNameContact) ]
       }
@@ -314,6 +327,30 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
 
     -- Request handlers
     --
+    handlerGetUserNameContactHtml :: DynamicPath -> ServerPartE Response
+    handlerGetUserNameContactHtml dpath = do
+      (uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
+      template <- getTemplate templates "user-details-form.html"
+      udetails <- queryUserDetails uid
+      showConfirmationOfSave <- not . null <$> queryString (lookBSs "showConfirmationOfSave")
+      let
+        emailTxt = maybe "" accountContactEmail udetails
+        nameTxt  = maybe "" accountName         udetails
+      cacheControl
+        [Private]
+        (etagFromHash
+          ( emailTxt
+          , nameTxt
+          , showConfirmationOfSave
+          )
+        )
+      ok . toResponse $
+        template
+          [ "username" $= display (userName uinfo)
+          , "contactEmailAddress" $= emailTxt
+          , "name" $= nameTxt
+          , "showConfirmationOfSave" $= showConfirmationOfSave
+          ]
 
     handlerGetUserNameContact :: DynamicPath -> ServerPartE Response
     handlerGetUserNameContact dpath = do
@@ -333,7 +370,10 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
     handlerPutUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+        void $ guardAuthorisedWhenInAnyGroup [uploadersGroup, adminGroup]
         NameAndContact name email <- expectAesonContent
+        guardValidLookingName name
+        guardValidLookingEmail email
         updateState userDetailsState (SetUserNameContact uid name email)
         noContent $ toResponse ()
 
