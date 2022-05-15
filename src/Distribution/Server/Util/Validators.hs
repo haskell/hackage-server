@@ -30,11 +30,13 @@ guardValidLookingEmail str = either errBadEmail return $ do
   guard (T.all (not.isAngle) str) ?! "Please use just the email address, not \"name\" <person@example.com> style."
   where
     isAngle c = c == '<' || c == '>'
-    hasAtSomewhere =
-      let (before, after) = T.span (/= '@') str
-       in T.length before >= 1
-       && T.length after  >  1
-       && not ('@' `T.elem` after)
+    hasAtSomewhere = case T.span (/= '@') str of
+      (before, rest)
+        | Just (_, after) <- T.uncons rest ->
+          T.length before >= 1
+            && T.length after > 0
+            && not ('@' `T.elem` after)
+      _ -> False
 
 errBadUserName, errBadRealName, errBadEmail :: String -> ServerPartE a
 errBadUserName err = errBadRequest "Problem with login name" [MText err]
