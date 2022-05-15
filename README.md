@@ -26,8 +26,6 @@ If you have the [Nix package manager](https://nixos.org/) installed, the easiest
     [nix-shell]$ cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
     hackage-server: Ready! Point your browser at http://127.0.0.1:8080
 
-Nix dependencies are managed by [Niv](https://github.com/nmattia/niv). Pull the latest version of the current [channel](https://nixos.wiki/wiki/Nix_channels) with `niv update`. Upgrade to a newer channel by editing `nix/sources.json`, and then `niv update`.
-
 ### Manually
 
 You can also install dependencies manually via your operating system's package

@@ -1,7 +1,11 @@
-{ sources ? import ./nix/sources.nix }:
 let
-  pkgs = import sources.nixpkgs
-    { overlays = []; config = {}; };
+  nixpkgs = builtins.fetchTarball {
+    # master on 2022-05-14
+    url = "https://github.com/NixOS/nixpkgs/archive/1d370bd07399fb52cea6badfbffbc90ac9b0f8f0.tar.gz";
+    sha256 = "1ln4vwy185gwhbf4f8vanrlj4w4bhwrcsb2m8fnm99f4zqzvp7fs";
+  };
+
+  pkgs = import nixpkgs { config = { }; };
 
 in
 pkgs.mkShell {
