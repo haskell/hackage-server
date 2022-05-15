@@ -2,6 +2,7 @@
 
 [![Build Status](https://travis-ci.org/haskell/hackage-server.png?branch=master)](https://travis-ci.org/haskell/hackage-server)
 [![Build status](https://github.com/haskell/hackage-server/actions/workflows/ci.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/ci.yml)
+[![Build status](https://github.com/haskell/hackage-server/actions/workflows/nix-shell.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/nix-shell.yml)
 
 This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances. The `master` branch is suitable for general usage. Specific policy and documentation for the central hackage instance exists in the `central-server` branch.
 
@@ -14,14 +15,16 @@ of libraries that provide Unicode and Globalization support.
 The [text-icu](https://hackage.haskell.org/package/text-icu) Haskell package
 uses the [icu4c](http://icu-project.org/apiref/icu4c/) library to build.
 
-### Nix shell
+### [`nix-shell`](https://nixos.org/manual/nix/stable/command-ref/nix-shell.html)
 
-If you have the Nix package manager installed, the easiest way to obtain
-`hackage-server`'s dependencies is using the Nix shell:
+If you have the [Nix package manager](https://nixos.org/) installed, the easiest way to run `hackage-server` is by using the `nix-shell`. It should be unnecessary to install any dependencies manually. In this repository:
 
-    nix-shell
+    nix-shell --pure
 
-Note: `libbrotli-dev` has to be installed manually.
+    [nix-shell]$ cabal v2-run -- hackage-server init
+
+    [nix-shell]$ cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
+    hackage-server: Ready! Point your browser at http://127.0.0.1:8080
 
 ### Manually
 
