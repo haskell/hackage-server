@@ -23,7 +23,7 @@ import           Data.Monoid          (Sum(..))
 import qualified Data.Text            as T
 import qualified Data.Text.Encoding   as T
 import           Data.SafeCopy        (SafeCopy(..), base, contain,
-                                       deriveSafeCopy)
+                                       deriveSafeCopy, safeGet, safePut)
 import           Data.Serialize       (Get, get, getListOf, getTwoOf, put,
                                        putListOf, putTwoOf)
 import           Data.Typeable        (Typeable)
@@ -31,6 +31,7 @@ import           Data.Word            (Word8)
 import           Distribution.License (licenseToSPDX)
 import           Distribution.Text    (display, simpleParse)
 import           GHC.Generics         (Generic)
+import           Data.Time (UTCTime)
 
 import           Distribution.SPDX.License (License)
 import           Distribution.Package      (PackageIdentifier, PackageName)
@@ -40,8 +41,7 @@ import qualified Distribution.Parsec as Parsec
 
 import qualified Distribution.Server.Features.PreferredVersions as Preferred
 import           Distribution.Server.Framework.MemSize          (MemSize,
-                                                                 memSize,
-                                                                 memSize7)
+                                                                 memSize, memSize8)
 
 
 -- | Basic information about a package. These values are
@@ -54,10 +54,10 @@ data PackageBasicDescription = PackageBasicDescription
   , pbd_author            :: !T.Text
   , pbd_homepage          :: !T.Text
   , pbd_metadata_revision :: !Int
+  , pbd_uploaded_at  :: !UTCTime
   } deriving (Eq, Show, Generic)
 
 instance SafeCopy PackageBasicDescription where
-
   putCopy PackageBasicDescription{..} = contain $ do
     put (Pretty.prettyShow pbd_license)
     put $ T.encodeUtf8 pbd_copyright
@@ -66,6 +66,7 @@ instance SafeCopy PackageBasicDescription where
     put $ T.encodeUtf8 pbd_author
     put $ T.encodeUtf8 pbd_homepage
     put pbd_metadata_revision
+    safePut pbd_uploaded_at
 
   getCopy = contain $ do
     licenseStr <- get
@@ -78,6 +79,7 @@ instance SafeCopy PackageBasicDescription where
         pbd_author            <- T.decodeUtf8 <$> get
         pbd_homepage          <- T.decodeUtf8 <$> get
         pbd_metadata_revision <- get
+        pbd_uploaded_at <- safeGet
         return PackageBasicDescription{..}
 
 
@@ -93,6 +95,7 @@ instance Aeson.ToJSON PackageBasicDescription where
       , Key.fromString "author"            .= pbd_author
       , Key.fromString "homepage"          .= pbd_homepage
       , Key.fromString "metadata_revision" .= pbd_metadata_revision
+      , Key.fromString "uploaded_at"       .= pbd_uploaded_at
       ]
 
 
@@ -110,6 +113,7 @@ instance Aeson.FromJSON PackageBasicDescription where
         pbd_author            <- obj .: Key.fromString "author"
         pbd_homepage          <- obj .: Key.fromString "homepage"
         pbd_metadata_revision <- obj .: Key.fromString "metadata_revision"
+        pbd_uploaded_at  <- obj .: Key.fromString "uploaded_at"
         return $
           PackageBasicDescription {..}
 
@@ -225,8 +229,8 @@ deriveSafeCopy 0 'base ''PackageInfoState
 
 instance MemSize PackageBasicDescription where
   memSize PackageBasicDescription{..} =
-    memSize7 (Pretty.prettyShow pbd_license) pbd_copyright pbd_synopsis
-             pbd_description pbd_author pbd_homepage pbd_metadata_revision
+    memSize8 (Pretty.prettyShow pbd_license) pbd_copyright pbd_synopsis
+             pbd_description pbd_author pbd_homepage pbd_metadata_revision pbd_uploaded_at
 
 instance MemSize PackageVersions where
   memSize (PackageVersions ps) = getSum $
