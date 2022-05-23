@@ -54,7 +54,7 @@ data PackageBasicDescription = PackageBasicDescription
   , pbd_author            :: !T.Text
   , pbd_homepage          :: !T.Text
   , pbd_metadata_revision :: !Int
-  , pbd_uploaded_at  :: !UTCTime
+  , pbd_uploaded_at       :: !UTCTime
   } deriving (Eq, Show, Generic)
 
 instance SafeCopy PackageBasicDescription where
@@ -79,7 +79,7 @@ instance SafeCopy PackageBasicDescription where
         pbd_author            <- T.decodeUtf8 <$> get
         pbd_homepage          <- T.decodeUtf8 <$> get
         pbd_metadata_revision <- get
-        pbd_uploaded_at <- safeGet
+        pbd_uploaded_at       <- safeGet
         return PackageBasicDescription{..}
 
 
@@ -113,7 +113,7 @@ instance Aeson.FromJSON PackageBasicDescription where
         pbd_author            <- obj .: Key.fromString "author"
         pbd_homepage          <- obj .: Key.fromString "homepage"
         pbd_metadata_revision <- obj .: Key.fromString "metadata_revision"
-        pbd_uploaded_at  <- obj .: Key.fromString "uploaded_at"
+        pbd_uploaded_at       <- obj .: Key.fromString "uploaded_at"
         return $
           PackageBasicDescription {..}
 

@@ -151,7 +151,7 @@ getBasicDescription uploadedAt (CabalFileText cf) metadataRev =
                                 PkgDescr.licenseRaw pkgd
       pbd_homepage          = T.pack . fromShortText $ PkgDescr.homepage pkgd
       pbd_metadata_revision = metadataRev
-      pbd_uploaded_at = uploadedAt
+      pbd_uploaded_at       = uploadedAt
       in
       return $ PackageBasicDescription {..}
     (_, Left (_, perrs)) ->
