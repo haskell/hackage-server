@@ -54,6 +54,16 @@
     .paginator {
       margin-left: auto;
     }
+    @media (prefers-color-scheme: dark) {
+      .paginator a {
+        color: #474747;
+      }
+    }
+    @media (prefers-color-scheme: light) {
+      .paginator a {
+        color: #333 !important;
+      }
+    }
     .paginator a {
       box-sizing: border-box;
       display: inline-block;
@@ -62,14 +72,23 @@
       margin-left: 2px;
       text-align: center;
       text-decoration: none !important;
-      color: #333 !important;
       border: 1px solid transparent;
       border-radius: 2px;
     }
+    @media (prefers-color-scheme: dark) {
+      .paginator .current, .paginator .current:hover {
+        color: #474747;
+        background: linear-gradient(to bottom, #585858 0%, #111 100%);
+      }
+    }
+    @media (prefers-color-scheme: light) {
+      .paginator .current, .paginator .current:hover {
+        color: #333 !important;
+        background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
+      }
+    }
     .paginator .current, .paginator .current:hover {
-      color: #333 !important;
       border: 1px solid #979797;
-      background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
     }
     .paginator a:hover {
       color: white !important;
