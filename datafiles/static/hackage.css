@@ -21,7 +21,6 @@ html {
     color: #333;
   }
 }
-
 body {
   text-align: left;
   min-height: 100vh;
@@ -233,7 +232,6 @@ ul.links li a, ul.links li form {
       background-color: #f7f7f7;
   }
 }
-
 pre {
   padding: 0.5rem 1rem;
   margin: 1em 0;
@@ -1046,27 +1044,22 @@ table.fancy th {
 @media (prefers-color-scheme: dark) {
   table.fancy td, table.properties td,
   table.fancy th, table.properties th {
-    padding: 0.15em 0.45em;
     background: #333;
   }
   table.dataTable.compact.fancy tbody th,
   table.dataTable.compact.fancy tbody td {
-    padding: 6px 10px;
-    line-height: normal;
     background: #333;
   }
 }
 
-@media (prefers-color-scheme: light) {
-  table.fancy td, table.properties td,
-  table.fancy th, table.properties th {
-    padding: 0.15em 0.45em;
-  }
-  table.dataTable.compact.fancy tbody th,
-  table.dataTable.compact.fancy tbody td {
-    padding: 6px 10px;
-    line-height: normal;
-  }
+table.fancy td, table.properties td,
+table.fancy th, table.properties th {
+  padding: 0.15em 0.45em;
+}
+table.dataTable.compact.fancy tbody th,
+table.dataTable.compact.fancy tbody td {
+  padding: 6px 10px;
+  line-height: normal;
 }
 
 ul.searchresults li {
