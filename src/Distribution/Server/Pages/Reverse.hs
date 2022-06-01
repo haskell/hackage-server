@@ -39,57 +39,19 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
                          -> LatestOrOld -- ^ Whether the ReverseDisplay was rendered for recent (OnlyLatest) or older (OnlyOlder) versions of the package.
                          -> ReversePageRender -- ^ Obtained from a ReverseDisplay-rendering function.
                          -> [Html]
-    reversePackageRender pkgid packageLink isRecent (ReversePageRender renders counts total) =
-        let packageAnchor = anchor ! [href $ packageLink pkgid] << display pkgid
-            hasVersion = packageVersion pkgid /= nullVersion
-            pkgname = packageName pkgid
-            statLinks = paragraph <<
-              [ toHtml "Check out the "
-              , anchor ! [href $ reverseVerboseUri reverseResource "" pkgname] << "exhaustive listings for all versions"
-              , toHtml $ " of " ++ display pkgid ++ " and its "
-              , anchor ! [href $ reverseFlatUri reverseResource "" pkgname] << "indirect dependencies", toHtml "." ]
-            versionBox = if hasVersion && total /= allCounts
-                then thediv ! [theclass "notification"] << [toHtml $ "These statistics only apply to this version of " ++ display pkgname ++ ". See also ",  anchor ! [href $ reverseNameUri reverseResource "" pkgname] << [toHtml "packages which depend on ", emphasize << "any", toHtml " version"], toHtml $ " (all " ++ show total ++ " of them)."]
-                else noHtml
-            allCounts = uncurry (+) counts
-            otherCount = case total - allCounts of
-                diff | diff > 0 -> paragraph << [show diff ++ " packages depend on versions of " ++ display (packageName pkgid) ++ " other than " ++ if hasVersion then display (packageVersion pkgid) else "the latest" ++ "."]
-                _ -> noHtml
-            (pageText, nonPageText) = (if isRecent == OnlyLatest then id else uncurry $ flip (,)) (recentText, nonRecentText)
-            otherLink = if isRecent == OnlyLatest then reverseOldUri reverseResource "" pkgid else reverseUri reverseResource "" pkgid
-        in h2 << (display pkgid ++ ": " ++ num allCounts "reverse dependencies" "reverse dependency"):versionBox:case counts of
-        (0, 0) ->
-          [ paragraph << [toHtml "No packages depend on ",
-                          packageAnchor, toHtml "."]
+    reversePackageRender pkgid packageLink isRecent (ReversePageRender renders (count, count') total) =
+        let allCounts = count + count'
+            firstTh = toHtml ("Depend on the " <> (if packageVersion pkgid == nullVersion then "latest" else "given") <> " version")
+        in h2 << (display pkgid ++ ": " ++ display allCounts ++ " reverse dependencies"):
+          [ if isRecent == OnlyLatest
+               then toHtml "No version specified, so showing reverse dependencies for latest version."
+               else toHtml ""
+          , table ! [ theclass "fancy" ]
+                  << [ tr << [ th << firstTh, th << toHtml "Depend on other versions", th << toHtml "Total" ]
+                     , tr << [ td << toHtml (display count), td << toHtml (display count'), td << toHtml (display total) ]]
+          , reverseTable
           ]
-        (0, count) ->
-          paragraph << [toHtml "No packages depend on ",
-                          if hasVersion then noHtml else toHtml "some version of ",
-                          packageAnchor,
-                          toHtml $ pageText 0 ++ " However, ",
-                          altVersions count nonPageText otherLink,
-                          toHtml "."] : [otherCount, statLinks]
-        (count, count') ->
-          [ (paragraph<<) $ [ mainVersions count pageText packageAnchor, toHtml " (listed below)." ]
-            ++ if count' > 0 then [ toHtml " Additionally, "
-                                  , altVersions count' nonPageText otherLink
-                                  , toHtml $ ". That's " ++ show (count+count') ++ " in total." ]
-                             else []
-          ] ++ (if isRecent == OnlyLatest then [] else [paragraph << oldText]) ++ [otherCount, statLinks, reverseTable]
       where
-        mainVersions count textFunc pkgLink = toHtml
-           [ toHtml $ num count "packages depend on " "package depends on "
-           , pkgLink
-           , toHtml $ textFunc count
-           ]
-        altVersions count textFunc altLink = toHtml
-           [ anchor ! [href altLink] << num count "packages" "package"
-           , toHtml  $ num' count " depend on " " depends on " ++ display pkgid ++ textFunc count
-           ]
-        recentText count    = ' ':num' count "in their latest versions" "in its latest version"
-        nonRecentText count = ' ':num' count "only in older or deprecated versions" "only in an older or deprecated version"
-        oldText = "The latest version of each package below, which doesn't depend on " ++ display pkgid ++ ", is linked from the first column. The version linked from the second column is the one which has a dependency on " ++ display pkgid ++", but it's no longer the preferred installation candidate. Note that packages which depend on versions of " ++ display pkgid ++ " not uploaded to Hackage are treated as not depending on it at all."
-
         reverseTable = thediv << table << reverseTableRows
         reverseTableRows =
             tr ! [theclass "fancy"] << [ th << "Package name", th << "Version", th << "Reverse dependencies" ] :
@@ -103,34 +65,20 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
         renderStatus (Just UnpreferredVersion) = [theclass "unpreferred"]
         renderStatus _ = []
 
-    reverseFlatRender :: PackageName -> (PackageName -> String) -> ReverseCount -> [(PackageName, Int)] -> [Html]
-    reverseFlatRender pkgname packageLink  (ReverseCount{totalCount, directCount}) pairs =
-      h2 << (display pkgname ++ ": " ++ num totalCount "total reverse dependencies" "reverse dependency"):case (directCount, totalCount) of
-        (0, 0) -> [paragraph << [toHtml "No packages depend on ", toPackage pkgname]]
-        _ ->
-          [ paragraph << if totalCount == directCount
-            then [ toHtml "All packages which use "
-                 , toPackage pkgname
-                 , toHtml " depend on it "
-                 , anchor ! [href $ reverseNameUri reverseResource "" pkgname] << "directly"
-                 , toHtml $ ". " ++ onlyPackage totalCount
-                 ]
-            else [ toPackage pkgname
-                 , toHtml " has "
-                 , anchor ! [href $ reverseNameUri reverseResource "" pkgname] << num directCount "packages" "package"
-                 , toHtml $ " which directly " ++ num' directCount "depend" "depends" ++ " on it, but there are more packages which depend on "
-                 , emphasize << "those"
-                 , toHtml $ " packages. If you flatten the tree of reverse dependencies, you'll find "
-                     ++ show totalCount ++ " packages which use " ++ display pkgname ++ ", and "
-                     ++ show (totalCount-directCount) ++ " which do so without depending directly on it. All of these packages are listed below."
-                 ]
-          , paragraph << [toHtml "See also the ", anchor ! [href $ reverseVerboseUri reverseResource "" pkgname] << "exhaustive listings for all versions", toHtml $ " of " ++ display pkgname ++ "."]
-          , reverseTable
-          ]
+    renderCount ReverseCount{totalCount, directCount} =
+      table ! [ theclass "fancy" ]
+            << [ tr << [ th << firstTh, th << secondTh, th << toHtml "Total" ]
+               , tr << [ td << toHtml (display directCount), td << toHtml (display (totalCount - directCount)), td << toHtml (display totalCount) ]]
       where
-        toPackage pkg = anchor ! [href $ packageLink pkg] << display pkg
+        firstTh = toHtml "Direct reverse dependencies"
+        secondTh = toHtml "Indirect reverse dependencies"
 
-        onlyPackage count = if count == 1 then "There's only one:" else "There are " ++ show count ++ ":"
+    reverseFlatRender :: PackageName -> (PackageName -> String) -> ReverseCount -> [(PackageName, Int)] -> [Html]
+    reverseFlatRender pkgname packageLink revCount pairs =
+      h2 << (display pkgname ++ ": " ++ "total reverse dependencies"):renderCount revCount:[reverseTable]
+      where
+
+        toPackage pkg = anchor ! [href $ packageLink pkg] << display pkg
 
         reverseTable = thediv << table << reverseTableRows
         reverseTableRows =
@@ -143,19 +91,9 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
 
     -- /package/:package/reverse/verbose
     reverseVerboseRender :: PackageName -> [Version] -> (PackageId -> String) -> ReverseCount -> (Map.Map Version (Set PackageIdentifier)) -> [Html]
-    reverseVerboseRender pkgname allVersions packageLink (ReverseCount {totalCount, directCount}) versions =
+    reverseVerboseRender pkgname allVersions packageLink revCount versions =
         h2 << (display pkgname ++ ": reverse dependency statistics"):
-      [ case directCount of
-            0 -> paragraph << [ toHtml "No packages depend on ", thisPackage, toHtml "." ]
-            _ -> toHtml
-                [ paragraph << [ anchor ! [href $ reverseNameUri reverseResource "" pkgname] << num directCount "packages" "package"
-                               , toHtml $ num' directCount " depend" " depends"
-                               , toHtml " directly on ", thisPackage, toHtml "." ]
-                , paragraph << [ toHtml $ num (totalCount - directCount) "packages depend" "package depends" ++ " indirectly on " ++ display pkgname ++ "." ]
-                , paragraph << [ anchor ! [href $ reverseFlatUri reverseResource "" pkgname] << num totalCount "packages" "package"
-                               , toHtml $ num' totalCount " depend" " depends" ++ " on " ++ display pkgname ++ " in total."
-                               ]
-                ]
+      [ renderCount revCount
       , versionTable
       , if length allVersions > limitVersions
            -- Why the oldest? Such that the package can be cached indefinitely without having to get invalidated.
@@ -165,8 +103,6 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
 
       where
         limitVersions = 10
-        toPackage pkgid = anchor ! [href $ packageLink pkgid] << display pkgid
-        thisPackage = toPackage (PackageIdentifier pkgname $ nullVersion)
 
         versionTable = thediv << (table ! [theclass "fancy"]) << versionTableRows
         versionTableRows =
@@ -192,10 +128,6 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
                       (toHtml "This version has no reverse dependencies.")
                       ((ulist <<) . mkListOfLinks)
             ]
-
-    num, num' :: Int -> String -> String -> String
-    num  n plural singular  = show n ++ " " ++ num' n plural singular
-    num' n plural singular = if n == 1 then singular else plural
 
     -- /packages/reverse
     reversePackagesRender :: (PackageName -> String) -> Int -> [(PackageName, ReverseCount)] -> [Html]
