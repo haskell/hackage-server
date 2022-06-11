@@ -4,7 +4,6 @@ module RevDepCommon where
 
 import           GHC.Generics (Generic)
 import Distribution.Server.Users.Types (UserId(..))
-import           Data.List (intercalate)
 import Distribution.Package (PackageIdentifier(..), PackageName, mkPackageName, unPackageName)
 import Distribution.Server.Packages.Types (PkgInfo(..))
 import qualified Data.Vector as Vector
@@ -16,17 +15,17 @@ import Distribution.Version (mkVersion, versionNumbers)
 
 data Package b =
   Package
-    { name :: b
-    , version :: Int
-    , deps :: [ b ]
+    { pName :: b
+    , pVersion :: Int
+    , pDeps :: [ b ]
     }
   deriving (Ord, Show, Eq)
 
 packToPkgInfo :: Show b => Package b -> PkgInfo
-packToPkgInfo Package {name, version, deps} =
-    mkPackage (mkPackageName $ show name) [version] (depsToBS deps)
+packToPkgInfo Package {pName, pVersion, pDeps} =
+    mkPackage (mkPackageName $ show pName) [pVersion] (depsToBS pDeps)
 
-mkPackage :: PackageName -> [Int] -> BSL.ByteString -> PkgInfo
+mkPackage :: PackageName -> [Int] -> [BSL.ByteString] -> PkgInfo
 mkPackage name intVersion depends =
   let
     version = mkVersion intVersion
@@ -38,19 +37,16 @@ mkPackage name intVersion depends =
 \name: " <> BSL.fromStrict (Char8.pack $ unPackageName name) <> "\n\
 \version: " <> dotVersion <> "\n"
     cabalFile :: CabalFileText
-    cabalFile = CabalFileText $ cabalFilePrefix <> if depends /= "" then "library\n  build-depends: " <> depends else ""
+    cabalFile = CabalFileText $ cabalFilePrefix <> if depends /= [] then "library\n  build-depends: " <> BSL.intercalate "," depends else ""
   in
   PkgInfo
   (PackageIdentifier name version)
   (Vector.fromList [(cabalFile, (UTCTime (fromGregorian 2020 1 1) 0, UserId 1))])
   mempty
 
-depsToBS :: Show b => [ b ] -> BSL.ByteString
-depsToBS deps =
-  let
-    depsBS :: String
-    depsBS = intercalate "," $ map show deps
- in BSL.fromStrict $ Char8.pack $ depsBS
+depsToBS :: Show b => [ b ] -> [BSL.ByteString]
+depsToBS =
+  map (BSL.fromStrict . Char8.pack . show)
 
 
 newtype TestPackage = TestPackage Word

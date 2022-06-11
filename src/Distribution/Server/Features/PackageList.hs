@@ -31,6 +31,7 @@ import Distribution.PackageDescription.Configuration
 import Distribution.Utils.ShortText (fromShortText)
 
 import Control.Concurrent
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -113,7 +114,7 @@ initListFeature _env = do
     itemUpdate <- newHook
 
     return $ \core@CoreFeature{..}
-              revs@ReverseFeature{revPackageStats, reverseHook}
+              revs@ReverseFeature{revDirectCount, reverseHook}
               download
               votesf@VotesFeature{..}
               tagsf@TagsFeature{..}
@@ -142,12 +143,15 @@ initListFeature _env = do
                    runHook_ itemUpdate (Set.singleton pkgname)
               Nothing -> return ()
 
-      registerHook reverseHook $ \pkgids -> do
-          let pkgs = map pkgName pkgids
-          forM_ pkgs $ \pkgname -> do
-              revCount <- revPackageStats pkgname
-              modifyItem pkgname (updateReverseItem revCount)
-          runHook_ itemUpdate $ Set.fromDistinctAscList pkgs
+      registerHook reverseHook $ \pkginfos -> do
+          let
+            names = Set.fromDistinctAscList $
+              map (pkgName . pkgInfoId . NE.head)
+                pkginfos
+          forM_ names $ \pkgname -> do
+              revDirect <- revDirectCount pkgname
+              modifyItem pkgname (updateReverseItem revDirect)
+          runHook_ itemUpdate names
 
       registerHook votesUpdated $ \(pkgname, _) -> do
           votes <- pkgNumScore pkgname
@@ -182,7 +186,7 @@ listFeature :: CoreFeature
                 PackageName -> IO ())
 
 listFeature CoreFeature{..}
-            ReverseFeature{revPackageStats}
+            ReverseFeature{revDirectCount}
             DownloadFeature{..}
             VotesFeature{..}
             TagsFeature{..}
@@ -247,7 +251,7 @@ listFeature CoreFeature{..}
     constructItem :: PkgInfo -> IO (PackageName, PackageItem)
     constructItem pkg = do
         let pkgname = packageName pkg
-        revCount <- revPackageStats pkgname
+        intRevDirectCount <- revDirectCount pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
         downs <- recentPackageDownloads
@@ -262,8 +266,8 @@ listFeature CoreFeature{..}
           , itemDownloads  = cmFind pkgname downs
           , itemVotes      = votes
           , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
-          , itemRevDepsCount = directCount revCount
-          , itemHotness = votes + fromIntegral (cmFind pkgname downs) + fromIntegral (directCount revCount)*2
+          , itemRevDepsCount = intRevDirectCount
+          , itemHotness = votes + fromIntegral (cmFind pkgname downs) + fromIntegral intRevDirectCount * 2
           }
 
     ------------------------------
@@ -308,7 +312,7 @@ updateVoteItem :: Float -> PackageItem -> PackageItem
 updateVoteItem score item =
     item {
         itemVotes = score,
-        itemHotness = fromIntegral (itemRevDepsCount item)*2 + score + fromIntegral (itemDownloads item)
+        itemHotness = fromIntegral (itemRevDepsCount item) * 2 + score + fromIntegral (itemDownloads item)
     }
 
 updateDeprecation :: Maybe [PackageName] -> PackageItem -> PackageItem
@@ -317,16 +321,16 @@ updateDeprecation pkgs item =
         itemDeprecated = pkgs
     }
 
-updateReverseItem :: ReverseCount -> PackageItem -> PackageItem
-updateReverseItem revCount item =
+updateReverseItem :: Int -> PackageItem -> PackageItem
+updateReverseItem revDirectCount item =
     item {
-        itemRevDepsCount = directCount revCount,
-        itemDownloads = directCount revCount,
-        itemHotness = fromIntegral (itemRevDepsCount item)*2 + itemVotes item + fromIntegral (itemDownloads item)
+        itemRevDepsCount = revDirectCount,
+        itemHotness = fromIntegral revDirectCount * 2 + itemVotes item + fromIntegral (itemDownloads item)
     }
 
 updateDownload :: Int -> PackageItem -> PackageItem
 updateDownload count item =
     item {
-        itemDownloads = count
+        itemDownloads = count,
+        itemHotness = fromIntegral (itemRevDepsCount item) * 2 + itemVotes item + realToFrac count
     }

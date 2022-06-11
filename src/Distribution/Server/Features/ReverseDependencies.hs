@@ -14,8 +14,8 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.PreferredVersions
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Server.Packages.PackageIndex (PackageIndex, packageNames, allPackagesByName)
-import Distribution.Server.Packages.Types (PkgInfo, pkgInfoId)
+import Distribution.Server.Packages.PackageIndex (PackageIndex, packageNames, allPackagesByNameNE)
+import Distribution.Server.Packages.Types (PkgInfo)
 import Distribution.Server.Features.ReverseDependencies.State
 import Distribution.Package
 import Distribution.Text (display)
@@ -26,6 +26,7 @@ import Data.Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.Containers.ListUtils (nubOrd)
 import Data.List (mapAccumL, sortOn)
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (catMaybes, fromJust)
 import Data.Function (fix)
 import qualified Data.Bimap as Bimap
@@ -35,14 +36,13 @@ import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import GHC.Generics hiding (packageName)
-import GHC.Stack
 
 data ReverseFeature = ReverseFeature {
     reverseFeatureInterface :: HackageFeature,
 
     reverseResource :: ReverseResource,
 
-    reverseHook :: Hook [PackageId] (),
+    reverseHook :: Hook [NE.NonEmpty PkgInfo] (),
 
     queryReverseDeps :: forall m. (MonadIO m, MonadCatch m) => PackageName -> m ([PackageName], [PackageName]),
     revPackageId :: forall m. (MonadCatch m, MonadIO m) => PackageId -> m ReverseDisplay,
@@ -50,6 +50,7 @@ data ReverseFeature = ReverseFeature {
     renderReverseRecent :: forall m. (MonadIO m, MonadCatch m) => PackageName -> ReverseDisplay -> m ReversePageRender,
     renderReverseOld :: forall m. (MonadIO m, MonadCatch m) => PackageName -> ReverseDisplay -> m ReversePageRender,
     revPackageFlat :: forall m. (MonadIO m, MonadCatch m) => PackageName -> m [(PackageName, Int)],
+    revDirectCount :: forall m. (MonadIO m, MonadCatch m) => PackageName -> m Int,
     revPackageStats :: forall m. (MonadIO m, MonadCatch m) => PackageName -> m ReverseCount,
     revCountForAllPackages :: forall m. (MonadIO m, MonadCatch m) => m [(PackageName, ReverseCount)],
     revJSON :: forall m. (MonadIO m, MonadThrow m) => m ByteString,
@@ -95,9 +96,9 @@ initReverseFeature _ = do
             Just pkginfo -> do
                 index <- queryGetPackageIndex
                 r <- readMemState memState
-                added <- addPackage (packageName pkgid) (getAllDependencies pkginfo index) r
+                added <- addPackage index (packageName pkgid) (getDepNames pkginfo) r
                 writeMemState memState added
-                runHook_ updateReverse [pkgid]
+                runHook_ updateReverse [pure pkginfo]
 
       return feature
 
@@ -128,7 +129,7 @@ instance ToJSON Edge
 reverseFeature :: IO (PackageIndex PkgInfo)
                -> IO PreferredVersions
                -> MemState ReverseIndex
-               -> Hook [PackageId] ()
+               -> Hook [NE.NonEmpty PkgInfo] ()
                -> ReverseFeature
 
 reverseFeature queryGetPackageIndex
@@ -153,8 +154,7 @@ reverseFeature queryGetPackageIndex
     initReverseIndex = do
             index <- liftIO queryGetPackageIndex
             -- We build the proper index earlier, this just fires the reverse hooks
-            let allPackages = map pkgInfoId $ concat $ allPackagesByName index
-            runHook_ reverseHook allPackages
+            runHook_ reverseHook $ allPackagesByNameNE index
 
 
     reverseResource = fix $ \r -> ReverseResource
@@ -187,14 +187,14 @@ reverseFeature queryGetPackageIndex
         let indirect = Set.difference rdepsall rdeps
         return (Set.toList rdeps, Set.toList indirect)
 
-    revPackageId :: (HasCallStack, MonadCatch m, MonadIO m) => PackageId -> m ReverseDisplay
+    revPackageId :: (MonadCatch m, MonadIO m) => PackageId -> m ReverseDisplay
     revPackageId pkgid = do
         dispInfo <- revDisplayInfo
         pkgIndex <- liftIO queryGetPackageIndex
         revs <- queryReverseIndex
         perVersionReverse dispInfo pkgIndex revs pkgid
 
-    revPackageName :: (HasCallStack, MonadIO m, MonadCatch m) => PackageName -> m ReverseDisplay
+    revPackageName :: (MonadIO m, MonadCatch m) => PackageName -> m ReverseDisplay
     revPackageName pkgname = do
         dispInfo <- revDisplayInfo
         pkgIndex <- liftIO queryGetPackageIndex
@@ -203,7 +203,7 @@ reverseFeature queryGetPackageIndex
 
     revJSON :: (MonadIO m, MonadThrow m) => m ByteString
     revJSON = do
-        ReverseIndex revdeps nodemap <- queryReverseIndex
+        ReverseIndex revdeps nodemap _depmap <- queryReverseIndex
         let assoc = takeWhile (\(a,_) -> a < Bimap.size nodemap) $ Arr.assocs . Gr.transposeG $ revdeps
             nodeToString node = unPackageName (nodemap Bimap.!> node)
             -- nodes = map (uncurry Node) $ map (\n -> (fst n, nodeToString (fst n))) assoc
@@ -216,7 +216,7 @@ reverseFeature queryGetPackageIndex
         prefs <- liftIO queryGetPreferredVersions
         return $ getDisplayInfo prefs pkgIndex
 
-    renderReverseWith :: (HasCallStack, MonadIO m, MonadCatch m) => PackageName -> ReverseDisplay -> (Maybe VersionStatus -> Bool) -> m ReversePageRender
+    renderReverseWith :: (MonadIO m, MonadCatch m) => PackageName -> ReverseDisplay -> (Maybe VersionStatus -> Bool) -> m ReversePageRender
     renderReverseWith pkg rev filterFunc = do
         let rev' = map fst $ Map.toList rev
         directCounts <- mapM revDirectCount (pkg:rev')
@@ -244,7 +244,7 @@ reverseFeature queryGetPackageIndex
 
     -- -- This could also differentiate between direct and indirect dependencies
     -- -- with a bit more calculation.
-    revPackageFlat :: (HasCallStack, MonadIO m, MonadCatch m) => PackageName -> m [(PackageName, Int)]
+    revPackageFlat :: (MonadIO m, MonadCatch m) => PackageName -> m [(PackageName, Int)]
     revPackageFlat pkgname = do
         memState <- readMemState reverseMemState
         deps <- getDependenciesFlat pkgname memState
@@ -252,12 +252,12 @@ reverseFeature queryGetPackageIndex
         counts <- mapM (`getTotalCount` memState) depList
         return $ zip depList counts
 
-    revPackageStats :: (HasCallStack, MonadIO m, MonadCatch m) => PackageName -> m ReverseCount
+    revPackageStats :: (MonadIO m, MonadCatch m) => PackageName -> m ReverseCount
     revPackageStats pkgname = do
       (direct, transitive) <- getReverseCount pkgname =<< readMemState reverseMemState
       return $ ReverseCount direct transitive
 
-    revDirectCount :: (HasCallStack, MonadIO m, MonadCatch m) => PackageName -> m Int
+    revDirectCount :: (MonadIO m, MonadCatch m) => PackageName -> m Int
     revDirectCount pkgname = do
       getDirectCount pkgname =<< readMemState reverseMemState
 
@@ -270,7 +270,7 @@ reverseFeature queryGetPackageIndex
     -- broken packages.
     --
     -- The returned list is sorted ascendingly on directCount (see ReverseCount).
-    revCountForAllPackages :: (HasCallStack, MonadIO m, MonadCatch m) => m [(PackageName, ReverseCount)]
+    revCountForAllPackages :: (MonadIO m, MonadCatch m) => m [(PackageName, ReverseCount)]
     revCountForAllPackages = do
         index <- liftIO queryGetPackageIndex
         let pkgnames = packageNames index
@@ -279,7 +279,7 @@ reverseFeature queryGetPackageIndex
 
     revForEachVersion :: (MonadThrow m, MonadIO m) => PackageName -> m (Map.Map Version (Set PackageIdentifier))
     revForEachVersion pkg = do
-      ReverseIndex revs nodemap <- readMemState reverseMemState
+      ReverseIndex revs nodemap depmap <- readMemState reverseMemState
       index <- liftIO queryGetPackageIndex
       nodeid <- Bimap.lookup pkg nodemap
       revDepNames <- mapM (`Bimap.lookupR` nodemap) (Set.toList $ suc revs nodeid)
@@ -289,5 +289,5 @@ reverseFeature queryGetPackageIndex
           revDepVersions = do
             x <- nubOrd revDepNames
             pkginfo <- PackageIndex.lookupPackageName index pkg
-            pure (packageVersion pkginfo, dependsOnPkg index (packageId pkginfo) x)
+            pure (packageVersion pkginfo, dependsOnPkg index (packageId pkginfo) x depmap)
       pure $ Map.fromListWith Set.union revDepVersions

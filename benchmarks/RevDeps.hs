@@ -31,8 +31,8 @@ randomPacks gen limit generated | length generated < limit = do
           <*> pure mempty
       else do
         prevIdx <- uniformRM (0, length generated - 1) gen
-        let Package { name = prevName } = generated Vector.! prevIdx
-            (prevNamePacks, nonPrevName) = Vector.partition ((== prevName) . name) generated
+        let Package { pName = prevName } = generated Vector.! prevIdx
+            (prevNamePacks, nonPrevName) = Vector.partition ((== prevName) . pName) generated
         depPacks <-
           if mempty /= nonPrevName
              then do
@@ -46,13 +46,13 @@ randomPacks gen limit generated | length generated < limit = do
         let
           newVersion =
             if mempty /= prevNamePacks
-               then 1 + maximum (fmap version prevNamePacks)
+               then 1 + maximum (fmap pVersion prevNamePacks)
                else 0
         pure $
           Package
-            { name = prevName
-            , version = newVersion
-            , deps = map name depPacks
+            { pName = prevName
+            , pVersion = newVersion
+            , pDeps = map pName depPacks
             }
   let added = generated <> pure toInsert
   randomPacks gen limit added

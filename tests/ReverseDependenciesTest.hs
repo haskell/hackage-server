@@ -32,12 +32,12 @@ import RevDepCommon (Package(..), TestPackage(..), mkPackage, packToPkgInfo)
 
 mtlBeelineLens :: [PkgInfo]
 mtlBeelineLens =
-  [ mkPackage "base" [4,15] ""
-  , mkPackage "mtl" [2,3] "base"
+  [ mkPackage "base" [4,15] []
+  , mkPackage "mtl" [2,3] ["base"]
   -- Note that this example is a bit unrealistic
   -- since these two do not depend on base...
-  , mkPackage "beeline" [0] "mtl"
-  , mkPackage "lens" [0] "mtl"
+  , mkPackage "beeline" [0] ["mtl"]
+  , mkPackage "lens" [0] ["mtl"]
   ]
 
 mkRevFeat :: [PkgInfo] -> IO ReverseFeature
@@ -51,7 +51,7 @@ mkRevFeat pkgs = do
         , migratedEphemeralPrefs = False
         }
   updateReverse <- newHook
-  Right constructed <- pure $ constructReverseIndex idx
+  constructed <- constructReverseIndex idx
   memState <- newMemStateWHNF constructed
   pure $
     reverseFeature
@@ -64,8 +64,9 @@ allTests :: TestTree
 allTests = testGroup "ReverseDependenciesTest"
   [ testCase "with set [beeline->mtl] and querying for mtl, we get beeline" $ do
       let pkgs =
-            [ mkPackage "mtl" [2,3] "base"
-            , mkPackage "beeline" [0] "mtl"
+            [ mkPackage "base" [4,15] []
+            , mkPackage "mtl" [2,3] ["base"]
+            , mkPackage "beeline" [0] ["mtl"]
             ]
       ReverseFeature{revPackageName} <- mkRevFeat pkgs
       res <- revPackageName "mtl"
@@ -73,22 +74,24 @@ allTests = testGroup "ReverseDependenciesTest"
       assertEqual "reverse dependencies must be [beeline]" ref res
   , testCase "revPackageName selects only the version with an actual dependency, even if it is not the newest" $ do
       let pkgs =
-            [ mkPackage "mtl" [2,3] "base"
-            , mkPackage "mtl-tf" [9000] "base"
-            , mkPackage "beeline" [0] "mtl"
-            , mkPackage "beeline" [1] "mtl-tf"
+            [ mkPackage "base" [4,15] []
+            , mkPackage "mtl" [2,3] ["base"]
+            , mkPackage "mtl-tf" [9000] ["base"]
+            , mkPackage "beeline" [0] ["mtl"]
+            , mkPackage "beeline" [1] ["mtl-tf"]
             ]
       ReverseFeature{revPackageName} <- mkRevFeat pkgs
       res <- revPackageName "mtl"
       let ref = Map.fromList [("beeline", (mkVersion [0], Nothing))]
       assertEqual "reverse dependencies must be [beeline v0]" ref res
   , testCase "revPackageId does select old version when queried with old reverse dependency" $ do
-      let mtl = mkPackage "mtl" [2,3] "base"
+      let mtl = mkPackage "mtl" [2,3] ["base"]
           pkgs =
-            [ mtl
-            , mkPackage "mtl-tf" [9000] "base"
-            , mkPackage "beeline" [0] "mtl"
-            , mkPackage "beeline" [1] "mtl-tf"
+            [ mkPackage "base" [4,15] []
+            , mtl
+            , mkPackage "mtl-tf" [9000] ["base"]
+            , mkPackage "beeline" [0] ["mtl"]
+            , mkPackage "beeline" [1] ["mtl-tf"]
             ]
       ReverseFeature{revPackageId} <- mkRevFeat pkgs
       res <- revPackageId (packageId mtl)
@@ -97,9 +100,10 @@ allTests = testGroup "ReverseDependenciesTest"
       assertEqual "reverse dependencies must be [beeline v0]" ref res
   , testCase "revPackageName can find multiple packages" $ do
       let pkgs =
-            [ mkPackage "mtl" [2,3] "base"
-            , mkPackage "beeline" [0] "mtl"
-            , mkPackage "mario" [0] "mtl"
+            [ mkPackage "base" [4,15] []
+            , mkPackage "mtl" [2,3] ["base"]
+            , mkPackage "beeline" [0] ["mtl"]
+            , mkPackage "mario" [0] ["mtl"]
             ]
       ReverseFeature{revPackageName} <- mkRevFeat pkgs
       res <- revPackageName "mtl"
@@ -147,8 +151,8 @@ prop_constructRevDeps :: Property
 prop_constructRevDeps = property $ do
   packs <- genPacks
   let idx = PackageIndex.fromList $ map packToPkgInfo packs
-  ReverseIndex foldedDeps foldedMap <- foldM (packageFolder @_ @TestPackage) emptyReverseIndex packs
-  Right (ReverseIndex constructedDeps constructedMap) <- pure $ constructReverseIndex idx
+  ReverseIndex foldedRevDeps foldedMap foldedDeps <- foldM (packageFolder @_ @TestPackage idx) emptyReverseIndex packs
+  Right (ReverseIndex constructedRevDeps constructedMap constructedDeps) <- pure $ constructReverseIndex idx
   for_ (PackageIndex.allPackageNames idx) $ \name -> do
     foundFolded :: Int <- Bimap.lookup name foldedMap
     foundConstructed :: Int <- Bimap.lookup name constructedMap
@@ -157,9 +161,11 @@ prop_constructRevDeps = property $ do
     -- foundFolded === foundConstructed
 
     -- but they should have the same deps
-    foldedPackNames <- mapM (`Bimap.lookupR` foldedMap) (foldedDeps Arr.! foundFolded)
-    constructedPackNames <- mapM (`Bimap.lookupR` constructedMap) (constructedDeps Arr.! foundConstructed)
+    foldedPackNames <- mapM (`Bimap.lookupR` foldedMap) (foldedRevDeps Arr.! foundFolded)
+    constructedPackNames <- mapM (`Bimap.lookupR` constructedMap) (constructedRevDeps Arr.! foundConstructed)
     Set.fromList foldedPackNames === Set.fromList constructedPackNames
+
+    foldedDeps === constructedDeps
 
 prop_statsEqualsDeps :: Property
 prop_statsEqualsDeps = property $ do
@@ -175,9 +181,9 @@ prop_statsEqualsDeps = property $ do
   length directSet === length directNames
   length totalSet === length totalNames
 
-packageFolder :: (MonadCatch m, MonadIO m, MonadTest m, Show b) => ReverseIndex -> Package b -> m ReverseIndex
-packageFolder index pkg@(Package name _version deps) =
-  catch (liftIO $ addPackage (mkPackageName $ show name) (map (mkPackageName . show) deps) index)
+packageFolder :: (MonadCatch m, MonadIO m, MonadTest m, Show b) => PackageIndex PkgInfo -> ReverseIndex -> Package b -> m ReverseIndex
+packageFolder index revindex pkg@(Package name _version deps) =
+  catch (liftIO $ addPackage index (mkPackageName $ show name) (map (mkPackageName . show) deps) revindex)
   $ \(e :: SomeException) -> do
     footnoteShow pkg
     footnoteShow index
@@ -187,9 +193,9 @@ packageFolder index pkg@(Package name _version deps) =
 
 genPackage :: forall m b. (MonadGen m, Enum b, Bounded b, Ord b) => b -> [Package b] -> m (Package b)
 genPackage newName available = do
-  version <- Gen.int (Range.linear 0 10)
+  pVersion <- Gen.int (Range.linear 0 10)
   depPacks :: [Package b] <- Gen.subsequence available
-  pure $ Package {name = newName, version, deps = map name depPacks }
+  pure $ Package {pName = newName, pVersion, pDeps = map pName depPacks }
 
 packsUntil :: forall m b. (Ord b, Bounded b, MonadGen m, Enum b) => Bool -> Int -> [Package b] -> m [Package b]
 packsUntil allowMultipleVersions limit generated | length generated < limit = do
@@ -199,11 +205,11 @@ packsUntil allowMultipleVersions limit generated | length generated < limit = do
       then
         genPackage (toEnum $ length generated) generated
       else do
-        Package { name = prevName } <- Gen.element generated
-        let (prevNamePacks, nonPrevName) = partition ((== prevName) . name) generated
+        Package { pName = prevName } <- Gen.element generated
+        let (prevNamePacks, nonPrevName) = partition ((== prevName) . pName) generated
         depPacks :: [Package b] <- Gen.subsequence nonPrevName
-        let newVersion = 1 + maximum (map version prevNamePacks)
-        pure $ Package {name = prevName, version = newVersion, deps = map name depPacks}
+        let newVersion = 1 + maximum (map pVersion prevNamePacks)
+        pure $ Package {pName = prevName, pVersion = newVersion, pDeps = map pName depPacks}
   let added = generated ++ [toInsert]
   packsUntil allowMultipleVersions limit added
 packsUntil _ _ generated = pure generated

@@ -630,13 +630,3 @@ test-suite DocTests
     , lib-server
     , doctest-parallel ^>= 0.2.2
         -- doctest-parallel-0.2.2 is the first to filter out autogen-modules
-
-executable ReverseDepsForPackage
-  import: exe-defaults
-
-  main-is: ReverseDepsForPackage.hs
-
-executable ReverseDepsPreferredForPackage
-  import: exe-defaults
-
-  main-is: ReverseDepsPreferredForPackage.hs
