@@ -1,4 +1,4 @@
-# Hackage-server
+# hackage-server
 
 [![Build status](https://github.com/haskell/hackage-server/actions/workflows/haskell-ci.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/haskell-ci.yml)
 [![Build status](https://github.com/haskell/hackage-server/actions/workflows/nix-flake.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/nix-flake.yml)
