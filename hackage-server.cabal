@@ -398,6 +398,7 @@ library
       Distribution.Server.Features.StaticFiles
       Distribution.Server.Features.ServerIntrospect
       Distribution.Server.Features.Sitemap
+      Distribution.Server.Features.PackageRank
       Distribution.Server.Util.NLP.Snowball
 
   if flag(debug)
