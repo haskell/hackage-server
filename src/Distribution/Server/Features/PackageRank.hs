@@ -4,22 +4,22 @@ module Distribution.Server.Features.PackageRank (
 
 import Distribution.Package
 import Distribution.PackageDescription
+import Distribution.Server.Users.Group
 import Distribution.Server.Features.Upload
-import Distribution.Server.Users.UserIdSet as UserIdSet
 
-rankPackage :: PackageDescription -> IO Double
-rankPackage p=do
+rankPackage :: UploadFeature -> PackageDescription -> IO Double
+rankPackage upload p=do
                 maintainers <- maintNum
-                return maintainers+reverseDeps+usageTrend+docScore+stability
+                return$maintainers+reverseDeps+usageTrend+docScore+stabilityScore
                     +goodMetadata+weightUniqueDeps+activelyMaintained
     where   reverseDeps=1
             usageTrend=1
             docScore=1
-            stability=1
+            stabilityScore=1
             maintNum :: IO Double
             maintNum=do  
-                        maintSet<-queryUserGroup$maintainersGroupDescription pkgNm
-                        return fromInteger.UserIdSet$size maintSet
+                        maint<-queryUserGroups$[maintainersGroup upload pkgNm]
+                        return.fromInteger.toInteger$size maint
             goodMetadata=1
             weightUniqueDeps=1
             activelyMaintained=1
