@@ -21,9 +21,13 @@ rankPackagePure p=reverseDeps+usageTrend+docScore+stabilityScore
             usageTrend=1
             docScore=1
             stabilityScore=1
+            testsBench=(bool2Double.hasTests) p + (bool2Double.hasBenchmarks) p
             goodMetadata=1
             weightUniqueDeps=1
             activelyMaintained=1
+            bool2Double :: Bool -> Double
+            bool2Double true=1
+            bool2Double false=0
 
 rankPackage :: UploadFeature -> PackageDescription -> IO Double
 rankPackage upload p=rankPackageIO upload p>>=(\x->return$x + rankPackagePure p)
