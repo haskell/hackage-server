@@ -6,8 +6,9 @@ import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.Server.Users.Group
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.DownloadCount
 
-rankPackageIO upload p=maintNum
+rankPackageIO download upload p=maintNum
     where
             maintNum :: IO Double
             maintNum=do  
@@ -29,5 +30,5 @@ rankPackagePure p=reverseDeps+usageTrend+docScore+stabilityScore
             bool2Double true=1
             bool2Double false=0
 
-rankPackage :: UploadFeature -> PackageDescription -> IO Double
-rankPackage upload p=rankPackageIO upload p>>=(\x->return$x + rankPackagePure p)
+rankPackage :: DownloadFeature -> UploadFeature -> PackageDescription -> IO Double
+rankPackage download upload p=rankPackageIO download upload p>>=(\x->return$x + rankPackagePure p)
