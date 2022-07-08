@@ -114,6 +114,9 @@
             <tr>
               <th>Versions <span style="font-weight:normal;font-size: small;">[<a href="/package/$package.name$.rss">RSS</a>]</span></th>
               <td>$versions$</td>
+              $if(! hasDocs)$
+                <td class="word-wrap">$lastDoc$</td>
+              $endif$
             </tr>
 
             $if(package.optional.hasChangelog)$
