@@ -156,16 +156,14 @@ documentationFeature name
                        , guardValidPackageId
                        , corePackagePage
                        , corePackagesPage
+                       , lookupPackageName
                        }
                      getPackages
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      ReportsFeature{..}
                      UserFeature{ guardAuthorised_ }
-                     VersionsFeature
-                        { queryGetPreferredInfo
-                        , withPackagePreferred
-                        }
+                     VersionsFeature{queryGetPreferredInfo}
                      documentationState
                      documentationChangeHook
   = DocumentationFeature{..}
@@ -391,7 +389,8 @@ documentationFeature name
 
       case pkgVersion pkgid == nullVersion of
         -- if no version is given we want to redirect to the latest version with docs
-        True -> withPackagePreferred pkgid $ \_ pkgs -> do
+        True -> do
+            pkgs <- lookupPackageName (pkgName pkgid)
             prefInfo <- queryGetPreferredInfo (pkgName pkgid)
             findLastVerWithDoc queryHasDocumentation prefInfo pkgs >>= \case
               Just (latestWithDocs, _) -> do
@@ -454,7 +453,7 @@ findLastVerWithDoc queryHasDoc prefInfo ps = helper (reverse ps)
     helper (pkg:pkgs) = do
       hasDoc <- queryHasDoc (pkgInfoId pkg)
       let status = getVersionStatus prefInfo (packageVersion pkg)
-      if hasDoc && status /= DeprecatedVersion 
+      if hasDoc && status == NormalVersion 
           then pure (Just (packageId pkg, status)) 
           else helper pkgs
 

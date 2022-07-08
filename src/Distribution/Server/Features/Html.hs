@@ -593,15 +593,6 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             pkgdesc = flattenPackageDescription $ pkgDesc pkg
 
         prefInfo      <- queryGetPreferredInfo pkgname
-
-        -- let findLastDocVer [] = pure Nothing
-        --     findLastDocVer (pkg':pkgs') = do
-        --         hasDoc <- queryHasDocumentation documentationFeature (pkgInfoId pkg')
-        --         let status = getVersionStatus prefInfo (packageVersion pkg')
-        --         if hasDoc && status /= DeprecatedVersion 
-        --             then pure (Just (packageVersion pkg', status)) 
-        --             else findLastDocVer pkgs'
-
         distributions <- queryPackageStatus pkgname
         totalDown     <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
@@ -614,7 +605,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
         hasDocs       <- queryHasDocumentation documentationFeature realpkg
-        lastVerWithDoc<- findLastVerWithDoc (queryHasDocumentation documentationFeature) prefInfo (reverse pkgs)
+        lastVerWithDoc<- findLastVerWithDoc (queryHasDocumentation documentationFeature) prefInfo pkgs
         rptStats      <- queryLastReportStats reportsFeature realpkg
         candidates    <- lookupCandidateName pkgname
         buildStatus   <- renderBuildStatus
