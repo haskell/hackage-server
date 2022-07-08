@@ -4,6 +4,7 @@ module Distribution.Server.Pages.PackageFromTemplate
   ( packagePageTemplate
   , candidatesPageTemplate
   , renderVersion
+  , renderLastDocVersion
   , latestVersion
   , commaList
   ) where
@@ -364,14 +365,21 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
       (status s ++ [href $ packageURL $ PackageIdentifier pname v]) <<
         display v
 
-    status st = case st of
-        NormalVersion -> []
-        DeprecatedVersion  -> [theclass "deprecated"]
-        UnpreferredVersion -> [theclass "unpreferred"]
-
     infoHtml = case info of
       Nothing -> noHtml
       Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
+
+renderLastDocVersion :: PackageId -> Maybe (Version, VersionStatus) -> Html
+renderLastDocVersion (PackageIdentifier pname _) (Just (v, s)) = "Last working documentation at " +++ 
+    anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v 
+    +++ "."
+renderLastDocVersion (PackageIdentifier _ _) Nothing = toHtml "No working documentation found."
+
+status :: VersionStatus -> [HtmlAttr]
+status st = case st of
+  NormalVersion -> []
+  DeprecatedVersion  -> [theclass "deprecated"]
+  UnpreferredVersion -> [theclass "unpreferred"]
 
 sourceRepositoryToHtml :: SourceRepo -> Html
 sourceRepositoryToHtml sr

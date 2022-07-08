@@ -76,6 +76,7 @@ import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
 import Distribution.PackageDescription (hasLibs)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
+import Distribution.Server.Features.PreferredVersions.State (getVersionStatus)
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -592,6 +593,15 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             pkgdesc = flattenPackageDescription $ pkgDesc pkg
 
         prefInfo      <- queryGetPreferredInfo pkgname
+
+        let findLastDocVer [] = pure Nothing
+            findLastDocVer (pkg':pkgs') = do
+                hasDoc <- queryHasDocumentation documentationFeature (pkgInfoId pkg')
+                let status = getVersionStatus prefInfo (packageVersion pkg')
+                if hasDoc && status /= DeprecatedVersion 
+                    then pure (Just (packageVersion pkg', status)) 
+                    else findLastDocVer pkgs'
+
         distributions <- queryPackageStatus pkgname
         totalDown     <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
@@ -604,6 +614,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
         hasDocs       <- queryHasDocumentation documentationFeature realpkg
+        lastDocVer    <- findLastDocVer (reverse pkgs)
         rptStats      <- queryLastReportStats reportsFeature realpkg
         candidates    <- lookupCandidateName pkgname
         buildStatus   <- renderBuildStatus
@@ -644,6 +655,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "analyticsPixels"   $= map analyticsPixelUrl (Set.toList analyticsPixels)
           , "versions"          $= (PagesNew.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
+          , "lastDoc"           $= PagesNew.renderLastDocVersion realpkg lastDocVer
           , "totalDownloads"    $= totalDown
           , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
