@@ -4,6 +4,7 @@ module Distribution.Server.Pages.PackageFromTemplate
   ( packagePageTemplate
   , candidatesPageTemplate
   , renderVersion
+  , renderVersionWithDocs
   , latestVersion
   , commaList
   ) where
@@ -340,29 +341,35 @@ candidatesPageTemplate cands candidates candidatesCore=
                     , toHtml $ ". " ++ fromShortText (synopsis desc)
                     ]
 
+renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> Html
+renderVersion pkg allVersionDocs = renderVersionWithDocs pkg (zip allVersionDocs (repeat Nothing))
 
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.
-renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> Html
-renderVersion (PackageIdentifier pname pversion) allVersions info =
+renderVersionWithDocs :: PackageId -> [((Version, VersionStatus), Maybe Bool)] -> Maybe String -> Html
+renderVersionWithDocs (PackageIdentifier pname pversion) allVersions info =
   versionList +++ infoHtml
   where
-    (earlierVersions, laterVersionsInc) = span ((<pversion) . fst) allVersions
+    (earlierVersions, laterVersionsInc) = span ((<pversion) . fst . fst) allVersions
 
     (mThisVersion, laterVersions) = case laterVersionsInc of
-            (v:later) | fst v == pversion -> (Just v, later)
+            (v:later) | fst (fst v) == pversion -> (Just v, later)
             later -> (Nothing, later)
+
+    displayVersionDocs v hasDocs = display v +++ 
+      case hasDocs of Just True -> small << "(doc)"; _ -> mempty
 
     versionList = commaList $ map versionedLink earlierVersions
       ++ (case pversion of
             v | v == nullVersion -> []
-            _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
+            _ -> [let (attr, hasDocs) = maybe ([], Nothing) ((,) <$> status . snd . fst <*> snd) mThisVersion
+                  in  strong ! attr << displayVersionDocs pversion hasDocs]
         )
       ++ map versionedLink laterVersions
 
-    versionedLink (v, s) = anchor !
+    versionedLink ((v, s), hasDocs) = anchor !
       (status s ++ [href $ packageURL $ PackageIdentifier pname v]) <<
-        display v
+        displayVersionDocs v hasDocs
 
     status st = case st of
         NormalVersion -> []

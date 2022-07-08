@@ -604,6 +604,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
         hasDocs       <- queryHasDocumentation documentationFeature realpkg
+        eachHasDocs   <- traverse (queryHasDocumentation documentationFeature . pkgInfoId) pkgs
         rptStats      <- queryLastReportStats reportsFeature realpkg
         candidates    <- lookupCandidateName pkgname
         buildStatus   <- renderBuildStatus
@@ -642,8 +643,10 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "cabalVersion"      $= display cabalVersion
           , "tags"              $= (renderTags tags)
           , "analyticsPixels"   $= map analyticsPixelUrl (Set.toList analyticsPixels)
-          , "versions"          $= (PagesNew.renderVersion realpkg
-              (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
+          , "versions"          $= PagesNew.renderVersionWithDocs 
+                                      realpkg
+                                      (zip (classifyVersions prefInfo $ map packageVersion pkgs) (map Just eachHasDocs))
+                                      infoUrl
           , "totalDownloads"    $= totalDown
           , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
