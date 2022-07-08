@@ -1,9 +1,11 @@
 {-# LANGUAGE RankNTypes, FlexibleContexts,
              NamedFieldPuns, RecordWildCards, PatternGuards #-}
+{-# LANGUAGE LambdaCase #-}
 module Distribution.Server.Features.Documentation (
     DocumentationFeature(..),
     DocumentationResource(..),
-    initDocumentationFeature
+    initDocumentationFeature,
+    findLastVerWithDoc
   ) where
 
 import Distribution.Server.Framework
@@ -41,6 +43,9 @@ import Data.Maybe
 import Data.Time.Clock (NominalDiffTime, diffUTCTime, getCurrentTime)
 import System.Directory (getModificationTime)
 import Control.Applicative
+import Distribution.Server.Features.PreferredVersions
+import Distribution.Server.Features.PreferredVersions.State (getVersionStatus)
+import Distribution.Server.Packages.Types
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
 -- 2. Have cabal generate a standard doc tarball, and serve that here
@@ -82,6 +87,7 @@ initDocumentationFeature :: String
                              -> TarIndexCacheFeature
                              -> ReportsFeature
                              -> UserFeature
+                             -> VersionsFeature
                              -> IO DocumentationFeature)
 initDocumentationFeature name
                          env@ServerEnv{serverStateDir} = do
@@ -91,9 +97,9 @@ initDocumentationFeature name
     -- Hooks
     documentationChangeHook <- newHook
 
-    return $ \core getPackages upload tarIndexCache reportsCore user -> do
+    return $ \core getPackages upload tarIndexCache reportsCore user version -> do
       let feature = documentationFeature name env
-                                         core getPackages upload tarIndexCache reportsCore user
+                                         core getPackages upload tarIndexCache reportsCore user version
                                          documentationState
                                          documentationChangeHook
       return feature
@@ -139,6 +145,7 @@ documentationFeature :: String
                      -> TarIndexCacheFeature
                      -> ReportsFeature
                      -> UserFeature
+                     -> VersionsFeature
                      -> StateComponent AcidState Documentation
                      -> Hook PackageId ()
                      -> DocumentationFeature
@@ -149,13 +156,16 @@ documentationFeature name
                        , guardValidPackageId
                        , corePackagePage
                        , corePackagesPage
-                       , lookupPackageId
                        }
                      getPackages
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      ReportsFeature{..}
                      UserFeature{ guardAuthorised_ }
+                     VersionsFeature
+                        { queryGetPreferredInfo
+                        , withPackagePreferred
+                        }
                      documentationState
                      documentationChangeHook
   = DocumentationFeature{..}
@@ -358,9 +368,6 @@ documentationFeature name
     withDocumentation self dpath func = do
       pkgid <- packageInPath dpath
 
-      -- lookupPackageId returns the latest version if no version is specified.
-      pkginfo <- lookupPackageId pkgid
-
       -- Set up the canonical URL to point to the unversioned path
       let basedpath =
             [ if var == "package"
@@ -375,17 +382,26 @@ documentationFeature name
       -- See https://support.google.com/webmasters/answer/139066?hl=en#6
       setHeaderM "Link" canonicalHeader
 
-      case pkgVersion pkgid == nullVersion of
-        -- if no version is given we want to redirect to the latest version
-        True -> tempRedirect latestPkgPath (toResponse "")
-          where
-            latest = packageId pkginfo
-            dpath' = [ if var == "package"
-                         then (var, display latest)
-                         else e
-                     | e@(var, _) <- dpath ]
-            latestPkgPath = (renderResource' self dpath')
+      -- Essentially errNotFound, but overloaded to specify a header.
+      -- (Needed since errNotFound throws away result of setHeaderM)
+      let errNotFoundH title message = throwError
+                  (ErrorResponse 404
+                  [("Link", canonicalHeader)]
+                  title message)
 
+      case pkgVersion pkgid == nullVersion of
+        -- if no version is given we want to redirect to the latest version with docs
+        True -> withPackagePreferred pkgid $ \_ pkgs -> do
+            prefInfo <- queryGetPreferredInfo (pkgName pkgid)
+            findLastVerWithDoc queryHasDocumentation prefInfo pkgs >>= \case
+              Just (latestWithDocs, _) -> do
+                let dpath' = [ if var == "package"
+                                then (var, display latestWithDocs)
+                                else e
+                            | e@(var, _) <- dpath ]
+                    latestPkgPath = (renderResource' self dpath')
+                tempRedirect latestPkgPath (toResponse "")
+              Nothing -> errNotFoundH "Not Found" [MText "There is no documentation for this package."]
         False -> do
           mdocs <- queryState documentationState $ LookupDocumentation pkgid
           case mdocs of
@@ -397,13 +413,6 @@ documentationFeature name
                 , MLink canonicalLink canonicalLink
                 , MText " for the latest version."
                 ]
-              where
-                -- Essentially errNotFound, but overloaded to specify a header.
-                -- (Needed since errNotFound throws away result of setHeaderM)
-                errNotFoundH title message = throwError
-                  (ErrorResponse 404
-                  [("Link", canonicalHeader)]
-                  title message)
             Just blob -> do
               index <- liftIO $ cachedTarIndex blob
               func pkgid blob index
@@ -438,6 +447,16 @@ checkDocTarball pkgid =
     maxDocMetaFileSize = 16 * 1024 -- 16KiB
     docMetaPath = DocMeta.packageDocMetaTarPath pkgid
 
+findLastVerWithDoc :: MonadIO m => (PackageIdentifier -> m Bool) -> PreferredInfo -> [PkgInfo] -> m (Maybe (PackageId, VersionStatus))
+findLastVerWithDoc queryHasDoc prefInfo ps = helper (reverse ps)
+  where
+    helper [] = pure Nothing
+    helper (pkg:pkgs) = do
+      hasDoc <- queryHasDoc (pkgInfoId pkg)
+      let status = getVersionStatus prefInfo (packageVersion pkg)
+      if hasDoc && status /= DeprecatedVersion 
+          then pure (Just (packageId pkg, status)) 
+          else helper pkgs
 
 {------------------------------------------------------------------------------
   Auxiliary
