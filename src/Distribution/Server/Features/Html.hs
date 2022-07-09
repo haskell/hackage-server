@@ -76,7 +76,6 @@ import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
 import Distribution.PackageDescription (hasLibs)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
-import Data.Bifunctor
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -605,7 +604,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
         hasDocs       <- queryHasDocumentation documentationFeature realpkg
-        lastVerWithDoc<- findLastVerWithDoc (queryHasDocumentation documentationFeature) prefInfo pkgs
+        mDocPkgId     <- if hasDocs then pure Nothing 
+                              else findLastVerWithDoc (queryHasDocumentation documentationFeature) prefInfo pkgs
         rptStats      <- queryLastReportStats reportsFeature realpkg
         candidates    <- lookupCandidateName pkgname
         buildStatus   <- renderBuildStatus
@@ -646,7 +646,6 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "analyticsPixels"   $= map analyticsPixelUrl (Set.toList analyticsPixels)
           , "versions"          $= (PagesNew.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
-          , "lastDoc"           $= PagesNew.renderLastDocVersion realpkg (fmap (first pkgVersion) lastVerWithDoc)
           , "totalDownloads"    $= totalDown
           , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
@@ -667,7 +666,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
             mdocIndex mdocMeta mreadme
-            docURL distributions
+            docURL mDocPkgId distributions
             deprs
             utilities
             False
@@ -1271,7 +1270,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
         ] ++
         PagesNew.packagePageTemplate render
             mdocIndex Nothing mreadme
-            docURL [] Nothing
+            docURL Nothing [] Nothing
             utilities
             True
 

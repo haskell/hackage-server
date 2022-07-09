@@ -4,7 +4,6 @@ module Distribution.Server.Pages.PackageFromTemplate
   ( packagePageTemplate
   , candidatesPageTemplate
   , renderVersion
-  , renderLastDocVersion
   , latestVersion
   , commaList
   ) where
@@ -81,14 +80,14 @@ import Distribution.Server.Features.Html.HtmlUtilities
 --    votes it has.
 packagePageTemplate :: PackageRender
             -> Maybe TarIndex -> Maybe DocMeta -> Maybe BS.ByteString
-            -> URL -> [(DistroName, DistroPackageInfo)]
+            -> URL -> Maybe PackageId -> [(DistroName, DistroPackageInfo)]
             -> Maybe [PackageName]
             -> HtmlUtilities
             -> Bool
             -> [TemplateAttr]
 packagePageTemplate render
             mdocIndex mdocMeta mreadme
-            docURL distributions
+            docURL mPkgId distributions
             deprs utilities isCandidate =
   if isCandidate
     then
@@ -98,7 +97,7 @@ packagePageTemplate render
     , "doc"               $= docFieldsTemplate
     ] ++
     -- Miscellaneous things that could still stand to be refactored a bit.
-    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL False
+    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL mPkgId False
     , "downloadSection"   $= Old.downloadSection render
     ]
     else
@@ -108,7 +107,7 @@ packagePageTemplate render
     , "doc"               $= docFieldsTemplate
     ] ++
     -- Miscellaneous things that could still stand to be refactored a bit.
-    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNav
+    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL mPkgId hasQuickNav
     , "executables"       $= (commaList . map toHtml $ rendExecNames render)
     , "downloadSection"   $= Old.downloadSection render
     , "stability"         $= renderStability desc
@@ -341,51 +340,37 @@ candidatesPageTemplate cands candidates candidatesCore=
                     , toHtml $ ". " ++ fromShortText (synopsis desc)
                     ]
 
-renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> Html
-renderVersion pkg allVersionDocs = renderVersionWithDocs pkg (zip allVersionDocs (repeat Nothing))
-
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.
-renderVersionWithDocs :: PackageId -> [((Version, VersionStatus), Maybe Bool)] -> Maybe String -> Html
-renderVersionWithDocs (PackageIdentifier pname pversion) allVersions info =
+renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> Html
+renderVersion (PackageIdentifier pname pversion) allVersions info =
   versionList +++ infoHtml
   where
-    (earlierVersions, laterVersionsInc) = span ((<pversion) . fst . fst) allVersions
+    (earlierVersions, laterVersionsInc) = span ((<pversion) . fst) allVersions
 
     (mThisVersion, laterVersions) = case laterVersionsInc of
-            (v:later) | fst (fst v) == pversion -> (Just v, later)
+            (v:later) | fst v == pversion -> (Just v, later)
             later -> (Nothing, later)
-
-    displayVersionDocs v hasDocs = display v +++ 
-      case hasDocs of Just True -> small << "(doc)"; _ -> mempty
 
     versionList = commaList $ map versionedLink earlierVersions
       ++ (case pversion of
             v | v == nullVersion -> []
-            _ -> [let (attr, hasDocs) = maybe ([], Nothing) ((,) <$> status . snd . fst <*> snd) mThisVersion
-                  in  strong ! attr << displayVersionDocs pversion hasDocs]
+            _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
         )
       ++ map versionedLink laterVersions
 
-    versionedLink ((v, s), hasDocs) = anchor !
+    versionedLink (v, s) = anchor !
       (status s ++ [href $ packageURL $ PackageIdentifier pname v]) <<
-        displayVersionDocs v hasDocs
+        display v
+
+    status st = case st of
+        NormalVersion -> []
+        DeprecatedVersion  -> [theclass "deprecated"]
+        UnpreferredVersion -> [theclass "unpreferred"]
 
     infoHtml = case info of
       Nothing -> noHtml
       Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
-
-renderLastDocVersion :: PackageId -> Maybe (Version, VersionStatus) -> Html
-renderLastDocVersion (PackageIdentifier pname _) (Just (v, s)) = "Last working documentation at " +++ 
-    anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v 
-    +++ "."
-renderLastDocVersion (PackageIdentifier _ _) Nothing = toHtml "No working documentation found."
-
-status :: VersionStatus -> [HtmlAttr]
-status st = case st of
-  NormalVersion -> []
-  DeprecatedVersion  -> [theclass "deprecated"]
-  UnpreferredVersion -> [theclass "unpreferred"]
 
 sourceRepositoryToHtml :: SourceRepo -> Html
 sourceRepositoryToHtml sr
