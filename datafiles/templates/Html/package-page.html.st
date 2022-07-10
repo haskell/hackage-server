@@ -88,6 +88,12 @@
 
         <div id="maintainer-corner">
           <h4>Maintainer's Corner</h4>
+          <p>Maintainers</p>
+          <ul>
+            <li>
+              $maintainers$
+            </li>
+          </ul>
           <p>For $package.maintainerURL$ and hackage trustees</p>
           <ul>
             <li>

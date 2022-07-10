@@ -1,7 +1,8 @@
 -- Body of the HTML page for a package
 module Distribution.Server.Pages.Group (
     groupPage,
-    renderGroupName
+    renderGroupName,
+    listGroupCompact
     -- renderGroupNameWithCands
   ) where
 
@@ -73,3 +74,8 @@ listGroup [] _ = p << "No member exist presently"
 listGroup users muri = unordList (map displayName users)
   where displayName uname = (anchor ! [href $ "/user/" ++ display uname] << display uname) +++
                             maybe [] (removeUser uname) muri
+
+listGroupCompact :: [Users.UserName] -> Html
+listGroupCompact [] = toHtml "No member exist presently"
+listGroupCompact users = foldr1 (\a b -> a +++ ", " +++ b) (map displayName users)
+  where displayName uname = (anchor ! [href $ "/user/" ++ display uname] << display uname)

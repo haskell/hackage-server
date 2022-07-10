@@ -76,6 +76,7 @@ import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
 import Distribution.PackageDescription (hasLibs)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
+import Distribution.Server.Pages.Group (listGroupCompact)
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -590,6 +591,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             docURL  = packageDocsContentUri docs realpkg
             execs   = rendExecNames render
             pkgdesc = flattenPackageDescription $ pkgDesc pkg
+            maintainers = maintainersGroup pkgname
 
         prefInfo      <- queryGetPreferredInfo pkgname
         distributions <- queryPackageStatus pkgname
@@ -611,6 +613,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
         analyticsPixels <- getPackageAnalyticsPixels pkgname
+        userDb          <- queryGetUserDb
+        maintainerlist  <- liftIO $ queryUserGroup maintainers
         let
           idAndReport = fmap (\(rptId, rpt, _) -> (rptId, rpt)) rptStats
           install = getInstall $ fmap (fst &&& BR.installOutcome . snd) idAndReport
@@ -660,6 +664,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "candidates"        $= case candidates of
                                     [] -> [ toHtml "No Candidates"]
                                     _  -> [ PagesNew.commaList $ flip map candidates $ \cand -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId cand] << display (packageVersion cand) ]
+          , "maintainers"       $= listGroupCompact (map (Users.userIdToName userDb) (Group.toList maintainerlist))
           ] ++
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
@@ -1102,7 +1107,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                  DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
-                 UserFeature{ guardAuthorised, guardAuthorised_ }
+                 UserFeature{ guardAuthorised, guardAuthorised_, queryGetUserDb }
                  templates = HtmlCandidates{..}
   where
     candidates     = candidatesResource
@@ -1261,10 +1266,15 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
               [] -> []
               warn -> [thediv ! [theclass "candidate-warn"] << [paragraph << strong (toHtml "Warnings:"), unordList warn]]
 
+      let maintainers = maintainersGroup pkgname
+      userDb          <- queryGetUserDb
+      maintainerlist  <- liftIO $ queryUserGroup maintainers
+
       return $ toResponse . template $
         [ "versions"          $= (PagesNew.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing)
         , "maintainHtml"      $= [maintainHtml]
         , "warningBox"        $= warningBox
+        , "maintainers"       $= listGroupCompact (map (Users.userIdToName userDb) (Group.toList maintainerlist))
         ] ++
         PagesNew.packagePageTemplate render
             mdocIndex Nothing mreadme
