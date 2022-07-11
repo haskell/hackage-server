@@ -33,6 +33,14 @@ In particular you need an account to be able to upload or help maintain packages
 <td><label for="email">Your email address</label>
 <td><input type="text" name="email" id="email">
 <td>e.g. jnovak@example.com (but do <b>not</b> use the style "Jan Novák" &lt;jnovak@example.com&gt;)
+
+<tr>
+<td><label for="captcha">Captcha</label>
+<td><input type="text" name="captcha" id="captcha">
+<td><img src="$base64image$" alt="captcha"/>The captcha will expire in 10 minutes.
+
+<input type="hidden" name="timestamp" id="timestamp" value="$timestamp$">
+<input type="hidden" name="hash" id="hash" value="$hash$">
 </table>
 
 <p>Your email address will be used to confirm your account (and if you ever

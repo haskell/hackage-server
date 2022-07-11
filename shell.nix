@@ -7,9 +7,9 @@ let
 
   pkgs = import nixpkgs { config = { }; };
 
-in
-pkgs.mkShell {
-  buildInputs = with pkgs; [
+in 
+with pkgs; pkgs.mkShell rec {
+  buildInputs = [
     # Haskell development
     cabal-install
     ghc
@@ -22,5 +22,14 @@ pkgs.mkShell {
     cryptodev
     pkg-config
     brotli
+
+    gd
+    libpng
+    libjpeg
+    fontconfig
+    freetype
+    expat
   ];
+
+  LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 }

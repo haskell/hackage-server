@@ -29,17 +29,23 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS -- Only used for ASCII data
-
+import qualified Data.ByteString.Lazy as BSL
 import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put, modify)
 import Data.SafeCopy (base, deriveSafeCopy)
 
 import Distribution.Text (display)
-import Data.Time (UTCTime(..), getCurrentTime, addDays)
+import Data.Time
 import Text.CSV (CSV, Record)
 import Network.Mail.Mime
 import Network.URI (URI(..), URIAuth(..))
+import Graphics.Captcha
+import qualified Data.ByteString.Base64 as Base64
+import qualified Crypto.Hash.SHA256 as SHA256
+import Data.String
+import Data.Char
+import Text.Read (readMaybe)
 
 
 -- | A feature to allow open account signup, and password reset,
@@ -413,20 +419,35 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
       [MText $ "The " ++ thing ++ " token does not exist. It could be that it "
             ++ "has been used already, or that it has expired."]
 
+    hashTimeAndCaptcha :: UTCTime -> String -> BS.ByteString
+    hashTimeAndCaptcha timestamp captcha = Base64.encode (SHA256.hash (fromString (show timestamp ++ map toUpper captcha)))
+
+    makeCaptchaHash :: IO (UTCTime, BS.ByteString, BS.ByteString)
+    makeCaptchaHash = do
+        (code, image) <- makeCaptcha
+        timestamp <- getCurrentTime
+        pure (timestamp, hashTimeAndCaptcha timestamp code, fromString "data:image/png;base64," <> Base64.encode image)
+
     handlerGetSignupRequestNew :: DynamicPath -> ServerPartE Response
     handlerGetSignupRequestNew _ = do
+        (timestamp, hash, base64image) <- liftIO makeCaptchaHash
         template <- getTemplate templates "SignupRequest.html"
-        ok $ toResponse $ template []
+        ok $ toResponse $ template 
+          [ "timestamp"   $= timestamp
+          , "hash"        $= hash
+          , "base64image" $= base64image
+          ]
 
     handlerPostSignupRequestNew :: DynamicPath -> ServerPartE Response
     handlerPostSignupRequestNew _ = do
         templateEmail        <- getTemplate templates "SignupConfirmation.email"
         templateConfirmation <- getTemplate templates "SignupEmailSent.html"
 
-        (username, realname, useremail) <- lookUserNameEmail
+        timestamp <- liftIO getCurrentTime
+
+        (username, realname, useremail) <- lookValidFields timestamp
 
         nonce     <- liftIO (newRandomNonce 10)
-        timestamp <- liftIO getCurrentTime
         let signupInfo = SignupInfo {
               signupUserName     = username,
               signupRealName     = realname,
@@ -462,16 +483,28 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
           templateConfirmation
             [ "useremail" $= useremail ]
       where
-        lookUserNameEmail = do
-          (username, realname, useremail) <-
-            msum [ body $ (,,) <$> lookText' "username"
-                               <*> lookText' "realname"
-                               <*> lookText' "email"
+        lookValidFields now = do
+          (username, realname, useremail, captcha, timestampStr, hash) <-
+            msum [ body $ (,,,,,) <$> lookText' "username"
+                                  <*> lookText' "realname"
+                                  <*> lookText' "email"
+                                  <*> look      "captcha"
+                                  <*> look      "timestamp"
+                                  <*> lookBS    "hash"
                  , errBadRequest "Missing form fields" [] ]
 
           guardValidLookingUserName username
           guardValidLookingName     realname
           guardValidLookingEmail    useremail
+
+          timestamp <- maybe (errBadRequest "Invalid request" [MText "Seems something went wrong with your request."]) 
+            pure (readMaybe timestampStr)
+
+          when (diffUTCTime now timestamp > secondsToNominalDiffTime (10 * 60)) $
+            errBadRequest "Problem with captcha" [MText "Oops, The captcha has expired. Please be quick next time!"]
+
+          unless (hashTimeAndCaptcha timestamp captcha == BSL.toStrict hash) $
+            errBadRequest "Problem with captcha" [MText "Sorry, the captcha is wrong. Please try sign up again."]
 
           return (username, realname, useremail)
 
