@@ -4,6 +4,7 @@ module Distribution.Server.Features.PackageRank
 
 import           Distribution.Package
 import           Distribution.PackageDescription
+import           Distribution.Types.Version
 import           Distribution.Server.Features.DownloadCount
 import           Distribution.Server.Features.Upload
 import           Distribution.Server.Users.Group
@@ -28,6 +29,8 @@ rankPackagePure p =
     + activelyMaintained
  where
   reverseDeps        = 1
+  versions           = versionNumbers . pkgVersion $ package p
+  dependencies       = allBuildDepends p
   usageTrend         = 1
   docScore           = 1
   stabilityScore     = 1
