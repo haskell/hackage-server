@@ -37,8 +37,8 @@ In particular you need an account to be able to upload or help maintain packages
 <tr>
 <td><label for="captcha">Captcha</label>
 <td><input type="text" name="captcha" id="captcha">
-<td><img src="$base64image$" alt="captcha"/>The captcha will expire in 10 minutes.
-
+<td><a href="javascript:changeCaptcha();"><img src="$base64image$" alt="captcha" id="image"/></a>
+The captcha will expire in 10 minutes. Click on the image to change one.
 <input type="hidden" name="timestamp" id="timestamp" value="$timestamp$">
 <input type="hidden" name="hash" id="hash" value="$hash$">
 </table>
@@ -56,4 +56,27 @@ can set your password and activate your account.
 </form>
 
 </div>
+<script type="text/javascript">
+var image = document.getElementById("image");
+var timestamp = document.getElementById("timestamp");
+var hash = document.getElementById("hash");
+
+function changeCaptcha() {
+  var xmlHttp = new XMLHttpRequest();
+  xmlHttp.onreadystatechange = function() { 
+      if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
+        var res = JSON.parse(xmlHttp.responseText);
+        if (typeof res == "object" && typeof res.timestamp == "string" && typeof res.hash == "string" && typeof res.base64image == "string") {
+          image.setAttribute("src", res.base64image);
+          timestamp.setAttribute("value", res.timestamp);
+          hash.setAttribute("value", res.hash);
+        } else {
+          console.error("Invalid response from /users/register/captcha");
+        }
+      }
+  }
+  xmlHttp.open("GET", "/users/register/captcha", true);
+  xmlHttp.send(null);
+}
+</script>
 </body></html>

@@ -28,6 +28,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Char8 as BS -- Only used for ASCII data
 import qualified Data.ByteString.Lazy as BSL
 import Data.Typeable (Typeable)
@@ -46,6 +47,9 @@ import qualified Crypto.Hash.SHA256 as SHA256
 import Data.String
 import Data.Char
 import Text.Read (readMaybe)
+import Data.Aeson
+import qualified Data.Aeson.KeyMap as KeyMap
+import qualified Data.Aeson.Key as Key
 
 
 -- | A feature to allow open account signup, and password reset,
@@ -312,6 +316,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
     userSignupFeatureInterface = (emptyHackageFeature "user-signup-reset") {
         featureDesc      = "Extra information about user accounts, email addresses etc."
       , featureResources = [signupRequestsResource,
+                            captchaResource,
                             signupRequestResource,
                             resetRequestsResource,
                             resetRequestResource]
@@ -330,6 +335,12 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
                        , (POST, "Create a new account signup request") ]
       , resourceGet  = [ ("", handlerGetSignupRequestNew) ]
       , resourcePost = [ ("", handlerPostSignupRequestNew) ]
+      }
+    
+    captchaResource = 
+      (resourceAt "/users/register/captcha") {
+        resourceDesc = [ (GET,  "Get a new captcha") ]
+      , resourceGet  = [ ("json", handlerGetCaptcha) ]
       }
 
     signupRequestResource =
@@ -436,6 +447,15 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
           [ "timestamp"   $= timestamp
           , "hash"        $= hash
           , "base64image" $= base64image
+          ]
+    
+    handlerGetCaptcha :: DynamicPath -> ServerPartE Response
+    handlerGetCaptcha _ = do
+        (timestamp, hash, base64image) <- liftIO makeCaptchaHash
+        ok $ toResponse $ Object $ KeyMap.fromList $ 
+          [ (Key.fromString "timestamp"  , String (T.pack (show timestamp)))
+          , (Key.fromString "hash"       , String (T.decodeUtf8 hash))
+          , (Key.fromString "base64image", String (T.decodeUtf8 base64image))
           ]
 
     handlerPostSignupRequestNew :: DynamicPath -> ServerPartE Response
