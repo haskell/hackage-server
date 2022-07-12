@@ -9,6 +9,8 @@ import           Distribution.Server.Features.DownloadCount
 import           Distribution.Server.Features.Upload
 import           Distribution.Server.Users.Group
 
+import Data.Maybe (isNothing)
+
 rankPackageIO download upload p = maintNum
  where
   -- Number of maintainers
@@ -39,6 +41,7 @@ rankPackagePure p =
   goodMetadata       = 1
   weightUniqueDeps   = 1
   activelyMaintained = 1
+  isApp = (isNothing.library) p && (not.null.executables) p
   bool2Double :: Bool -> Double
   bool2Double true  = 1
   bool2Double false = 0
