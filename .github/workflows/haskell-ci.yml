@@ -61,11 +61,11 @@ jobs:
             "$HOME/.ghcup/bin/ghcup" install ghc "$HCVER"
             "$HOME/.ghcup/bin/ghcup" install cabal 3.6.2.0
             apt-get update
-            apt-get install -y libbrotli-dev
+            apt-get install -y libbrotli-dev libgd-dev libpng-dev libjpeg-dev libfontconfig-dev libfreetype-dev libexpat1-dev
           else
             apt-add-repository -y 'ppa:hvr/ghc'
             apt-get update
-            apt-get install -y "$HCNAME" libbrotli-dev
+            apt-get install -y "$HCNAME" libbrotli-dev libgd-dev libpng-dev libjpeg-dev libfontconfig-dev libfreetype-dev libexpat1-dev
             mkdir -p "$HOME/.ghcup/bin"
             curl -sL https://downloads.haskell.org/ghcup/0.1.17.5/x86_64-linux-ghcup-0.1.17.5 > "$HOME/.ghcup/bin/ghcup"
             chmod a+x "$HOME/.ghcup/bin/ghcup"

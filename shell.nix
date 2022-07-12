@@ -31,5 +31,5 @@ with pkgs; pkgs.mkShell rec {
     expat
   ];
 
-  LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
+  # LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 }
