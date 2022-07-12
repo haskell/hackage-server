@@ -23,6 +23,7 @@
 module Distribution.Server.Features.Sitemap.Functions (
     SitemapEntry
   , ChangeFreq(..)
+  , renderSitemapIndex
   , renderSitemap
   , urlsToSitemapEntries
   , pathsAndDatesToSitemapEntries
@@ -46,6 +47,22 @@ data SitemapEntry = SitemapEntry {
                }
 
 data ChangeFreq = Monthly | Weekly | Daily
+
+-- | Generate a sitemap index file from each sitemap uri.
+renderSitemapIndex :: URI -> [String] -> ByteString
+renderSitemapIndex serverBaseURI sitemaps =
+  xrender $
+    doc defaultDocInfo $
+      xelem "sitemapindex" $
+          xattr "xmlns" "http://www.sitemaps.org/schemas/sitemap/0.9"
+        <#> map renderLink sitemaps
+  where
+    serverBaseURI' = T.pack (show serverBaseURI)
+    renderLink :: String -> Xml Elem
+    renderLink uri = xelem "sitemap" $ 
+      xelems [
+        xelem "loc" (xtext (serverBaseURI' <> T.pack (uri)))
+      ]
 
 -- | Primary function - generates the XML file from a list of Nodes.
 renderSitemap :: URI -> [SitemapEntry] -> ByteString
