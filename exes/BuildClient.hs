@@ -38,7 +38,7 @@ import System.Exit(exitFailure, ExitCode(..))
 import System.FilePath
 import System.Directory (canonicalizePath, createDirectoryIfMissing,
                          doesFileExist, doesDirectoryExist, getDirectoryContents,
-                         renameFile, removeFile, getAppUserDataDirectory,
+                         renameFile, removeFile,
                          createDirectory, removeDirectoryRecursive,
                          createDirectoryIfMissing, makeAbsolute)
 import System.Console.GetOpt
@@ -156,9 +156,9 @@ initialise opts uri auxUris
     readMissingOpt prompt = maybe (putStrLn prompt >> getLine) return
 
 -- | Parse the @00-index.cache@ file of the available package repositories.
-parseRepositoryIndices :: Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime)
-parseRepositoryIndices verbosity = do
-    cabalDir <- getAppUserDataDirectory "cabal/packages"
+parseRepositoryIndices :: BuildOpts -> Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime)
+parseRepositoryIndices opts verbosity = do
+    let cabalDir = bo_stateDir opts </> "cached-tarballs"
     cacheDirs <- listDirectory cabalDir
     indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "01-index.tar") cacheDirs
     M.unions <$> mapM readIndex indexFiles
@@ -480,7 +480,7 @@ buildOnce opts pkgs = keepGoing $ do
     -- documentation index. Consequently, we make sure that the packages we are
     -- going to build actually appear in the repository before building. See
     -- #543.
-    repoIndex <- parseRepositoryIndices verbosity
+    repoIndex <- parseRepositoryIndices opts verbosity
 
     pkgIdsHaveDocs <- getDocumentationStats verbosity opts config (Just pkgs)
     infoStats verbosity Nothing pkgIdsHaveDocs
