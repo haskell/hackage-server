@@ -1048,8 +1048,9 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
 
     servePackageReport :: DynamicPath -> ServerPartE Response
     servePackageReport dpath = do
-        (repid, report, mlog, covg) <- packageReport dpath
+        (repid, report, mlog, mtest, covg) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
+        mtest' <- traverse queryTestLog mtest
         let covg' = fmap getCvgDet covg
         pkgid <- packageInPath dpath
         cacheControlWithoutETag [Public, maxAgeDays 30]
@@ -1058,6 +1059,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
           [ "pkgid" $= (pkgid :: PackageIdentifier)
           , "report" $= (repid, report)
           , "log" $= toMessage <$> mlog'
+          , "test" $= toMessage <$> mtest'
           , "covg" $= covg'
           ]
       where

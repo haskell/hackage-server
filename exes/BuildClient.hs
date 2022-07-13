@@ -363,6 +363,7 @@ data DocInfo = DocInfo {
   , docInfoHasDocs     :: HasDocs
   , docInfoIsCandidate :: Bool
   }
+  deriving Show
 
 docInfoPackageName :: DocInfo -> PackageName
 docInfoPackageName = pkgName . docInfoPackage
@@ -570,9 +571,9 @@ processPkg verbosity opts config docInfo = do
     let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport == Just True
 
     -- Run Tests if installOk, Run coverage is Tests runs
-    (testOutcome, hpcLoc)   <- case installOk of
+    (testOutcome, hpcLoc, testfile)   <- case installOk of
       True  -> testPackage verbosity opts docInfo
-      False -> return (Nothing, Nothing)
+      False -> return (Nothing, Nothing, Nothing)
     coverageFile <- mapM (coveragePackage verbosity opts docInfo) hpcLoc
 
     -- Modify test-outcome and rewrite report file.
@@ -581,7 +582,7 @@ processPkg verbosity opts config docInfo = do
     case bo_dryRun opts of
       True -> return ()
       False -> uploadResults verbosity config docInfo
-                                    mTgz mRpt logfile coverageFile installOk
+                                    mTgz mRpt logfile testfile coverageFile installOk
   where
     prepareTempBuildDir :: IO ()
     prepareTempBuildDir = do
@@ -630,7 +631,7 @@ coveragePackage verbosity opts docInfo loc = do
   return coverageFile
 
 
-testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (Maybe String, Maybe FilePath)
+testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (Maybe String, Maybe FilePath, Maybe FilePath)
 testPackage verbosity opts docInfo = do
   let pkgid = docInfoPackage docInfo
       testLogFile = (installDirectory opts) </> display pkgid <.> "test"
@@ -663,7 +664,7 @@ testPackage verbosity opts docInfo = do
       [ "Test results for " ++ display pkgid ++ ":"
       , testResultFile
       ]
-  return (testOutcome, hpcLoc)
+  return (testOutcome, hpcLoc, Just testResultFile)
 
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
@@ -855,9 +856,9 @@ tarGzDirectory dir = do
   where (containing_dir, nested_dir) = splitFileName dir
 
 uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath
-                    -> Maybe FilePath -> FilePath -> Maybe FilePath -> Bool -> IO ()
+                    -> Maybe FilePath -> FilePath -> Maybe FilePath -> Maybe FilePath -> Bool -> IO ()
 uploadResults verbosity config docInfo
-              mdocsTarballFile buildReportFile buildLogFile coverageFile installOk =
+              mdocsTarballFile buildReportFile buildLogFile testLogFile coverageFile installOk =
     httpSession verbosity "hackage-build" version $ do
       -- Make sure we authenticate to Hackage
       setAuthorityGen (provideAuthInfo (bc_srcURI config)
@@ -867,7 +868,7 @@ uploadResults verbosity config docInfo
         Just docsTarballFile ->
           putDocsTarball config docInfo docsTarballFile
 
-      putBuildFiles config docInfo buildReportFile buildLogFile coverageFile installOk
+      putBuildFiles config docInfo buildReportFile buildLogFile testLogFile coverageFile installOk
 
 putDocsTarball :: BuildConfig -> DocInfo -> FilePath -> HttpSession ()
 putDocsTarball config docInfo docsTarballFile =
@@ -875,13 +876,14 @@ putDocsTarball config docInfo docsTarballFile =
       "application/x-tar" (Just "gzip") docsTarballFile
 
 putBuildFiles :: BuildConfig -> DocInfo -> Maybe FilePath
-                    -> FilePath -> Maybe FilePath -> Bool -> HttpSession ()
-putBuildFiles config docInfo reportFile buildLogFile coverageFile installOk = do
+                    -> FilePath -> Maybe FilePath -> Maybe FilePath -> Bool -> HttpSession ()
+putBuildFiles config docInfo reportFile buildLogFile testLogFile coverageFile installOk = do
     reportContent   <- liftIO $ traverse readFile reportFile
     logContent      <- liftIO $ readFile buildLogFile
+    testContent     <- liftIO $ traverse readFile testLogFile
     coverageContent <- liftIO $ traverse readFile coverageFile
     let uri   = docInfoReports config docInfo
-        body  = encode $ BR.BuildFiles reportContent (Just logContent) coverageContent (not installOk)
+        body  = encode $ BR.BuildFiles reportContent (Just logContent) testContent coverageContent (not installOk)
     setAllowRedirects False
     (_, response) <- request Request {
       rqURI     = uri,
