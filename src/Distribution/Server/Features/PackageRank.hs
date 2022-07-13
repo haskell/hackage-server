@@ -4,12 +4,25 @@ module Distribution.Server.Features.PackageRank
 
 import           Distribution.Package
 import           Distribution.PackageDescription
-import           Distribution.Types.Version
 import           Distribution.Server.Features.DownloadCount
+import           Distribution.Server.Features.PackageInfoJSON.State
+                                                ( getVersionsFor )
 import           Distribution.Server.Features.Upload
 import           Distribution.Server.Users.Group
+                                                ( queryUserGroups
+                                                , size
+                                                )
+import           Distribution.Types.Version
 
-import Data.Maybe (isNothing)
+import           Data.Maybe                     ( isNothing )
+
+data Scorer = Scorer
+  { total :: Double
+  , score :: Double
+  }
+
+instance Num Scorer where
+  Scorer a b + Scorer c d = Scorer (a + c) (b + d)
 
 rankPackageIO download upload p = maintNum
  where
@@ -18,6 +31,8 @@ rankPackageIO download upload p = maintNum
   maintNum = do
     maint <- queryUserGroups [maintainersGroup upload pkgNm]
     return . fromInteger . toInteger $ size maint
+  versionsPkg :: IO Double
+  versionsPkg = getVersionsFor pkgNm >>= return length
   pkgNm :: PackageName
   pkgNm = pkgName $ package p
 
@@ -25,23 +40,14 @@ rankPackagePure p =
   reverseDeps
     + usageTrend
     + docScore
-    + stabilityScore
-    + goodMetadata
-    + weightUniqueDeps
-    + activelyMaintained
+    + reverseDeps
  where
   reverseDeps        = 1
-  versions           = versionNumbers . pkgVersion $ package p
   dependencies       = allBuildDepends p
   usageTrend         = 1
   docScore           = 1
-  stabilityScore     = 1
-  -- Does the Package have tests and Benchmarks
   testsBench = (bool2Double . hasTests) p + (bool2Double . hasBenchmarks) p
-  goodMetadata       = 1
-  weightUniqueDeps   = 1
-  activelyMaintained = 1
-  isApp = (isNothing.library) p && (not.null.executables) p
+  isApp              = (isNothing . library) p && (not . null . executables) p
   bool2Double :: Bool -> Double
   bool2Double true  = 1
   bool2Double false = 0
