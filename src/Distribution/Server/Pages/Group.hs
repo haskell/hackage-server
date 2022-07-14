@@ -71,11 +71,12 @@ removeUser uname uri =
 
 listGroup :: [Users.UserName] -> Maybe String -> Html
 listGroup [] _ = p << "No member exist presently"
-listGroup users muri = unordList (map displayName users)
-  where displayName uname = (anchor ! [href $ "/user/" ++ display uname] << display uname) +++
-                            maybe [] (removeUser uname) muri
+listGroup users muri = unordList (map (displayName muri) users)
 
 listGroupCompact :: [Users.UserName] -> Html
 listGroupCompact [] = toHtml "No member exist presently"
-listGroupCompact users = foldr1 (\a b -> a +++ ", " +++ b) (map displayName users)
-  where displayName uname = (anchor ! [href $ "/user/" ++ display uname] << display uname)
+listGroupCompact users = foldr1 (\a b -> a +++ ", " +++ b) (map (displayName Nothing) users)
+
+displayName :: Maybe String -> Users.UserName -> Html
+displayName muri uname = (anchor ! [href $ "/user/" ++ display uname] << display uname) +++
+                            maybe [] (removeUser uname) muri
