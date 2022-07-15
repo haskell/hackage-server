@@ -21,7 +21,11 @@ import           Distribution.Server.Users.Group
                                                 )
 import           Distribution.Types.Version
 
+import           Data.List                      ( sort
+                                                , sortBy
+                                                )
 import           Data.Maybe                     ( isNothing )
+import           Data.Time.Clock                ( UTCTime(..) )
 
 data Scorer = Scorer
   { total :: Double
@@ -39,9 +43,10 @@ rankPackageIO core versions download upload p = maintNum
   maintNum = do
     maint <- queryUserGroups [maintainersGroup upload pkgNm]
     return . fromInteger . toInteger $ size maint
+  info         = lookupPackageName core pkgNm
   descriptions = do
-    desc <- lookupPackageName core pkgNm
-    return (pkgDesc <$> desc)
+    infPkg <- info
+    return (pkgDesc <$> infPkg)
 
   versionList = do
     desc <- descriptions
@@ -55,9 +60,12 @@ rankPackageIO core versions download upload p = maintNum
               $   queryGetPreferredInfo versions pkgNm
               >>= (\x -> return $ partitionVersions x y)
           )
-  
-
-
+  lastUploads = do
+    infPkg <- info
+    return
+      $   sortBy (flip compare)
+      $   (\x -> fst (pkgOriginalUploadInfo x))
+      <$> infPkg
 
 rankPackagePure p = reverseDeps + usageTrend + docScore + reverseDeps
  where
