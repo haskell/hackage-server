@@ -6,6 +6,7 @@ import           Distribution.Package
 import           Distribution.PackageDescription
 import           Distribution.Server.Features.Core
 import           Distribution.Server.Features.DownloadCount
+import           Distribution.Server.Features.DownloadCount.State
 import           Distribution.Server.Features.PreferredVersions
 import           Distribution.Server.Features.PreferredVersions.State
 import           Distribution.Server.Features.Upload
@@ -16,6 +17,7 @@ import           Distribution.Server.Users.Group
                                                 , size
                                                 )
 import           Distribution.Types.Version
+import Distribution.Server.Util.CountingMap (cmFind)
 
 import           Control.Monad.IO.Class         ( liftIO )
 import           Data.List                      ( sort
@@ -87,6 +89,7 @@ rankPackageIO core versions download upload p = liftIO maintNum
  where
   pkgNm :: PackageName
   pkgNm = pkgName $ package p
+  isApp        = (isNothing . library) p && (not . null . executables) p
   -- Number of maintainers
   maintNum :: IO Double
   maintNum = do
@@ -96,7 +99,9 @@ rankPackageIO core versions download upload p = liftIO maintNum
   descriptions = do
     infPkg <- info
     return (pkgDesc <$> infPkg)
-
+  downloadScore :: IO Scorer
+  downloadScore = recentPackageDownloads download >>=return.calcDownScore.(cmFind pkgNm)
+  calcDownScore i = Scorer 5 $ (logBase 2 (int2Double$max 0 (i-100) + 100) - 6.6) / (if isApp then 5 else 6)
   versionList =
     do
         sortBy (flip compare)
