@@ -42,15 +42,20 @@ rankPackageIO core versions download upload p = maintNum
   descriptions = do
     desc <- lookupPackageName core pkgNm
     return (pkgDesc <$> desc)
-  partVer :: ServerPartE (IO ([Version], [Version], [Version]))
-  partVer = do
+
+  versionList = do
     desc <- descriptions
-    return
-      $   queryGetPreferredInfo versions pkgNm
-      >>= (\x -> return $ partitionVersions
-            x
-            (map (pkgVersion . package . packageDescription) desc)
+    return (map (pkgVersion . package . packageDescription) desc)
+
+  partVer :: ServerPartE (IO ([Version], [Version], [Version]))
+  partVer =
+    versionList
+      >>= (\y ->
+            return
+              $   queryGetPreferredInfo versions pkgNm
+              >>= (\x -> return $ partitionVersions x y)
           )
+  
 
 
 
