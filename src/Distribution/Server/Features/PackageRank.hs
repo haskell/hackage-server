@@ -4,10 +4,17 @@ module Distribution.Server.Features.PackageRank
 
 import           Distribution.Package
 import           Distribution.PackageDescription
+import           Distribution.Server.Features.Core
 import           Distribution.Server.Features.DownloadCount
-import           Distribution.Server.Features.HaskellPlatform
 import           Distribution.Server.Features.PreferredVersions
+import           Distribution.Server.Features.PreferredVersions.State
 import           Distribution.Server.Features.Upload
+import           Distribution.Server.Framework
+import           Distribution.Server.Packages.PackageIndex
+                                                ( PackageIndex )
+import qualified Distribution.Server.Packages.PackageIndex
+                                               as PackageIndex
+import           Distribution.Server.Packages.Types
 import           Distribution.Server.Users.Group
                                                 ( queryUserGroups
                                                 , size
@@ -23,14 +30,7 @@ data Scorer = Scorer
 
 add (Scorer a b) (Scorer c d) = Scorer (a + c) (b + d)
 
-rankPackageIO
-  :: VersionsFeature
-  -> PlatformFeature
-  -> DownloadFeature
-  -> UploadFeature
-  -> PackageDescription
-  -> IO Double
-rankPackageIO prefferedV platform download upload p = maintNum
+rankPackageIO core versions download upload p = maintNum
  where
   pkgNm :: PackageName
   pkgNm = pkgName $ package p
@@ -39,7 +39,20 @@ rankPackageIO prefferedV platform download upload p = maintNum
   maintNum = do
     maint <- queryUserGroups [maintainersGroup upload pkgNm]
     return . fromInteger . toInteger $ size maint
-  versions = platformVersions platform pkgNm
+  descriptions = do
+    desc <- lookupPackageName core pkgNm
+    return (pkgDesc <$> desc)
+  partVer :: ServerPartE (IO ([Version], [Version], [Version]))
+  partVer = do
+    desc <- descriptions
+    return
+      $   queryGetPreferredInfo versions pkgNm
+      >>= (\x -> return $ partitionVersions
+            x
+            (map (pkgVersion . package . packageDescription) desc)
+          )
+
+
 
 rankPackagePure p = reverseDeps + usageTrend + docScore + reverseDeps
  where
@@ -54,14 +67,14 @@ rankPackagePure p = reverseDeps + usageTrend + docScore + reverseDeps
   bool2Double false = 0
 
 rankPackage
-  :: VersionsFeature
-  -> PlatformFeature
+  :: CoreResource
+  -> VersionsFeature
   -> DownloadFeature
   -> UploadFeature
   -> PackageDescription
   -> IO Double
-rankPackage versions platform download upload p =
-  rankPackageIO versions platform download upload p
+rankPackage core versions download upload p =
+  rankPackageIO core versions download upload p
     >>= (\x -> return $ x + rankPackagePure p)
 
 
