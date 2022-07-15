@@ -130,7 +130,7 @@
     $downloadSection$
 
     <h4>Maintainer's Corner</h4>
-    <p>Maintainers</p>
+    <p>Package maintainers</p>
     <ul>
       <li>
         $maintainers$
