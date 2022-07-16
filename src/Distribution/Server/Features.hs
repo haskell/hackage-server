@@ -337,6 +337,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                         coreFeature
                         documentationCoreFeature
                         tagsFeature
+                        tarIndexCacheFeature
 
     packageFeedFeature <- mkPackageFeedFeature
                             coreFeature

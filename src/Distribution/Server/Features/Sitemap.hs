@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards, NamedFieldPuns, RecursiveDo #-}
+{-# LANGUAGE TupleSections #-}
 
 module Distribution.Server.Features.Sitemap (
   SitemapFeature(..)
@@ -28,6 +29,10 @@ import Network.URI
 import Control.DeepSeq
 import Text.Read
 import Data.List.Split
+import Distribution.Server.Framework.BlobStorage
+import Distribution.Server.Features.TarIndexCache
+import qualified Data.TarIndex as Tar
+import System.FilePath (takeExtension)
 
 data Sitemap
   = Sitemap 
@@ -52,6 +57,7 @@ initSitemapFeature :: ServerEnv
                    -> IO ( CoreFeature
                       -> DocumentationFeature
                       -> TagsFeature
+                      -> TarIndexCacheFeature
                       -> IO SitemapFeature)
 
 initSitemapFeature env@ServerEnv{ serverCacheDelay,
@@ -60,10 +66,11 @@ initSitemapFeature env@ServerEnv{ serverCacheDelay,
 
   return $ \coref@CoreFeature{..}
             docsCore@DocumentationFeature{..}
-            tagsf@TagsFeature{..} -> do
+            tagsf@TagsFeature{..} 
+            tarf@TarIndexCacheFeature{..} -> do
 
     rec let (feature, updateSitemapCache) =
-              sitemapFeature env coref docsCore tagsf
+              sitemapFeature env coref docsCore tagsf tarf
                              initTime sitemapCache
 
         sitemapCache <- newAsyncCacheNF updateSitemapCache
@@ -80,6 +87,7 @@ sitemapFeature  :: ServerEnv
                 -> CoreFeature
                 -> DocumentationFeature
                 -> TagsFeature
+                -> TarIndexCacheFeature
                 -> UTCTime
                 -> AsyncCache Sitemap
                 -> (SitemapFeature, IO Sitemap)
@@ -87,6 +95,7 @@ sitemapFeature  ServerEnv{..}
                 CoreFeature{..}
                 DocumentationFeature{..}
                 TagsFeature{..}
+                TarIndexCacheFeature{cachedTarIndex}
                 initTime
                 sitemapCache
   = (SitemapFeature{..}, updateSitemapCache)
@@ -151,10 +160,10 @@ sitemapFeature  ServerEnv{..}
       pkgIndex <- queryGetPackageIndex
       docIndex <- queryDocumentationIndex
 
-      let sitemaps = generateSitemap serverBaseURI pageBuildDate
+      sitemaps <- generateSitemap serverBaseURI pageBuildDate
                                     (map fst alltags)
-                                    pkgIndex docIndex
-          uriScheme i = "/sitemap/" <> show i <> ".xml"
+                                    pkgIndex docIndex cachedTarIndex
+      let uriScheme i = "/sitemap/" <> show i <> ".xml"
           sitemapIndex = renderSitemapIndex serverBaseURI (map uriScheme [0..(length sitemaps - 1)])
       return $ Sitemap (XMLResponse sitemapIndex) (map XMLResponse sitemaps)
 
@@ -165,19 +174,21 @@ generateSitemap :: URI
                 -> T.Text
                 -> [Tag]
                 -> PackageIndex.PackageIndex PkgInfo
-                -> Map.Map PackageId a
-                -> [ByteString]
-generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex =
-    renderSitemap serverBaseURI <$> chunksOf 50000 allEntries
+                -> Map.Map PackageId BlobId
+                -> (BlobId -> IO Tar.TarIndex)
+                -> IO [ByteString]
+generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarIndex = do
+  versionedDocSubEntries <- versionedDocSubEntriesIO
+  let -- Combine and build sitemap
+      allEntries = miscEntries
+                ++ tagEntries
+                ++ nameEntries
+                ++ nameVersEntries
+                ++ baseDocEntries
+                ++ versionedDocEntries
+                ++ versionedDocSubEntries
+  pure $ renderSitemap serverBaseURI <$> chunksOf 50000 allEntries
   where
-    -- Combine and build sitemap
-    allEntries = miscEntries
-              ++ tagEntries
-              ++ nameEntries
-              ++ nameVersEntries
-              ++ baseDocEntries
-              ++ versionedDocEntries
-
     -- Misc. pages
     -- e.g. ["http://myhackage.com/index", ...]
     miscEntries = urlsToSitemapEntries miscPages pageBuildDate Weekly 0.75
@@ -258,3 +269,26 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex =
         , Map.member (packageId pkg) docIndex
         ]
         pageBuildDate Monthly 0.25
+
+    -- Versioned doc pages in subdirectories
+    --  versionedSubDocURIs :: [path :: String]
+    --  e.g. ["http://myhackage.com/packages/mypackage-1.0.2/docs/Lib.html", ...]
+    versionedDocSubEntriesIO = do
+      let pkgs = [ (pkg , blob)
+                 | pkg <- concat pkgss
+                 , Just blob <- [Map.lookup (packageId pkg) docIndex]
+                 ]
+      pkgIndices <- traverse (\(pkg, blob) -> (pkg,) <$> cachedTarIndex blob) pkgs
+      pure $ urlsToSitemapEntries
+        [ prefixPkgURI ++ display (packageId pkg) ++ "/docs" ++ fp
+        | (pkg, tarIndex) <- pkgIndices 
+        , Just tar <- [Tar.lookup tarIndex ""]
+        , fp <- entryToPaths "/" tar
+        , takeExtension fp == ".html"
+        ]
+        pageBuildDate Monthly 0.25
+
+    entryToPaths :: FilePath -> Tar.TarIndexEntry -> [FilePath]
+    entryToPaths _    (Tar.TarFileEntry _) = []
+    entryToPaths base (Tar.TarDir content) = map ((base </>) . fst) content ++ 
+      [ file | (folder, entry) <- content, file <- entryToPaths (base </> folder) entry ]
