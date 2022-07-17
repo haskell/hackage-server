@@ -83,7 +83,55 @@ freshness (x : xs) lastUpd app =
   patches (x : y : xs) = sum xs
   patches _            = 0
 
-temporalScore core versions download upload p = do
+
+--  partVer :: ServerPartE ([Version], [Version], [Version])
+--  partVer =
+--    versionList
+--      >>= (\y ->
+--            liftIO
+--              $   queryGetPreferredInfo versions pkgNm
+--              >>= (\x -> return $ partitionVersions x y)
+--          )
+--
+--  -- Number of maintainers
+--  maintNum :: IO Double
+--  maintNum = do
+--    maint <- queryUserGroups [maintainersGroup upload pkgNm]
+--    return . int2Double $ size maint
+
+rankIO
+  :: CoreResource
+  -> VersionsFeature
+  -> DownloadFeature
+  -> UploadFeature
+  -> PackageDescription
+  -> ServerPartE Scorer
+
+rankIO core vers downs upl pkg = do
+                                    temp <- temporalScore core vers downs upl pkg lastUploads versionList downloadsPerMonth
+                                    return temp
+
+    where
+          pkgNm :: PackageName
+          pkgNm = pkgName $ package pkg
+          info         = lookupPackageName core pkgNm
+          descriptions = do
+            infPkg <- info
+            return (pkgDesc <$> infPkg)
+          lastUploads = do
+            infPkg <- info
+            return $ sortBy (flip compare) $ fst . pkgOriginalUploadInfo <$> infPkg
+          versionList =
+            do
+                sortBy (flip compare)
+              .   map (pkgVersion . package . packageDescription)
+              <$> descriptions
+          downloadsPerMonth =
+            liftIO $ recentPackageDownloads downs >>= return . cmFind pkgNm
+
+        
+
+temporalScore core versions download upload p lastUploads versionList downloadsPerMonth= do
   fresh <- freshnessScore
   downs <- downloadScore
   tract <- tractionScore
@@ -92,41 +140,12 @@ temporalScore core versions download upload p = do
   pkgNm :: PackageName
   pkgNm = pkgName $ package p
   isApp = (isNothing . library) p && (not . null . executables) p
-  -- Number of maintainers
-  maintNum :: IO Double
-  maintNum = do
-    maint <- queryUserGroups [maintainersGroup upload pkgNm]
-    return . int2Double $ size maint
-  info         = lookupPackageName core pkgNm
-  descriptions = do
-    infPkg <- info
-    return (pkgDesc <$> infPkg)
   downloadScore = downloadsPerMonth >>= return . calcDownScore
-  downloadsPerMonth =
-    liftIO $ recentPackageDownloads download >>= return . cmFind pkgNm
   calcDownScore i = Scorer 5 $ max
     ( (logBase 2 (int2Double $ max 0 (i - 100) + 100) - 6.6)
     / (if isApp then 5 else 6)
     )
     5
-  versionList =
-    do
-        sortBy (flip compare)
-      .   map (pkgVersion . package . packageDescription)
-      <$> descriptions
-
-  partVer :: ServerPartE ([Version], [Version], [Version])
-  partVer =
-    versionList
-      >>= (\y ->
-            liftIO
-              $   queryGetPreferredInfo versions pkgNm
-              >>= (\x -> return $ partitionVersions x y)
-          )
-  lastUploads = do
-    infPkg <- info
-    return $ sortBy (flip compare) $ fst . pkgOriginalUploadInfo <$> infPkg
-  -- [Version] -> UTCTime -> Bool
   packageFreshness = do
     ups  <- lastUploads
     vers <- versionList
@@ -161,7 +180,7 @@ rankPackage
   -> PackageDescription
   -> ServerPartE Double
 rankPackage core versions download upload p =
-  temporalScore core versions download upload p
+  rankIO core versions download upload p
     >>= (\x -> return $ total x + rankPackagePure p)
 
 
