@@ -32,6 +32,7 @@ import           Data.Time.Clock                ( UTCTime(..)
                                                 , getCurrentTime
                                                 , nominalDay
                                                 )
+import qualified Distribution.Utils.ShortText  as S
 import           GHC.Float                      ( int2Double )
 
 data Scorer = Scorer
@@ -42,10 +43,11 @@ data Scorer = Scorer
 -- frac 0<=frac<=1
 fracScor maxim frac = Scorer maxim (maxim * frac)
 
-boolScor k true = Scorer k k
-boolScor k true = Scorer k 0
+boolScor k true  = Scorer k k
+boolScor k false = Scorer k 0
 
-add (Scorer a b) (Scorer c d) = Scorer (a + c) (b + d)
+(><) :: Scorer -> Scorer -> Scorer
+(><) (Scorer a b) (Scorer c d) = Scorer (a + c) (b + d)
 
 total (Scorer a b) = a / b
 
@@ -108,39 +110,46 @@ rankIO
   -> ServerPartE Scorer
 
 rankIO core vers downs upl pkg = do
-                                    temp <- temporalScore core vers downs upl pkg lastUploads versionList downloadsPerMonth
-                                    return temp
+  temp <- temporalScore core
+                        vers
+                        downs
+                        upl
+                        pkg
+                        lastUploads
+                        versionList
+                        downloadsPerMonth
+  return temp
 
-    where
-          pkgNm :: PackageName
-          pkgNm = pkgName $ package pkg
-          info         = lookupPackageName core pkgNm
-          descriptions = do
-            infPkg <- info
-            return (pkgDesc <$> infPkg)
-          lastUploads = do
-            infPkg <- info
-            return $ sortBy (flip compare) $ fst . pkgOriginalUploadInfo <$> infPkg
-          versionList =
-            do
-                sortBy (flip compare)
-              .   map (pkgVersion . package . packageDescription)
-              <$> descriptions
-          downloadsPerMonth =
-            liftIO $ recentPackageDownloads downs >>= return . cmFind pkgNm
-
-        
-
-temporalScore core versions download upload p lastUploads versionList downloadsPerMonth= do
-  fresh <- freshnessScore
-  downs <- downloadScore
-  tract <- tractionScore
-  return $ add tract $ add fresh downs
  where
   pkgNm :: PackageName
-  pkgNm = pkgName $ package p
-  isApp = (isNothing . library) p && (not . null . executables) p
-  downloadScore = downloadsPerMonth >>= return . calcDownScore
+  pkgNm        = pkgName $ package pkg
+  info         = lookupPackageName core pkgNm
+  descriptions = do
+    infPkg <- info
+    return (pkgDesc <$> infPkg)
+  lastUploads = do
+    infPkg <- info
+    return $ sortBy (flip compare) $ fst . pkgOriginalUploadInfo <$> infPkg
+  versionList =
+    do
+        sortBy (flip compare)
+      .   map (pkgVersion . package . packageDescription)
+      <$> descriptions
+  downloadsPerMonth = liftIO $ cmFind pkgNm <$> recentPackageDownloads downs
+
+
+
+temporalScore core versions download upload p lastUploads versionList downloadsPerMonth
+  = do
+    fresh <- freshnessScore
+    downs <- downloadScore
+    tract <- tractionScore
+    return $ tract >< fresh >< downs
+ where
+  pkgNm :: PackageName
+  pkgNm         = pkgName $ package p
+  isApp         = (isNothing . library) p && (not . null . executables) p
+  downloadScore = calcDownScore <$> downloadsPerMonth
   calcDownScore i = Scorer 5 $ max
     ( (logBase 2 (int2Double $ max 0 (i - 100) + 100) - 6.6)
     / (if isApp then 5 else 6)
@@ -152,25 +161,22 @@ temporalScore core versions download upload p lastUploads versionList downloadsP
     case ups of
       [] -> return 0
       _  -> liftIO $ freshness vers (head ups) isApp
-  freshnessScore = packageFreshness >>= return . fracScor 10
-  -- Missing dependencyFreshnessScore for reasonable effectivity needs caching
+  freshnessScore = fracScor 10 <$> packageFreshness
+-- Missing dependencyFreshnessScore for reasonable effectivity needs caching
   tractionScore  = do
     fresh <- packageFreshness
     downs <- downloadsPerMonth
     return $ boolScor 1 (fresh * int2Double downs > 1000)
 
-rankPackagePure p = reverseDeps + usageTrend + docScore + reverseDeps
+rankPackagePage p = tests >< benchs >< desc >< homeP >< sourceRp >< cats
  where
-  reverseDeps  = 1
-  dependencies = allBuildDepends p
-  usageTrend   = 1
-  docScore     = 1
-  testsBench   = (bool2Double . hasTests) p + (bool2Double . hasBenchmarks) p
-  isApp        = (isNothing . library) p && (not . null . executables) p
-
-bool2Double :: Bool -> Double
-bool2Double true  = 1
-bool2Double false = 0
+  tests    = boolScor 50 (hasTests p)
+  benchs   = boolScor 10 (hasBenchmarks p)
+  desc     = Scorer 30 (min 1 (int2Double (S.length $ description p) / 300))
+  -- ducumentation = boolScor 30 ()
+  homeP    = boolScor 30 (not $ S.null $ homepage p)
+  sourceRp = boolScor 8 (not $ null $ sourceRepos p)
+  cats     = boolScor 5 (not $ S.null $ category p)
 
 rankPackage
   :: CoreResource
@@ -181,6 +187,6 @@ rankPackage
   -> ServerPartE Double
 rankPackage core versions download upload p =
   rankIO core versions download upload p
-    >>= (\x -> return $ total x + rankPackagePure p)
+    >>= (\x -> return $ total x + total (rankPackagePage p))
 
 
