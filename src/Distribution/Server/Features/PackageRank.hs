@@ -24,13 +24,17 @@ import           Data.List                      ( sort
                                                 , sortBy
                                                 )
 import           Data.Maybe                     ( isNothing )
-import           Data.Ord                       ( max
+import           Data.Ord                       ( comparing
+                                                , max
                                                 , min
                                                 )
 import           Data.Time.Clock                ( UTCTime(..)
                                                 , diffUTCTime
                                                 , getCurrentTime
                                                 , nominalDay
+                                                )
+import           Distribution.Simple.Utils      ( safeHead
+                                                , safeLast
                                                 )
 import qualified Distribution.Utils.ShortText  as S
 import           GHC.Float                      ( int2Double )
@@ -40,6 +44,9 @@ data Scorer = Scorer
   , score   :: Double
   }
 
+scorer maxim frac = case maxim >= frac of
+  true  -> Scorer maxim frac
+  false -> Scorer maxim maxim
 -- frac 0<=frac<=1
 fracScor maxim frac = Scorer maxim (maxim * frac)
 
@@ -50,6 +57,19 @@ boolScor k false = Scorer k 0
 (><) (Scorer a b) (Scorer c d) = Scorer (a + c) (b + d)
 
 total (Scorer a b) = a / b
+
+major (x : xs) = x
+major _        = 0
+minor (x : y : xs) = y
+minor _            = 0
+patches (x : y : xs) = sum xs
+patches _            = 0
+
+numDays :: Maybe UTCTime -> Maybe UTCTime -> Double
+numDays (Just first) (Just last) =
+  fromRational $ toRational $ diffUTCTime first last / fromRational
+    (toRational nominalDay)
+numDays _ _ = 0
 
 freshness :: [Version] -> UTCTime -> Bool -> IO Double
 freshness [] _ app = return 0
@@ -68,33 +88,10 @@ freshness (x : xs) lastUpd app =
                              | major v > 0                  = 200
                              | minor v > 3                  = 140
                              | otherwise                    = 80
-  age =
-    getCurrentTime
-      >>= (\x ->
-            return
-              $ fromRational
-              $ toRational
-              $ diffUTCTime x lastUpd
-              / fromRational (toRational nominalDay)
-          )
+  age       = flip numDays (Just lastUpd) . Just <$> getCurrentTime
   decayDays = expectedUpdateInterval / 2 + (if app then 300 else 200)
-  major (x : xs) = x
-  major _        = 0
-  minor (x : y : xs) = y
-  minor _            = 0
-  patches (x : y : xs) = sum xs
-  patches _            = 0
 
 
---  partVer :: ServerPartE ([Version], [Version], [Version])
---  partVer =
---    versionList
---      >>= (\y ->
---            liftIO
---              $   queryGetPreferredInfo versions pkgNm
---              >>= (\x -> return $ partitionVersions x y)
---          )
---
 --  -- Number of maintainers
 --  maintNum :: IO Double
 --  maintNum = do
@@ -118,10 +115,10 @@ rankIO core vers downs upl pkg = do
                         lastUploads
                         versionList
                         downloadsPerMonth
-  return temp
+  vers <- versionScore versionList vers lastUploads pkg
+  return (temp >< vers)
 
  where
-  pkgNm :: PackageName
   pkgNm        = pkgName $ package pkg
   info         = lookupPackageName core pkgNm
   descriptions = do
@@ -137,7 +134,53 @@ rankIO core vers downs upl pkg = do
       <$> descriptions
   downloadsPerMonth = liftIO $ cmFind pkgNm <$> recentPackageDownloads downs
 
-
+versionScore
+  :: ServerPartE [Version]
+  -> VersionsFeature
+  -> ServerPartE [UTCTime]
+  -> PackageDescription
+  -> ServerPartE Scorer
+versionScore versionList versions lastUploads desc = do
+  intUse <- intUsable
+  depre  <- deprec
+  lUps   <- lastUploads
+  return $ calculateScore depre lUps intUse
+ where
+  pkgNm = pkgName $ package desc
+  partVers =
+    versionList
+      >>= (\y ->
+            liftIO
+              $   queryGetPreferredInfo versions pkgNm
+              >>= (\x -> return $ partitionVersions x y)
+          )
+  intUsable = do
+    (norm, _, unpref) <- partVers
+    return $ versionNumbers <$> norm ++ unpref
+  deprec = do
+    (_, deprec, _) <- partVers
+    return deprec
+  calculateScore :: [Version] -> [UTCTime] -> [[Int]] -> Scorer
+  calculateScore [] _ _ = Scorer 118 0
+  calculateScore depre lUps intUse =
+    boolScor 20 (length intUse > 1)
+      >< scorer 40 (numDays (safeHead lUps) (safeLast lUps))
+      >< scorer
+           15
+           (int2Double $ length $ filter (\x -> major x > 0 || minor x > 0)
+                                         intUse
+           )
+      >< scorer
+           20
+           (int2Double $ 4 * length
+             (filter (\x -> major x > 0 && patches x > 0) intUse)
+           )
+      >< scorer
+           10
+           (int2Double $ patches $ head $ sortBy (comparing patches) intUse)
+      >< boolScor 8  (any (\x -> major x == 0 && patches x > 0) intUse)
+      >< boolScor 10 (any (\x -> major x > 0 && major x < 20) intUse)
+      >< boolScor 5  (not $ null $ depre)
 
 temporalScore core versions download upload p lastUploads versionList downloadsPerMonth
   = do
@@ -150,7 +193,7 @@ temporalScore core versions download upload p lastUploads versionList downloadsP
   pkgNm         = pkgName $ package p
   isApp         = (isNothing . library) p && (not . null . executables) p
   downloadScore = calcDownScore <$> downloadsPerMonth
-  calcDownScore i = Scorer 5 $ max
+  calcDownScore i = Scorer 5 $ min
     ( (logBase 2 (int2Double $ max 0 (i - 100) + 100) - 6.6)
     / (if isApp then 5 else 6)
     )
