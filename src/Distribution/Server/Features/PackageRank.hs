@@ -20,7 +20,8 @@ import           Distribution.Server.Util.CountingMap
 import           Distribution.Types.Version
 
 import           Control.Monad.IO.Class         ( liftIO )
-import           Data.List                      ( sort
+import           Data.List                      ( maximumBy
+                                                , sort
                                                 , sortBy
                                                 )
 import           Data.Maybe                     ( isNothing )
@@ -92,12 +93,6 @@ freshness (x : xs) lastUpd app =
   decayDays = expectedUpdateInterval / 2 + (if app then 300 else 200)
 
 
---  -- Number of maintainers
---  maintNum :: IO Double
---  maintNum = do
---    maint <- queryUserGroups [maintainersGroup upload pkgNm]
---    return . int2Double $ size maint
-
 rankIO
   :: CoreResource
   -> VersionsFeature
@@ -116,7 +111,8 @@ rankIO core vers downs upl pkg = do
                         versionList
                         downloadsPerMonth
   vers <- versionScore versionList vers lastUploads pkg
-  return (temp >< vers)
+  auth <- authorScore upl pkg
+  return (temp >< vers >< auth)
 
  where
   pkgNm        = pkgName $ package pkg
@@ -133,6 +129,19 @@ rankIO core vers downs upl pkg = do
       .   map (pkgVersion . package . packageDescription)
       <$> descriptions
   downloadsPerMonth = liftIO $ cmFind pkgNm <$> recentPackageDownloads downs
+
+authorScore :: UploadFeature -> PackageDescription -> ServerPartE Scorer
+authorScore upload desc =
+  liftIO maintScore
+    >>= (\x -> return $ boolScor 1 (not $ S.null $ author desc) >< x)
+ where
+  pkgNm = pkgName $ package desc
+  maintScore :: IO Scorer
+  maintScore = do
+    maint <- queryUserGroups [maintainersGroup upload pkgNm]
+
+    return $ boolScor 3 (size maint > 1) >< scorer 5 (int2Double $ size maint)
+
 
 versionScore
   :: ServerPartE [Version]
@@ -175,12 +184,10 @@ versionScore versionList versions lastUploads desc = do
            (int2Double $ 4 * length
              (filter (\x -> major x > 0 && patches x > 0) intUse)
            )
-      >< scorer
-           10
-           (int2Double $ patches $ head $ sortBy (comparing patches) intUse)
-      >< boolScor 8  (any (\x -> major x == 0 && patches x > 0) intUse)
+      >< scorer 10 (int2Double $ patches $ maximumBy (comparing patches) intUse)
+      >< boolScor 8 (any (\x -> major x == 0 && patches x > 0) intUse)
       >< boolScor 10 (any (\x -> major x > 0 && major x < 20) intUse)
-      >< boolScor 5  (not $ null $ depre)
+      >< boolScor 5  (not $ null depre)
 
 temporalScore core versions download upload p lastUploads versionList downloadsPerMonth
   = do
