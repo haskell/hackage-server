@@ -1,17 +1,21 @@
-{-# LANGUAGE OverloadedStrings, NamedFieldPuns #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies, DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 module RevDepCommon where
 
-import           GHC.Generics (Generic)
-import Distribution.Server.Users.Types (UserId(..))
-import Distribution.Package (PackageIdentifier(..), PackageName, mkPackageName, unPackageName)
-import Distribution.Server.Packages.Types (PkgInfo(..))
-import qualified Data.Vector as Vector
-import Distribution.Server.Packages.Types (CabalFileText(..))
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.Vector as Vector
 import           Data.Time (UTCTime(..), fromGregorian)
-import Distribution.Version (mkVersion, versionNumbers)
+import           GHC.Generics (Generic)
+
+import           Distribution.Server.Users.Types (UserId(..))
+import           Distribution.Package (PackageIdentifier(..), PackageName, mkPackageName, unPackageName)
+import           Distribution.Server.Packages.Types (PkgInfo(..))
+import           Distribution.Server.Packages.Types (CabalFileText(..))
+import           Distribution.Version (mkVersion, versionNumbers)
 
 data Package b =
   Package

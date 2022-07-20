@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, NamedFieldPuns, BlockArguments #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards, BlockArguments #-}
 module Distribution.Server.Pages.Reverse (
     ReverseHtmlUtil(..)
   , reverseHtmlUtil
@@ -58,8 +58,8 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << anchor ! [href $ packageLink $ PackageIdentifier (packageName pkg) $ nullVersion ] << display (packageName pkg)
                 , td << anchor ! (renderStatus status ++ [href $ packageLink pkg]) << display (packageVersion pkg)
-                , td << [ toHtml $ (show count) ++ " (", anchor ! [href $ reverseFlatUri reverseResource "" $ packageName pkg] << "view", toHtml ")" ] ]
-            | (ReverseRender pkg status count, n) <- zip renders [(1::Int)..] ]
+                , td << [ toHtml $ (show count'') ++ " (", anchor ! [href $ reverseFlatUri reverseResource "" $ packageName pkg] << "view", toHtml ")" ] ]
+            | (ReverseRender pkg status count'', n) <- zip renders [(1::Int)..] ]
 
         renderStatus (Just DeprecatedVersion) = [theclass "deprecated"]
         renderStatus (Just UnpreferredVersion) = [theclass "unpreferred"]
@@ -92,18 +92,12 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
     -- /package/:package/reverse/verbose
     reverseVerboseRender :: PackageName -> [Version] -> (PackageId -> String) -> ReverseCount -> (Map.Map Version (Set PackageIdentifier)) -> [Html]
     reverseVerboseRender pkgname allVersions packageLink revCount versions =
-        h2 << (display pkgname ++ ": reverse dependency statistics"):
+        h2 << (display pkgname ++ ": reverse dependencies per version"):
       [ renderCount revCount
       , versionTable
-      , if length allVersions > limitVersions
-           -- Why the oldest? Such that the package can be cached indefinitely without having to get invalidated.
-           then thediv << [toHtml "Only showing the oldest ", toHtml (display limitVersions), toHtml " versions."]
-           else mempty
       ]
 
       where
-        limitVersions = 10
-
         versionTable = thediv << (table ! [theclass "fancy"]) << versionTableRows
         versionTableRows =
             (tr << [ th << "Version", th << "Reverse dependencies" ]) :
@@ -111,7 +105,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
                 [ td << anchor ! [href $ packageLink pkgid ] << display version
                 , td << [ row ]
                 ]
-            | (version, n) <- take limitVersions $ zip allVersions [(1::Int)..]
+            | (version, n) <- zip allVersions [(1::Int)..]
             , let
                 pkgid = PackageIdentifier pkgname version
                 mkListOfLinks :: Set PackageIdentifier -> [Html]

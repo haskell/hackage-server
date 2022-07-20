@@ -79,21 +79,21 @@ instance MemSize ReverseIndex where
 constructReverseIndex :: MonadCatch m => PackageIndex PkgInfo -> m ReverseIndex
 constructReverseIndex index = do
     let nodePkgMap = foldr (uncurry Bimap.insert) Bimap.empty $ zip (PackageIndex.allPackageNames index) [0..]
-    (revs, deps) <- constructRevDeps index nodePkgMap
+    (revs, dependencies) <- constructRevDeps index nodePkgMap
     pure $
       ReverseIndex
         { reverseDependencies = revs
         , packageNodeIdMap = nodePkgMap
-        , deps = deps
+        , deps = dependencies
         }
 
 addPackage :: (MonadCatch m, MonadIO m) => PackageIndex PkgInfo -> PackageName -> [PackageName]
            -> ReverseIndex -> m ReverseIndex
-addPackage index pkgname deps ri@(ReverseIndex revs nodemap pkgIdToDeps) = do
+addPackage index pkgname dependencies ri@(ReverseIndex revs nodemap pkgIdToDeps) = do
   let
     npm = Bimap.tryInsert pkgname (Bimap.size nodemap) nodemap
   new :: [(Int, [Int])] <-
-    forM deps $ \d ->
+    forM dependencies $ \d ->
       (,) <$> lookup d npm <*> fmap (:[]) (lookup pkgname npm)
   let rd = insEdges (Bimap.size npm) new revs
       pkginfos = PackageIndex.lookupPackageName index pkgname
@@ -119,10 +119,10 @@ constructRevDeps index nodemap = do
             pure $ either (const Nothing) Just eitherErrOrFound
     -- This will mix dependencies of different versions of the same package, but that is intended.
     edges <- traverse nodeIdsOfDependencies allPackages
-    let deps = Map.fromList $ map (packageId &&& getDeps) allPackages
+    let dependencies = Map.fromList $ map (packageId &&& getDeps) allPackages
 
     pure (Gr.buildG (0, Bimap.size nodemap) (nubOrd $ concat edges)
-         , deps
+         , dependencies
          )
 
 getDeps :: PkgInfo -> [Dependency]
@@ -137,12 +137,12 @@ getDepNames pkg =
 -- | because these are the versions that could accept that version of ghc-prim as a dep
 -- | Note that this doesn't include executables! Only the library.
 dependsOnPkg :: PackageIndex PkgInfo -> PackageId -> PackageName -> Map PackageIdentifier [Dependency] -> Set PackageIdentifier
-dependsOnPkg index needle packageHaystack deps =
+dependsOnPkg index needle packageHaystack dependencies =
     fromList $ mapMaybe descPermits (PackageIndex.lookupPackageName index packageHaystack)
     where
         descPermits :: PkgInfo -> Maybe PackageIdentifier
         descPermits pkginfo
-          | Just found <- Map.lookup (packageId pkginfo) deps
+          | Just found <- Map.lookup (packageId pkginfo) dependencies
           , any toDepsList found = Just (packageId pkginfo)
           | otherwise = Nothing
         toDepsList (Dependency name versionRange _) =
@@ -151,7 +151,7 @@ dependsOnPkg index needle packageHaystack deps =
 
 -- | Collect all dependencies from all branches of a condition tree.
 harvestDependencies :: CondTree v [Dependency] a -> [Dependency]
-harvestDependencies (CondNode _ deps comps) = deps ++ concatMap forComponent comps
+harvestDependencies (CondNode _ dependencies comps) = dependencies ++ concatMap forComponent comps
   where forComponent (CondBranch _ iftree elsetree) = harvestDependencies iftree ++ maybe [] harvestDependencies elsetree
 
 ---------------------------------ReverseDisplay
@@ -178,12 +178,12 @@ perPackageReverse indexFunc index revdeps pkg = do
   perVersionReverse indexFunc index revdeps best
 
 perVersionReverse :: MonadCatch m => (PackageName -> (PreferredInfo, [Version])) -> PackageIndex PkgInfo -> ReverseIndex -> PackageId -> m (Map PackageName (Version, Maybe VersionStatus))
-perVersionReverse indexFunc index (ReverseIndex revs nodemap deps) pkg = do
+perVersionReverse indexFunc index (ReverseIndex revs nodemap dependencies) pkg = do
     found <- lookup (packageName pkg) nodemap
     -- this will be too much, since we are throwing away the specific version
     revDepNames :: Set PackageName <- fromList <$> mapM (`lookupR` nodemap) (toList $ suc revs found)
     let packagemap :: Map PackageName (Set Version)
-        packagemap = Map.fromList $ map (\x -> (x, Set.map packageVersion $ dependsOnPkg index pkg x deps)) (toList revDepNames)
+        packagemap = Map.fromList $ map (\x -> (x, Set.map packageVersion $ dependsOnPkg index pkg x dependencies)) (toList revDepNames)
     pure $ constructReverseDisplay indexFunc packagemap
 
 constructReverseDisplay :: (PackageName -> (PreferredInfo, [Version])) -> Map PackageName (Set Version) -> Map PackageName (Version, Maybe VersionStatus)
