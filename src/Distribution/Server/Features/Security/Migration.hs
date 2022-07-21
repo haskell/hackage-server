@@ -206,11 +206,11 @@ data Migrated a = Migrated MigrationStats a | AlreadyMigrated a
   deriving (Functor)
 
 instance Applicative Migrated where
-  pure    = return
+  pure    = AlreadyMigrated
   f <*> x = do f' <- f ; x' <- x ; return $ f' x'
 
 instance Monad Migrated where
-  return = AlreadyMigrated
+  return = pure
   AlreadyMigrated a >>= f = f a
   Migrated stats  a >>= f =
     case f a of
