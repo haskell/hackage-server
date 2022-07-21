@@ -251,7 +251,7 @@ data Restore a = RestoreDone a
                | RestoreFindBlob BlobId (Bool -> Restore a)
 
 instance Monad Restore where
-  return = RestoreDone
+  return = pure
   RestoreDone x         >>= g = g x
   RestoreFail err       >>= _ = RestoreFail err
   RestoreAddBlob  bs  f >>= g = RestoreAddBlob  bs  $ \bid -> f bid >>= g
@@ -270,7 +270,7 @@ instance Functor Restore where
   fmap = liftM
 
 instance Applicative Restore where
-  pure      = return
+  pure      = RestoreDone
   mf <*> mx = do f <- mf ; x <- mx ; return (f x)
 
 runRestore :: BlobStores -> Restore a -> IO (Either String a)
