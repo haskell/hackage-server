@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
              TypeFamilies, TemplateHaskell,
-             RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns #-}
+             RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns,
+             DefaultSignatures #-}
 module Distribution.Server.Features.UserNotify (
     initUserNotifyFeature,
     UserNotifyFeature(..),
@@ -9,7 +10,7 @@ module Distribution.Server.Features.UserNotify (
 
 import Distribution.Package
 
-import Distribution.Server.Users.Types(UserId)
+import Distribution.Server.Users.Types(UserId, UserInfo (..))
 import Distribution.Server.Users.UserIdSet as UserIdSet
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Group
@@ -36,14 +37,15 @@ import Control.Monad.State (get, put)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Distribution.Text (display)
 import Text.CSV (CSV, Record)
+import Text.XHtml hiding (base, (</>))
 import Data.List(intercalate)
-import Data.Aeson.TH
+import Data.Hashable (Hashable(..))
+import Data.Aeson.TH ( defaultOptions, deriveJSON )
 
 import Data.Time (UTCTime(..), getCurrentTime, diffUTCTime, addUTCTime, defaultTimeLocale, formatTime)
 import Data.Time.Format.Internal (buildTime)
 
 import Data.Maybe(fromMaybe, mapMaybe, fromJust, listToMaybe)
-import Data.Char(toLower)
 
 import Network.Mail.Mime
 import Network.URI(uriAuthority, uriRegName)
@@ -99,7 +101,11 @@ defaultNotifyPrefs = NotifyPref {
                        notifyPendingTags = True
                      }
 
-data NotifyRevisionRange = NoNotifyRevisions | NotifyAllVersions | NotifyNewestVersion deriving (Eq, Read, Show, Typeable)
+data NotifyRevisionRange = NoNotifyRevisions | NotifyAllVersions | NotifyNewestVersion deriving (Eq, Enum, Bounded, Read, Show, Typeable)
+
+instance Hashable NotifyRevisionRange where
+  hash = fromEnum
+  hashWithSalt s x = s `hashWithSalt` hash x
 
 instance MemSize NotifyPref where memSize _ = memSize ((True,True,True),(True,True, True))
 
@@ -114,7 +120,83 @@ $(deriveSafeCopy 0 'base ''NotifyRevisionRange)
 $(deriveSafeCopy 0 'base ''NotifyPref)
 $(deriveSafeCopy 0 'base ''NotifyData)
 $(deriveJSON defaultOptions ''NotifyRevisionRange)
-$(deriveJSON compatAesonOptions{fieldLabelModifier = (\(c:s) -> toLower c : s) . drop (length "notify")} ''NotifyPref)
+
+------------------------------
+-- UI
+--
+
+-- Bool's 'FromJSON' instance doesn't act as desired.
+data OK = Yes | No deriving (Eq, Show, Enum, Bounded)
+
+$(deriveJSON defaultOptions ''OK)
+
+toBool :: OK -> Bool
+toBool = (== Yes)
+
+fromBool :: Bool -> OK
+fromBool b = if b then Yes else No
+
+instance Hashable OK where
+  hashWithSalt s x = s `hashWithSalt` fromEnum x
+
+data NotifyPrefUI 
+  = NotifyPrefUI 
+    { ui_notifyEnabled          :: OK
+    , ui_notifyRevisionRange    :: NotifyRevisionRange
+    , ui_notifyUpload           :: OK
+    , ui_notifyMaintainerGroup  :: OK
+    , ui_notifyDocBuilderReport :: OK
+    , ui_notifyPendingTags      :: OK
+    }
+  deriving (Eq)
+
+$(deriveJSON (compatAesonOptionsDropPrefix "ui_") ''NotifyPrefUI)
+
+instance Hashable NotifyPrefUI where
+  hashWithSalt s NotifyPrefUI{..} = s 
+    `hashWithSalt` hash ui_notifyEnabled
+    `hashWithSalt` hash ui_notifyRevisionRange
+    `hashWithSalt` hash ui_notifyUpload
+    `hashWithSalt` hash ui_notifyMaintainerGroup
+    `hashWithSalt` hash ui_notifyDocBuilderReport
+    `hashWithSalt` hash ui_notifyPendingTags
+
+notifyPrefToUI :: NotifyPref -> NotifyPrefUI
+notifyPrefToUI NotifyPref{..} = NotifyPrefUI
+  { ui_notifyEnabled          = fromBool (not notifyOptOut)
+  , ui_notifyRevisionRange    = notifyRevisionRange
+  , ui_notifyUpload           = fromBool notifyUpload
+  , ui_notifyMaintainerGroup  = fromBool notifyMaintainerGroup
+  , ui_notifyDocBuilderReport = fromBool notifyDocBuilderReport
+  , ui_notifyPendingTags      = fromBool notifyPendingTags
+  }
+
+notifyPrefFromUI :: NotifyPrefUI -> NotifyPref
+notifyPrefFromUI NotifyPrefUI{..} = NotifyPref
+  { notifyOptOut           = not (toBool ui_notifyEnabled)
+  , notifyRevisionRange    = ui_notifyRevisionRange
+  , notifyUpload           = toBool ui_notifyUpload
+  , notifyMaintainerGroup  = toBool ui_notifyMaintainerGroup
+  , notifyDocBuilderReport = toBool ui_notifyDocBuilderReport
+  , notifyPendingTags      = toBool ui_notifyPendingTags
+  }
+
+class ToRadioButtons a where
+  toRadioButtons :: String -> a -> Html
+  default toRadioButtons :: (Eq a, Enum a, Bounded a, Aeson.ToJSON a) => String -> a -> Html
+  toRadioButtons nm def = foldr1 (+++) $ map renderRadioButton [minBound..maxBound]
+    where
+      renderRadioButton choice = toHtml
+        [ input ! (if (def == choice) then (checked :) else id) 
+            [thetype "radio", identifier htmlId, name nm, value choiceName]
+        , label ! [thefor htmlId] << choiceName
+        ]
+        where
+          choiceName = read (BS.unpack (Aeson.encode choice))
+          htmlId = nm ++ "." ++ choiceName
+
+instance ToRadioButtons NotifyRevisionRange
+instance ToRadioButtons OK
 
 ------------------------------
 -- State queries and updates
@@ -238,7 +320,7 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "UserNotify"]
-                   [ "SingleNotify.html" ]
+                   [ "user-notify-form.html" ]
 
     return $ \users core uploadfeature adminlog userdetails -> do
       let feature = userNotifyFeature env
@@ -283,7 +365,9 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         resourceDesc   = [ (GET,    "get the notify preference of a user account")
                          , (PUT,    "set the notify preference of a user account")
                          ]
-      , resourceGet    = [ ("json", handlerGetUserNotify) ]
+      , resourceGet    = [ ("json", handlerGetUserNotify) 
+                         , ("html", handlerGetUserNotifyHtml)
+                         ]
       , resourcePut    = [ ("json", handlerPutUserNotify) ]
       }
 
@@ -301,14 +385,33 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
     handlerGetUserNotify dpath = do
       uid <- lookupUserName =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-      npref <- fromMaybe defaultNotifyPrefs <$> queryGetUserNotifyPref uid
-      return $ toResponse (Aeson.toJSON npref)
+      nprefui <- notifyPrefToUI . fromMaybe defaultNotifyPrefs <$> queryGetUserNotifyPref uid
+      return $ toResponse (Aeson.toJSON nprefui)
+
+    handlerGetUserNotifyHtml dpath = do
+      (uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
+      guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      nprefui@NotifyPrefUI{..} <- notifyPrefToUI . fromMaybe defaultNotifyPrefs <$> queryGetUserNotifyPref uid
+      showConfirmationOfSave <- not . Prelude.null <$> queryString (lookBSs "showConfirmationOfSave")
+      template <- getTemplate templates "user-notify-form.html"
+      cacheControl [Private] $ etagFromHash (nprefui, showConfirmationOfSave)
+      ok . toResponse $
+        template
+          [ "username"                $= display (userName uinfo) 
+          , "showConfirmationOfSave"  $= showConfirmationOfSave
+          , "notifyEnabled"           $= toRadioButtons "notifyEnabled=%s"          ui_notifyEnabled
+          , "notifyRevisionRange"     $= toRadioButtons "notifyRevisionRange=%s"    ui_notifyRevisionRange
+          , "notifyUpload"            $= toRadioButtons "notifyUpload=%s"           ui_notifyUpload
+          , "notifyMaintainerGroup"   $= toRadioButtons "notifyMaintainerGroup=%s"  ui_notifyMaintainerGroup
+          , "notifyDocBuilderReport"  $= toRadioButtons "notifyDocBuilderReport=%s" ui_notifyDocBuilderReport
+          , "notifyPendingTags"       $= toRadioButtons "notifyPendingTags=%s"      ui_notifyPendingTags
+          ]
 
     handlerPutUserNotify dpath = do
       uid <- lookupUserName =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-      npref <- expectAesonContent
-      updateSetUserNotifyPref uid npref
+      nprefui <- expectAesonContent
+      updateSetUserNotifyPref uid (notifyPrefFromUI nprefui)
       noContent $ toResponse ()
 
     -- Engine
