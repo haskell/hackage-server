@@ -136,6 +136,8 @@ $(deriveJSON defaultOptions ''NotifyRevisionRange)
 
 -- | `Bool`'s 'FromJSON' instance can't parse strings:
 --
+-- >>> import qualified Data.Aeson as Aeson
+-- >>> import qualified Data.ByteString.Lazy.Char8 as BS
 -- >>> Aeson.decode (BS.pack "\"true\"") :: Maybe Bool
 -- Nothing
 --
