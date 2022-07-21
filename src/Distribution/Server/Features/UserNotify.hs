@@ -38,7 +38,8 @@ import Distribution.Text (display)
 import Text.CSV (CSV, Record)
 import Data.List(intercalate)
 
-import Data.Time (UTCTime(..), getCurrentTime, diffUTCTime, addUTCTime, buildTime, defaultTimeLocale, formatTime)
+import Data.Time (UTCTime(..), getCurrentTime, diffUTCTime, addUTCTime, defaultTimeLocale, formatTime)
+import Data.Time.Format.Internal (buildTime)
 
 import Data.Maybe(fromMaybe, mapMaybe, fromJust, listToMaybe)
 
@@ -106,8 +107,8 @@ instance MemSize NotifyData where memSize (NotifyData x) = memSize x
 emptyNotifyData :: IO NotifyData
 emptyNotifyData = getCurrentTime >>= \x-> return (NotifyData (Map.empty, x))
 
-$(deriveSafeCopy 0 'base ''NotifyPref)
 $(deriveSafeCopy 0 'base ''NotifyRevisionRange)
+$(deriveSafeCopy 0 'base ''NotifyPref)
 $(deriveSafeCopy 0 'base ''NotifyData)
 
 ------------------------------
@@ -396,7 +397,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                        mailHeaders = [(BSS.pack "Subject",
                                        T.pack "[Hackage] Maintainer Notifications")],
                        mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
-                                             None Nothing [] (BS.pack $ intercalate ("\n\n") ebody)]]
+                                             None DefaultDisposition [] (PartContent $ BS.pack $ intercalate ("\n\n") ebody)]]
                      }
                      Just ourHost = uriAuthority serverBaseURI
 
