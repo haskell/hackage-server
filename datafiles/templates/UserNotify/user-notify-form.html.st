@@ -17,21 +17,35 @@ $if(showConfirmationOfSave)$
   </p>
 $endif$
 
-<p>
-  The email is used e.g. to contact you regarding the packages you maintain, or for account recovery.<br/>
-  Make sure you have access to the new e-mail address, because <strong>no confirmation mail is sent</strong> when this form is submitted.
-</p>
-
 <form action="/user/$username$/notify" method=POST enctype="multipart/form-data">
   <input type="hidden" name="_method" value="PUT"/>
   <input type="hidden" name="_return" value="/user/$username$/notify?showConfirmationOfSave=True"/>
   <input type="hidden" name="_transform" value="form2json"/>
-  <label>Enabled: $notifyEnabled$ </label><br />
-  <label>Notify Revision Range: $notifyRevisionRange$ </label><br />
-  <label>Notify Upload: $notifyUpload$ </label><br />
-  <label>Notify Maintainer Group: $notifyMaintainerGroup$ </label><br />
-  <label>Notify DocBuilder Report: $notifyDocBuilderReport$ </label><br />
-  <label>Notify Pending Tags: $notifyPendingTags$ </label><br />
+  <table>
+    <tr>
+      <td><label>Enabled:
+      <td>$notifyEnabled$
+    
+    <tr>
+      <td><label>Notify package revision range:
+      <td>$notifyRevisionRange$
+
+    <tr>
+      <td><label>Notify package upload:
+      <td>$notifyUpload$
+
+    <tr>
+      <td><label>Notify maintainer group change:
+      <td>$notifyMaintainerGroup$
+
+    <tr>
+      <td><label>Notify docbuilder report:
+      <td>$notifyDocBuilderReport$
+
+    <tr>
+      <td><label>Notify pending proposed tags:
+      <td>$notifyPendingTags$
+  </table>
   <input type="submit" value="Save notify preference" />
 </form>
 </div>

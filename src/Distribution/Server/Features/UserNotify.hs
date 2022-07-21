@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
              TypeFamilies, TemplateHaskell,
              RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns,
-             DefaultSignatures #-}
+             DefaultSignatures, OverloadedStrings #-}
 module Distribution.Server.Features.UserNotify (
     initUserNotifyFeature,
     UserNotifyFeature(..),
@@ -9,6 +9,7 @@ module Distribution.Server.Features.UserNotify (
   ) where
 
 import Distribution.Package
+import Distribution.Pretty
 
 import Distribution.Server.Users.Types(UserId, UserInfo (..))
 import Distribution.Server.Users.UserIdSet as UserIdSet
@@ -37,7 +38,8 @@ import Control.Monad.State (get, put)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Distribution.Text (display)
 import Text.CSV (CSV, Record)
-import Text.XHtml hiding (base, (</>))
+import Text.XHtml hiding (base, text, (</>))
+import Text.PrettyPrint
 import Data.List(intercalate)
 import Data.Hashable (Hashable(..))
 import Data.Aeson.TH ( defaultOptions, deriveJSON )
@@ -55,6 +57,8 @@ import qualified Data.ByteString.Char8 as BSS
 import qualified Data.Text as T
 import qualified Data.Vector as Vec
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson
+
 
 -- A feature to manage notifications to users when package metadata, etc is updated.
 
@@ -101,7 +105,12 @@ defaultNotifyPrefs = NotifyPref {
                        notifyPendingTags = True
                      }
 
-data NotifyRevisionRange = NoNotifyRevisions | NotifyAllVersions | NotifyNewestVersion deriving (Eq, Enum, Bounded, Read, Show, Typeable)
+data NotifyRevisionRange = NoNotifyRevisions | NotifyAllVersions | NotifyNewestVersion deriving (Eq, Enum, Read, Show, Typeable)
+
+instance Pretty NotifyRevisionRange where
+  pretty NoNotifyRevisions = text "No notify revisions"
+  pretty NotifyAllVersions = text "Notify all versions"
+  pretty NotifyNewestVersion = text "Notify newest version"
 
 instance Hashable NotifyRevisionRange where
   hash = fromEnum
@@ -125,22 +134,34 @@ $(deriveJSON defaultOptions ''NotifyRevisionRange)
 -- UI
 --
 
--- Bool's 'FromJSON' instance doesn't act as desired.
-data OK = Yes | No deriving (Eq, Show, Enum, Bounded)
+-- | `Bool`'s 'FromJSON' instance can't parse strings:
+--
+-- >>> Aeson.decode (BS.pack "\"true\"") :: Maybe Bool
+-- Nothing
+--
+-- However, form2json will pass JSON bool values as strings to the decoder.
+-- So we define a newtype wrapping it up.
+newtype OK = OK {unOK :: Bool} deriving (Eq, Show, Enum)
 
-$(deriveJSON defaultOptions ''OK)
+instance Pretty OK where
+  pretty (OK True) = text "Yes"
+  pretty (OK False) = text "No"
 
-toBool :: OK -> Bool
-toBool = (== Yes)
+instance Aeson.ToJSON OK where
+  toJSON = Aeson.toJSON . unOK
 
-fromBool :: Bool -> OK
-fromBool b = if b then Yes else No
+instance Aeson.FromJSON OK where
+  parseJSON (Aeson.Bool b) = pure (OK b)
+  parseJSON (Aeson.String "true") = pure (OK True)
+  parseJSON (Aeson.String "false") = pure (OK False)
+  parseJSON s@(Aeson.String _) = Aeson.prependFailure "parsing OK failed, " (Aeson.unexpected s)
+  parseJSON invalid = Aeson.prependFailure "parsing OK failed, " (Aeson.typeMismatch "Bool or String" invalid)
 
 instance Hashable OK where
   hashWithSalt s x = s `hashWithSalt` fromEnum x
 
-data NotifyPrefUI 
-  = NotifyPrefUI 
+data NotifyPrefUI
+  = NotifyPrefUI
     { ui_notifyEnabled          :: OK
     , ui_notifyRevisionRange    :: NotifyRevisionRange
     , ui_notifyUpload           :: OK
@@ -148,12 +169,12 @@ data NotifyPrefUI
     , ui_notifyDocBuilderReport :: OK
     , ui_notifyPendingTags      :: OK
     }
-  deriving (Eq)
+  deriving (Eq, Show, Typeable)
 
 $(deriveJSON (compatAesonOptionsDropPrefix "ui_") ''NotifyPrefUI)
 
 instance Hashable NotifyPrefUI where
-  hashWithSalt s NotifyPrefUI{..} = s 
+  hashWithSalt s NotifyPrefUI{..} = s
     `hashWithSalt` hash ui_notifyEnabled
     `hashWithSalt` hash ui_notifyRevisionRange
     `hashWithSalt` hash ui_notifyUpload
@@ -163,40 +184,48 @@ instance Hashable NotifyPrefUI where
 
 notifyPrefToUI :: NotifyPref -> NotifyPrefUI
 notifyPrefToUI NotifyPref{..} = NotifyPrefUI
-  { ui_notifyEnabled          = fromBool (not notifyOptOut)
+  { ui_notifyEnabled          = OK (not notifyOptOut)
   , ui_notifyRevisionRange    = notifyRevisionRange
-  , ui_notifyUpload           = fromBool notifyUpload
-  , ui_notifyMaintainerGroup  = fromBool notifyMaintainerGroup
-  , ui_notifyDocBuilderReport = fromBool notifyDocBuilderReport
-  , ui_notifyPendingTags      = fromBool notifyPendingTags
+  , ui_notifyUpload           = OK notifyUpload
+  , ui_notifyMaintainerGroup  = OK notifyMaintainerGroup
+  , ui_notifyDocBuilderReport = OK notifyDocBuilderReport
+  , ui_notifyPendingTags      = OK notifyPendingTags
   }
 
 notifyPrefFromUI :: NotifyPrefUI -> NotifyPref
 notifyPrefFromUI NotifyPrefUI{..} = NotifyPref
-  { notifyOptOut           = not (toBool ui_notifyEnabled)
+  { notifyOptOut           = not (unOK ui_notifyEnabled)
   , notifyRevisionRange    = ui_notifyRevisionRange
-  , notifyUpload           = toBool ui_notifyUpload
-  , notifyMaintainerGroup  = toBool ui_notifyMaintainerGroup
-  , notifyDocBuilderReport = toBool ui_notifyDocBuilderReport
-  , notifyPendingTags      = toBool ui_notifyPendingTags
+  , notifyUpload           = unOK ui_notifyUpload
+  , notifyMaintainerGroup  = unOK ui_notifyMaintainerGroup
+  , notifyDocBuilderReport = unOK ui_notifyDocBuilderReport
+  , notifyPendingTags      = unOK ui_notifyPendingTags
   }
 
 class ToRadioButtons a where
   toRadioButtons :: String -> a -> Html
-  default toRadioButtons :: (Eq a, Enum a, Bounded a, Aeson.ToJSON a) => String -> a -> Html
-  toRadioButtons nm def = foldr1 (+++) $ map renderRadioButton [minBound..maxBound]
-    where
-      renderRadioButton choice = toHtml
-        [ input ! (if (def == choice) then (checked :) else id) 
-            [thetype "radio", identifier htmlId, name nm, value choiceName]
-        , label ! [thefor htmlId] << choiceName
-        ]
-        where
-          choiceName = read (BS.unpack (Aeson.encode choice))
-          htmlId = nm ++ "." ++ choiceName
 
-instance ToRadioButtons NotifyRevisionRange
-instance ToRadioButtons OK
+renderRadioButtons :: (Eq a, Aeson.ToJSON a, Pretty a) => [a] -> String -> a -> Html
+renderRadioButtons choices nm def = foldr1 (+++) $ map renderRadioButton choices
+  where
+    renderRadioButton choice = toHtml
+      [ input ! (if (def == choice) then (checked :) else id)
+          [thetype "radio", identifier htmlId, name nm, value choiceName]
+      , label ! [thefor htmlId] << display choice
+      ]
+      where
+        jsonName = Aeson.encode choice
+        -- try to strip quotes
+        choiceName = BS.unpack $ if BS.head jsonName == '"' && BS.last jsonName == '"'
+                        then BS.init (BS.tail jsonName)
+                        else jsonName
+        htmlId = nm ++ "." ++ choiceName
+
+instance ToRadioButtons NotifyRevisionRange where
+  toRadioButtons = renderRadioButtons [NoNotifyRevisions, NotifyAllVersions, NotifyNewestVersion]
+
+instance ToRadioButtons OK where
+  toRadioButtons = renderRadioButtons [OK True, OK False]
 
 ------------------------------
 -- State queries and updates
@@ -365,7 +394,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         resourceDesc   = [ (GET,    "get the notify preference of a user account")
                          , (PUT,    "set the notify preference of a user account")
                          ]
-      , resourceGet    = [ ("json", handlerGetUserNotify) 
+      , resourceGet    = [ ("json", handlerGetUserNotify)
                          , ("html", handlerGetUserNotifyHtml)
                          ]
       , resourcePut    = [ ("json", handlerPutUserNotify) ]
@@ -397,7 +426,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
       cacheControl [Private] $ etagFromHash (nprefui, showConfirmationOfSave)
       ok . toResponse $
         template
-          [ "username"                $= display (userName uinfo) 
+          [ "username"                $= display (userName uinfo)
           , "showConfirmationOfSave"  $= showConfirmationOfSave
           , "notifyEnabled"           $= toRadioButtons "notifyEnabled=%s"          ui_notifyEnabled
           , "notifyRevisionRange"     $= toRadioButtons "notifyRevisionRange=%s"    ui_notifyRevisionRange
