@@ -37,11 +37,13 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Distribution.Text (display)
 import Text.CSV (CSV, Record)
 import Data.List(intercalate)
+import Data.Aeson.TH
 
 import Data.Time (UTCTime(..), getCurrentTime, diffUTCTime, addUTCTime, defaultTimeLocale, formatTime)
 import Data.Time.Format.Internal (buildTime)
 
 import Data.Maybe(fromMaybe, mapMaybe, fromJust, listToMaybe)
+import Data.Char(toLower)
 
 import Network.Mail.Mime
 import Network.URI(uriAuthority, uriRegName)
@@ -50,6 +52,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.ByteString.Char8 as BSS
 import qualified Data.Text as T
 import qualified Data.Vector as Vec
+import qualified Data.Aeson as Aeson
 
 -- A feature to manage notifications to users when package metadata, etc is updated.
 
@@ -110,6 +113,8 @@ emptyNotifyData = getCurrentTime >>= \x-> return (NotifyData (Map.empty, x))
 $(deriveSafeCopy 0 'base ''NotifyRevisionRange)
 $(deriveSafeCopy 0 'base ''NotifyPref)
 $(deriveSafeCopy 0 'base ''NotifyData)
+$(deriveJSON defaultOptions ''NotifyRevisionRange)
+$(deriveJSON compatAesonOptions{fieldLabelModifier = (\(c:s) -> toLower c : s) . drop (length "notify")} ''NotifyPref)
 
 ------------------------------
 -- State queries and updates
@@ -263,7 +268,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
   where
     userNotifyFeatureInterface = (emptyHackageFeature "user-notify") {
         featureDesc      = "Notifications to users on metadata updates."
-      , featureResources = [] -- TODO we can add json features here for updating prefs
+      , featureResources = [userNotifyResource] -- TODO we can add json features here for updating prefs
       , featureState     = [abstractAcidStateComponent notifyState]
       , featureCaches    = []
       , featureReloadFiles = reloadTemplates templates
@@ -273,6 +278,14 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
     -- Resources
     --
 
+    userNotifyResource =
+      (resourceAt "/user/:username/notify.:format") {
+        resourceDesc   = [ (GET,    "get the notify preference of a user account")
+                         , (PUT,    "set the notify preference of a user account")
+                         ]
+      , resourceGet    = [ ("json", handlerGetUserNotify) ]
+      , resourcePut    = [ ("json", handlerPutUserNotify) ]
+      }
 
     -- Queries and updates
     --
@@ -282,6 +295,21 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
 
     updateSetUserNotifyPref ::  MonadIO m => UserId -> NotifyPref -> m ()
     updateSetUserNotifyPref uid np = updateState notifyState (AddNotifyPref uid np)
+
+    -- Request handlers
+    --
+    handlerGetUserNotify dpath = do
+      uid <- lookupUserName =<< userNameInPath dpath
+      guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      npref <- fromMaybe defaultNotifyPrefs <$> queryGetUserNotifyPref uid
+      return $ toResponse (Aeson.toJSON npref)
+
+    handlerPutUserNotify dpath = do
+      uid <- lookupUserName =<< userNameInPath dpath
+      guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      npref <- expectAesonContent
+      updateSetUserNotifyPref uid npref
+      noContent $ toResponse ()
 
     -- Engine
     --
