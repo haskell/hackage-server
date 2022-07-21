@@ -1,7 +1,13 @@
 name: "Test nix-shell"
 on:
-  - push
-  - pull_request
+  push:
+    branches:
+      - master
+      - ci*
+  pull_request:
+    branches:
+      - master
+      - ci*
 jobs:
   nix-shell:
     runs-on: ubuntu-latest
