@@ -10,6 +10,8 @@ import           Distribution.Server.Features.PreferredVersions
 import           Distribution.Server.Features.PreferredVersions.State
 import           Distribution.Server.Features.Upload
 import           Distribution.Server.Framework  ( ServerPartE )
+import           Distribution.Server.Framework.Feature
+                                                ( queryState )
 import           Distribution.Server.Packages.Types
 import           Distribution.Server.Users.Group
                                                 ( queryUserGroups
@@ -45,6 +47,9 @@ data Scorer = Scorer
   , score   :: Double
   }
 
+instance Semigroup Scorer where
+  (Scorer a b) <> (Scorer c d) = Scorer (a + b) (c + d)
+
 scorer maxim frac = case maxim >= frac of
   true  -> Scorer maxim frac
   false -> Scorer maxim maxim
@@ -53,9 +58,6 @@ fracScor maxim frac = Scorer maxim (maxim * frac)
 
 boolScor k true  = Scorer k k
 boolScor k false = Scorer k 0
-
-(><) :: Scorer -> Scorer -> Scorer
-(><) (Scorer a b) (Scorer c d) = Scorer (a + c) (b + d)
 
 total (Scorer a b) = a / b
 
@@ -92,9 +94,11 @@ freshness (x : xs) lastUpd app =
   age       = flip numDays (Just lastUpd) . Just <$> getCurrentTime
   decayDays = expectedUpdateInterval / 2 + (if app then 300 else 200)
 
+-- lookupPackageId
+-- queryHasDocumentation
 
 rankIO
-  :: CoreResource
+  :: CoreFeature
   -> VersionsFeature
   -> DownloadFeature
   -> UploadFeature
@@ -102,7 +106,7 @@ rankIO
   -> ServerPartE Scorer
 
 rankIO core vers downs upl pkg = do
-  temp <- temporalScore core
+  temp <- temporalScore coreR
                         vers
                         downs
                         upl
@@ -112,11 +116,13 @@ rankIO core vers downs upl pkg = do
                         downloadsPerMonth
   vers <- versionScore versionList vers lastUploads pkg
   auth <- authorScore upl pkg
-  return (temp >< vers >< auth)
+  return (temp <> vers <> auth)
 
  where
+  pkgId        = package pkg
   pkgNm        = pkgName $ package pkg
-  info         = lookupPackageName core pkgNm
+  info         = lookupPackageName coreR pkgNm
+  coreR        = coreResource core
   descriptions = do
     infPkg <- info
     return (pkgDesc <$> infPkg)
@@ -133,14 +139,14 @@ rankIO core vers downs upl pkg = do
 authorScore :: UploadFeature -> PackageDescription -> ServerPartE Scorer
 authorScore upload desc =
   liftIO maintScore
-    >>= (\x -> return $ boolScor 1 (not $ S.null $ author desc) >< x)
+    >>= (\x -> return $ boolScor 1 (not $ S.null $ author desc) <> x)
  where
   pkgNm = pkgName $ package desc
   maintScore :: IO Scorer
   maintScore = do
     maint <- queryUserGroups [maintainersGroup upload pkgNm]
 
-    return $ boolScor 3 (size maint > 1) >< scorer 5 (int2Double $ size maint)
+    return $ boolScor 3 (size maint > 1) <> scorer 5 (int2Double $ size maint)
 
 
 versionScore
@@ -173,28 +179,28 @@ versionScore versionList versions lastUploads desc = do
   calculateScore [] _ _ = Scorer 118 0
   calculateScore depre lUps intUse =
     boolScor 20 (length intUse > 1)
-      >< scorer 40 (numDays (safeHead lUps) (safeLast lUps))
-      >< scorer
+      <> scorer 40 (numDays (safeHead lUps) (safeLast lUps))
+      <> scorer
            15
            (int2Double $ length $ filter (\x -> major x > 0 || minor x > 0)
                                          intUse
            )
-      >< scorer
+      <> scorer
            20
            (int2Double $ 4 * length
              (filter (\x -> major x > 0 && patches x > 0) intUse)
            )
-      >< scorer 10 (int2Double $ patches $ maximumBy (comparing patches) intUse)
-      >< boolScor 8 (any (\x -> major x == 0 && patches x > 0) intUse)
-      >< boolScor 10 (any (\x -> major x > 0 && major x < 20) intUse)
-      >< boolScor 5  (not $ null depre)
+      <> scorer 10 (int2Double $ patches $ maximumBy (comparing patches) intUse)
+      <> boolScor 8 (any (\x -> major x == 0 && patches x > 0) intUse)
+      <> boolScor 10 (any (\x -> major x > 0 && major x < 20) intUse)
+      <> boolScor 5  (not $ null depre)
 
 temporalScore core versions download upload p lastUploads versionList downloadsPerMonth
   = do
     fresh <- freshnessScore
     downs <- downloadScore
     tract <- tractionScore
-    return $ tract >< fresh >< downs
+    return $ tract <> fresh <> downs
  where
   pkgNm :: PackageName
   pkgNm         = pkgName $ package p
@@ -218,7 +224,7 @@ temporalScore core versions download upload p lastUploads versionList downloadsP
     downs <- downloadsPerMonth
     return $ boolScor 1 (fresh * int2Double downs > 1000)
 
-rankPackagePage p = tests >< benchs >< desc >< homeP >< sourceRp >< cats
+rankPackagePage p = tests <> benchs <> desc <> homeP <> sourceRp <> cats
  where
   tests    = boolScor 50 (hasTests p)
   benchs   = boolScor 10 (hasBenchmarks p)
@@ -229,7 +235,7 @@ rankPackagePage p = tests >< benchs >< desc >< homeP >< sourceRp >< cats
   cats     = boolScor 5 (not $ S.null $ category p)
 
 rankPackage
-  :: CoreResource
+  :: CoreFeature
   -> VersionsFeature
   -> DownloadFeature
   -> UploadFeature
