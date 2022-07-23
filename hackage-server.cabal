@@ -404,6 +404,7 @@ library lib-server
     , semigroups            ^>= 0.19
     , split                 ^>= 0.2
     , stm                   ^>= 2.5.0
+    , stringsearch          ^>= 0.3.6.6
     , tagged                ^>= 0.8.5
     , xhtml                 ^>= 3000.2
     , xmlgen                ^>= 0.6
