@@ -14,6 +14,8 @@ import           Distribution.Server.Features.Upload
 import           Distribution.Server.Framework  ( ServerPartE )
 import           Distribution.Server.Framework.BlobStorage
                                                 ( BlobId )
+import qualified Distribution.Server.Framework.BlobStorage
+                                               as BlobStorage
 import           Distribution.Server.Framework.Feature
                                                 ( queryState )
 import           Distribution.Server.Packages.Types
@@ -26,6 +28,7 @@ import           Distribution.Server.Util.CountingMap
 import           Distribution.Types.Version
 
 import           Control.Monad.IO.Class         ( liftIO )
+import qualified Data.ByteString.Lazy          as BSL
 import           Data.List                      ( maximumBy
                                                 , sortBy
                                                 )
@@ -39,6 +42,8 @@ import           Data.Time.Clock                ( UTCTime(..)
                                                 , getCurrentTime
                                                 , nominalDay
                                                 )
+import           Distribution.Server.Framework.ServerEnv
+                                                ( ServerEnv(..) )
 import           Distribution.Simple.Utils      ( safeHead
                                                 , safeLast
                                                 )
@@ -54,7 +59,8 @@ instance Semigroup Scorer where
   (Scorer a b) <> (Scorer c d) = Scorer (a + b) (c + d)
 
 scorer :: Double -> Double -> Scorer
-scorer maxim scr = if maxim >= scr then (Scorer maxim scr) else (Scorer maxim maxim)
+scorer maxim scr =
+  if maxim >= scr then Scorer maxim scr else Scorer maxim maxim
 
 fracScor :: Double -> Double -> Scorer
 fracScor maxim frac = scorer maxim (maxim * frac)
@@ -112,10 +118,11 @@ rankIO
   -> DownloadFeature
   -> UploadFeature
   -> DocumentationFeature
+  -> ServerEnv
   -> PackageDescription
   -> ServerPartE Scorer
 
-rankIO core vers downs upl docs pkg = do
+rankIO core vers downs upl docs env pkg = do
   temp  <- temporalScore pkg lastUploads versionList downloadsPerMonth
   versS <- versionScore versionList vers lastUploads pkg
   auth  <- authorScore upl pkg
@@ -139,29 +146,19 @@ rankIO core vers downs upl docs pkg = do
   downloadsPerMonth = liftIO $ cmFind pkgNm <$> recentPackageDownloads downs
   -- TODO get appropriate pkgInfo (head might fail)
   packageTarball    = pkgLatestTarball . head <$> info
-  documentTarball :: ServerPartE (Maybe BlobId)
-  documentTarball = queryDocumentation docs pkgId
+  documentBlob :: ServerPartE (Maybe BlobId)
+  documentBlob  = queryDocumentation docs pkgId
+  blobStore     = serverBlobStore env
+  documentation = do
+    blob <- documentBlob
+    maybeIO blob
+   where
+    maybeIO Nothing  = return Nothing
+    maybeIO (Just a) = liftIO (Just <$> BlobStorage.fetch blobStore a)
 
---      mdocs <- queryState documentationState $ LookupDocumentation pkgid
---           case mdocs of
---             Nothing ->
---               errNotFoundH "Not Found"
---                 [ MText "There is no documentation for "
---                 , MLink (display pkgid) ("/package/" ++ display pkgid)
---                 , MText ". See "
---                 , MLink canonicalLink canonicalLink
---                 , MText " for the latest version."
---                 ]
---               where
---                 -- Essentially errNotFound, but overloaded to specify a header.
---                 -- (Needed since errNotFound throws away result of setHeaderM)
---                 errNotFoundH title message = throwError
---                   (ErrorResponse 404
---                   [("Link", canonicalHeader)]
---                   title message)
---             Just blob -> do
---               index <- liftIO $ cachedTarIndex blob
---               func pkgid blob index
+  documLines =
+    (int2Double . length . filter (not . BSL.null) . BSL.split 10 <$>)
+      <$> documentation -- 10 is \n
 
 authorScore :: UploadFeature -> PackageDescription -> ServerPartE Scorer
 authorScore upload desc =
@@ -273,10 +270,11 @@ rankPackage
   -> DownloadFeature
   -> UploadFeature
   -> DocumentationFeature
+  -> ServerEnv
   -> PackageDescription
   -> ServerPartE Double
-rankPackage core versions download upload docs p =
-  rankIO core versions download upload docs p
+rankPackage core versions download upload docs env p =
+  rankIO core versions download upload docs env p
     >>= (\x -> return $ total x + total (rankPackagePage p))
 
 
