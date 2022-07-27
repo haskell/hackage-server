@@ -10,10 +10,9 @@ import           Distribution.Server.Features.Documentation
 import           Distribution.Server.Features.DownloadCount
 import           Distribution.Server.Features.PreferredVersions
 import           Distribution.Server.Features.PreferredVersions.State
+import           Distribution.Server.Features.TarIndexCache
 import           Distribution.Server.Features.Upload
 import           Distribution.Server.Framework  ( ServerPartE )
-import           Distribution.Server.Framework.BlobStorage
-                                                ( BlobId )
 import qualified Distribution.Server.Framework.BlobStorage
                                                as BlobStorage
 import           Distribution.Server.Framework.Feature
@@ -27,6 +26,11 @@ import           Distribution.Server.Util.CountingMap
                                                 ( cmFind )
 import           Distribution.Types.Version
 
+import           Control.Monad                  ( forM
+                                                , join
+                                                , liftM2
+                                                , mapM
+                                                )
 import           Control.Monad.IO.Class         ( liftIO )
 import qualified Data.ByteString.Lazy          as BSL
 import           Data.List                      ( maximumBy
@@ -37,6 +41,7 @@ import           Data.Ord                       ( comparing
                                                 , max
                                                 , min
                                                 )
+import qualified Data.TarIndex                 as TarIndex
 import           Data.Time.Clock                ( UTCTime(..)
                                                 , diffUTCTime
                                                 , getCurrentTime
@@ -54,6 +59,7 @@ data Scorer = Scorer
   { maximum :: Double
   , score   :: Double
   }
+  deriving Show
 
 instance Semigroup Scorer where
   (Scorer a b) <> (Scorer c d) = Scorer (a + b) (c + d)
@@ -119,10 +125,11 @@ rankIO
   -> UploadFeature
   -> DocumentationFeature
   -> ServerEnv
+  -> TarIndexCacheFeature
   -> PackageDescription
   -> ServerPartE Scorer
 
-rankIO core vers downs upl docs env pkg = do
+rankIO core vers downs upl docs env tarCache pkg = do
   temp  <- temporalScore pkg lastUploads versionList downloadsPerMonth
   versS <- versionScore versionList vers lastUploads pkg
   auth  <- authorScore upl pkg
@@ -145,20 +152,32 @@ rankIO core vers downs upl docs env pkg = do
       <$> descriptions
   downloadsPerMonth = liftIO $ cmFind pkgNm <$> recentPackageDownloads downs
   -- TODO get appropriate pkgInfo (head might fail)
-  packageTarball    = pkgLatestTarball . head <$> info
-  documentBlob :: ServerPartE (Maybe BlobId)
-  documentBlob  = queryDocumentation docs pkgId
-  blobStore     = serverBlobStore env
-  documentation = do
-    blob <- documentBlob
-    maybeIO blob
-   where
-    maybeIO Nothing  = return Nothing
-    maybeIO (Just a) = liftIO (Just <$> BlobStorage.fetch blobStore a)
+  packageTarB       = info >>= liftIO . packageTarball tarCache . head
+  packageTarEntr    = do
+    tarB <- packageTarB
+    return
+      .   join
+      $   (\(path, _, index) -> TarIndex.lookup index path)
+      <$> rightToMaybe tarB
+  rightToMaybe (Right a) = Just a
+  rightToMaybe (Left  _) = Nothing
+  documentBlob :: ServerPartE (Maybe BlobStorage.BlobId)
+  documentBlob       = queryDocumentation docs pkgId
+  documentIndex      = documentBlob >>= liftIO . mapM (cachedTarIndex tarCache)
+  documentationEntry = do
+    index <- documentIndex
+    path  <- documentPath
+    return . join $ liftM2 TarIndex.lookup index path
 
-  documLines =
-    (int2Double . length . filter (not . BSL.null) . BSL.split 10 <$>)
-      <$> documentation -- 10 is \n
+  blobStore    = serverBlobStore env
+  documentPath = do
+    blob <- documentBlob
+    return $ (BlobStorage.filepath blobStore) <$> blob
+
+  -- TODO fix this
+  --documLines =
+  --  (int2Double . length . filter (not . BSL.null) . BSL.split 10 <$>)
+  --    <$> documentation -- 10 is \n
 
 authorScore :: UploadFeature -> PackageDescription -> ServerPartE Scorer
 authorScore upload desc =
@@ -271,10 +290,11 @@ rankPackage
   -> UploadFeature
   -> DocumentationFeature
   -> ServerEnv
+  -> TarIndexCacheFeature
   -> PackageDescription
   -> ServerPartE Double
-rankPackage core versions download upload docs env p =
-  rankIO core versions download upload docs env p
+rankPackage core versions download upload docs env tarCache p =
+  rankIO core versions download upload docs env tarCache p
     >>= (\x -> return $ total x + total (rankPackagePage p))
 
 
