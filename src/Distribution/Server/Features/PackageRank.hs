@@ -1,9 +1,9 @@
+{-# LANGUAGE TupleSections #-}
+
 module Distribution.Server.Features.PackageRank
   ( rankPackage
   ) where
 
-import           Distribution.Package
-import           Distribution.PackageDescription
 import           Distribution.Server.Features.Core
 import           Distribution.Server.Features.Documentation
                                                 ( DocumentationFeature(..) )
@@ -15,8 +15,8 @@ import           Distribution.Server.Features.Upload
 import           Distribution.Server.Framework  ( ServerPartE )
 import qualified Distribution.Server.Framework.BlobStorage
                                                as BlobStorage
-import           Distribution.Server.Framework.Feature
-                                                ( queryState )
+import           Distribution.Server.Framework.ServerEnv
+                                                ( ServerEnv(..) )
 import           Distribution.Server.Packages.Types
 import           Distribution.Server.Users.Group
                                                 ( queryUserGroups
@@ -24,12 +24,18 @@ import           Distribution.Server.Users.Group
                                                 )
 import           Distribution.Server.Util.CountingMap
                                                 ( cmFind )
+import           Distribution.Package
+import           Distribution.PackageDescription
 import           Distribution.Types.Version
+import           Distribution.Simple.Utils      ( safeHead
+                                                , safeLast
+                                                )
+import qualified Distribution.Utils.ShortText  as S
 
-import           Control.Monad                  ( forM
-                                                , join
+import qualified Codec.Archive.Tar             as Tar
+import qualified Codec.Archive.Tar.Entry       as Tar
+import           Control.Monad                  ( join
                                                 , liftM2
-                                                , mapM
                                                 )
 import           Control.Monad.IO.Class         ( liftIO )
 import qualified Data.ByteString.Lazy          as BSL
@@ -37,23 +43,16 @@ import           Data.List                      ( maximumBy
                                                 , sortBy
                                                 )
 import           Data.Maybe                     ( isNothing )
-import           Data.Ord                       ( comparing
-                                                , max
-                                                , min
-                                                )
-import qualified Data.TarIndex                 as TarIndex
+import           Data.Ord                       ( comparing )
+import qualified Data.TarIndex                 as T
 import           Data.Time.Clock                ( UTCTime(..)
                                                 , diffUTCTime
                                                 , getCurrentTime
                                                 , nominalDay
                                                 )
-import           Distribution.Server.Framework.ServerEnv
-                                                ( ServerEnv(..) )
-import           Distribution.Simple.Utils      ( safeHead
-                                                , safeLast
-                                                )
-import qualified Distribution.Utils.ShortText  as S
 import           GHC.Float                      ( int2Double )
+import           System.FilePath                ( isExtensionOf )
+import qualified          System.IO         as SIO
 
 data Scorer = Scorer
   { maximum :: Double
@@ -133,7 +132,8 @@ rankIO core vers downs upl docs env tarCache pkg = do
   temp  <- temporalScore pkg lastUploads versionList downloadsPerMonth
   versS <- versionScore versionList vers lastUploads pkg
   auth  <- authorScore upl pkg
-  return (temp <> versS <> auth)
+  codeS <- codeScore documentLines srcLines packageLines
+  return (temp <> versS <> auth <> codeS)
 
  where
   pkgId        = package pkg
@@ -152,32 +152,53 @@ rankIO core vers downs upl docs env tarCache pkg = do
       <$> descriptions
   downloadsPerMonth = liftIO $ cmFind pkgNm <$> recentPackageDownloads downs
   -- TODO get appropriate pkgInfo (head might fail)
-  packageTarB       = info >>= liftIO . packageTarball tarCache . head
-  packageTarEntr    = do
-    tarB <- packageTarB
+  packageEntr       = do
+    inf  <- info
+    tarB <- liftIO . packageTarball tarCache . head $ inf
     return
-      .   join
-      $   (\(path, _, index) -> TarIndex.lookup index path)
-      <$> rightToMaybe tarB
+      $   (\(path, _, index) -> (path, ) <$> T.lookup index path)
+      =<< rightToMaybe tarB
   rightToMaybe (Right a) = Just a
   rightToMaybe (Left  _) = Nothing
+
   documentBlob :: ServerPartE (Maybe BlobStorage.BlobId)
-  documentBlob       = queryDocumentation docs pkgId
-  documentIndex      = documentBlob >>= liftIO . mapM (cachedTarIndex tarCache)
-  documentationEntry = do
+  documentBlob      = queryDocumentation docs pkgId
+  documentIndex     = documentBlob >>= liftIO . mapM (cachedTarIndex tarCache)
+  documentationEntr = do
     index <- documentIndex
     path  <- documentPath
-    return . join $ liftM2 TarIndex.lookup index path
+    return $ liftM2 (,) path (join $ liftM2 T.lookup index path)
+  documentLines = documentationEntr >>= liftIO . filterLinesTar (const True)
+  srcLines      = packageEntr >>= liftIO . filterLinesTar (isExtensionOf ".hs")
+  packageLines  = packageEntr >>= liftIO . filterLinesTar (const True)
 
-  blobStore    = serverBlobStore env
+  filterLinesTar
+    :: (FilePath -> Bool) -> Maybe (FilePath, T.TarIndexEntry) -> IO Double
+  filterLinesTar f (Just (path, T.TarFileEntry offset)) =
+    if f path then getLines path offset else return 0
+  filterLinesTar f (Just (_, T.TarDir dir)) =
+    sum <$> mapM (filterLinesTar f . Just) dir
+  filterLinesTar _ _ = return 0
+
+  -- TODO if size is too big give it a good score and do not read the file
+  getLines path offset = do
+    handle <- SIO.openFile path SIO.ReadMode
+    SIO.hSeek handle SIO.AbsoluteSeek (fromIntegral $ offset * 512)
+    header <- BSL.hGet handle 512
+    case Tar.read header of
+      (Tar.Next Tar.Entry { Tar.entryContent = Tar.NormalFile _ siz } _) -> do
+        body <- BSL.hGet handle (fromIntegral siz)
+        return
+          $ int2Double
+          . length
+          . filter (not . BSL.null)
+          . BSL.split 10
+          $ body
+      _ -> return 0
+
   documentPath = do
     blob <- documentBlob
-    return $ (BlobStorage.filepath blobStore) <$> blob
-
-  -- TODO fix this
-  --documLines =
-  --  (int2Double . length . filter (not . BSL.null) . BSL.split 10 <$>)
-  --    <$> documentation -- 10 is \n
+    return $ BlobStorage.filepath (serverBlobStore env) <$> blob
 
 authorScore :: UploadFeature -> PackageDescription -> ServerPartE Scorer
 authorScore upload desc =
@@ -191,6 +212,20 @@ authorScore upload desc =
 
     return $ boolScor 3 (size maint > 1) <> scorer 5 (int2Double $ size maint)
 
+codeScore
+  :: ServerPartE Double
+  -> ServerPartE Double
+  -> ServerPartE Double
+  -> ServerPartE Scorer
+codeScore documentL haskellL packageL = do
+  docum   <- documentL
+  haskell <- haskellL
+  pkg     <- packageL
+  return
+    $  boolScor 1 (pkg > 700)
+    <> boolScor 1 (pkg < 80000)
+    <> fracScor 2 (min 1 (haskell / 5000))
+    <> fracScor 2 (min 1 (10 * docum) / (3000 + haskell))
 
 versionScore
   :: ServerPartE [Version]
@@ -296,5 +331,3 @@ rankPackage
 rankPackage core versions download upload docs env tarCache p =
   rankIO core versions download upload docs env tarCache p
     >>= (\x -> return $ total x + total (rankPackagePage p))
-
-
