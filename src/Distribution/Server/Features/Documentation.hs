@@ -4,8 +4,7 @@
 module Distribution.Server.Features.Documentation (
     DocumentationFeature(..),
     DocumentationResource(..),
-    initDocumentationFeature,
-    findLastVerWithDoc
+    initDocumentationFeature
   ) where
 
 import Distribution.Server.Framework
@@ -55,6 +54,8 @@ data DocumentationFeature = DocumentationFeature {
     queryHasDocumentation   :: forall m. MonadIO m => PackageIdentifier -> m Bool,
     queryDocumentation      :: forall m. MonadIO m => PackageIdentifier -> m (Maybe BlobId),
     queryDocumentationIndex :: forall m. MonadIO m => m (Map.Map PackageId BlobId),
+
+    latestPackageWithDocumentation :: forall m. MonadIO m => PreferredInfo -> [PkgInfo] -> m (Maybe PackageId),
 
     uploadDocumentation :: DynamicPath -> ServerPartE Response,
     deleteDocumentation :: DynamicPath -> ServerPartE Response,
@@ -360,6 +361,24 @@ documentationFeature name
       runHook_ documentationChangeHook pkgid
       noContent (toResponse ())
 
+    latestPackageWithDocumentation :: MonadIO m => PreferredInfo -> [PkgInfo] -> m (Maybe PackageId)
+    latestPackageWithDocumentation prefInfo ps = helper (reverse ps)
+      where
+        helper [] = helper2 (reverse ps)
+        helper (pkg:pkgs) = do
+          hasDoc <- queryHasDocumentation (pkgInfoId pkg)
+          let status = getVersionStatus prefInfo (packageVersion pkg)
+          if hasDoc && status == NormalVersion 
+              then pure (Just (packageId pkg)) 
+              else helper pkgs
+
+        helper2 [] = pure Nothing
+        helper2 (pkg:pkgs) = do
+          hasDoc <- queryHasDocumentation (pkgInfoId pkg)
+          if hasDoc
+              then pure (Just (packageId pkg)) 
+              else helper2 pkgs
+
     withDocumentation :: Resource -> DynamicPath
                       -> (PackageId -> BlobId -> TarIndex -> ServerPartE Response)
                       -> ServerPartE Response
@@ -392,7 +411,7 @@ documentationFeature name
         True -> do
             pkgs <- lookupPackageName (pkgName pkgid)
             prefInfo <- queryGetPreferredInfo (pkgName pkgid)
-            findLastVerWithDoc queryHasDocumentation prefInfo pkgs >>= \case
+            latestPackageWithDocumentation prefInfo pkgs >>= \case
               Just latestWithDocs -> do
                 let dpath' = [ if var == "package"
                                 then (var, display latestWithDocs)
@@ -446,23 +465,7 @@ checkDocTarball pkgid =
     maxDocMetaFileSize = 16 * 1024 -- 16KiB
     docMetaPath = DocMeta.packageDocMetaTarPath pkgid
 
-findLastVerWithDoc :: MonadIO m => (PackageIdentifier -> m Bool) -> PreferredInfo -> [PkgInfo] -> m (Maybe PackageId)
-findLastVerWithDoc queryHasDoc prefInfo ps = helper (reverse ps)
-  where
-    helper [] = helper2 (reverse ps)
-    helper (pkg:pkgs) = do
-      hasDoc <- queryHasDoc (pkgInfoId pkg)
-      let status = getVersionStatus prefInfo (packageVersion pkg)
-      if hasDoc && status == NormalVersion 
-          then pure (Just (packageId pkg)) 
-          else helper pkgs
 
-    helper2 [] = pure Nothing
-    helper2 (pkg:pkgs) = do
-      hasDoc <- queryHasDoc (pkgInfoId pkg)
-      if hasDoc
-          then pure (Just (packageId pkg)) 
-          else helper2 pkgs
 
 {------------------------------------------------------------------------------
   Auxiliary

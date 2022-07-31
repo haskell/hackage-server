@@ -604,8 +604,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
         hasDocs       <- queryHasDocumentation documentationFeature realpkg
-        mDocPkgId     <- if hasDocs then pure Nothing 
-                              else findLastVerWithDoc (queryHasDocumentation documentationFeature) prefInfo pkgs
+        mDocPkgId     <- if hasDocs then pure Nothing
+                              else latestPackageWithDocumentation documentationFeature prefInfo pkgs
         rptStats      <- queryLastReportStats reportsFeature realpkg
         candidates    <- lookupCandidateName pkgname
         buildStatus   <- renderBuildStatus
