@@ -12,7 +12,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Char
 import qualified NLP.Tokenize as NLP
-import qualified NLP.Snowball as NLP
+import qualified Distribution.Server.Util.NLP.Snowball as NLP
 import qualified Data.Foldable as F
 
 import qualified Documentation.Haddock.Markup as Haddock
@@ -26,7 +26,7 @@ extraStems ss x = x : mapMaybe (`T.stripSuffix` x) ss
 extractSynopsisTerms :: [Text] -> Set Text -> String -> [Text]
 extractSynopsisTerms ss stopWords =
       concatMap (extraStems ss) --note this adds extra possible stems, it doesn't delete any given one.
-    . NLP.stems NLP.English
+    . NLP.stems
     . filter (`Set.notMember` stopWords)
     . map (T.toCaseFold . T.pack)
     . concatMap splitTok
@@ -54,7 +54,7 @@ splitTok tok =
 extractDescriptionTerms :: [Text] -> Set Text -> String -> [Text]
 extractDescriptionTerms ss stopWords =
       concatMap (extraStems ss)
-    . NLP.stems NLP.English
+    . NLP.stems
     . filter (`Set.notMember` stopWords)
     . map (T.toCaseFold . T.pack)
     . maybe

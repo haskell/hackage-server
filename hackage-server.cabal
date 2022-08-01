@@ -63,6 +63,12 @@ extra-source-files:
   tests/unpack-checks/LANGUAGE-GHC-9.2/Main.hs
   tests/unpack-checks/LANGUAGE-GHC-9.2/Setup.hs
   tests/unpack-checks/LANGUAGE-GHC-9.2/LANGUAGE-GHC.cabal
+  libstemmer_c/src_c/stem_ISO_8859_1_english.h
+  libstemmer_c/include/libstemmer.h
+  libstemmer_c/runtime/api.h
+  libstemmer_c/runtime/header.h
+  libstemmer_c/LICENSE
+  src/Distribution/Server/Util/NLP/LICENSE
 
 source-repository head
   type: git
@@ -356,6 +362,7 @@ library lib-server
       Distribution.Server.Features.StaticFiles
       Distribution.Server.Features.ServerIntrospect
       Distribution.Server.Features.Sitemap
+      Distribution.Server.Util.NLP.Snowball
 
   if flag(debug)
     cpp-options: -DDEBUG
@@ -410,8 +417,12 @@ library lib-server
     , xss-sanitize          ^>= 0.3.6
 
   if !flag(minimal)
-    build-depends: snowball ^>= 1.0
-                 , tokenize ^>= 0.3
+    build-depends: tokenize ^>= 0.3
+
+    c-sources:  libstemmer_c/src_c/stem_ISO_8859_1_english.c
+                libstemmer_c/runtime/api.c
+                libstemmer_c/runtime/utilities.c
+                libstemmer_c/libstemmer/libstemmer.c
 
   if flag(cabal-parsers)
     build-depends: cabal-parsers ^>= 0
