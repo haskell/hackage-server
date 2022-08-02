@@ -4,32 +4,25 @@ module Distribution.Server.Features.PackageRank
   ( rankPackage
   ) where
 
+import           Distribution.Package
+import           Distribution.PackageDescription
 import           Distribution.Server.Features.Core
 import           Distribution.Server.Features.Documentation
                                                 ( DocumentationFeature(..) )
-import           Distribution.Server.Features.DownloadCount
+import           Distribution.Server.Features.PackageList
 import           Distribution.Server.Features.PreferredVersions
 import           Distribution.Server.Features.PreferredVersions.State
 import           Distribution.Server.Features.TarIndexCache
-import           Distribution.Server.Features.Upload
 import           Distribution.Server.Framework  ( ServerPartE )
 import qualified Distribution.Server.Framework.BlobStorage
                                                as BlobStorage
 import           Distribution.Server.Framework.ServerEnv
                                                 ( ServerEnv(..) )
 import           Distribution.Server.Packages.Types
-import           Distribution.Server.Users.Group
-                                                ( queryUserGroups
-                                                , size
-                                                )
-import           Distribution.Server.Util.CountingMap
-                                                ( cmFind )
-import           Distribution.Package
-import           Distribution.PackageDescription
-import           Distribution.Types.Version
 import           Distribution.Simple.Utils      ( safeHead
                                                 , safeLast
                                                 )
+import           Distribution.Types.Version
 import qualified Distribution.Utils.ShortText  as S
 
 import qualified Codec.Archive.Tar             as Tar
@@ -52,7 +45,7 @@ import           Data.Time.Clock                ( UTCTime(..)
                                                 )
 import           GHC.Float                      ( int2Double )
 import           System.FilePath                ( isExtensionOf )
-import qualified          System.IO         as SIO
+import qualified System.IO                     as SIO
 
 data Scorer = Scorer
   { maximum :: Double
@@ -116,22 +109,20 @@ freshness (x : xs) lastUpd app =
 -- lookupPackageId
 -- queryHasDocumentation
 
--- TODO CoreFeature can be substituted by CoreResource
 rankIO
   :: CoreResource
   -> VersionsFeature
-  -> DownloadFeature
-  -> UploadFeature
   -> DocumentationFeature
   -> ServerEnv
   -> TarIndexCacheFeature
+  -> ListFeature
   -> PackageDescription
   -> ServerPartE Scorer
 
-rankIO core vers downs upl docs env tarCache pkg = do
+rankIO core vers docs env tarCache list pkg = do
   temp  <- temporalScore pkg lastUploads versionList downloadsPerMonth
   versS <- versionScore versionList vers lastUploads pkg
-  auth  <- authorScore upl pkg
+  auth  <- authorScore pkg pkgIt
   codeS <- codeScore documentLines srcLines packageLines
   return (temp <> versS <> auth <> codeS)
 
@@ -139,6 +130,7 @@ rankIO core vers downs upl docs env tarCache pkg = do
   pkgId        = package pkg
   pkgNm        = pkgName pkgId
   info         = lookupPackageName core pkgNm
+  pkgIt        = safeHead <$> makeItemList list [pkgNm]
   descriptions = do
     infPkg <- info
     return (pkgDesc <$> infPkg)
@@ -150,14 +142,18 @@ rankIO core vers downs upl docs env tarCache pkg = do
         sortBy (flip compare)
       .   map (pkgVersion . package . packageDescription)
       <$> descriptions
-  downloadsPerMonth = liftIO $ cmFind pkgNm <$> recentPackageDownloads downs
+  downloadsPerMonth :: ServerPartE (Maybe Int)
+  downloadsPerMonth = liftIO $ do
+    items <- pkgIt
+    return (itemDownloads <$> items)
   -- TODO get appropriate pkgInfo (head might fail)
-  packageEntr       = do
+  packageEntr = do
     inf  <- info
-    tarB <- liftIO . packageTarball tarCache . head $ inf
+    tarB <- liftIO $ mapM (packageTarball tarCache) (safeHead inf)
     return
       $   (\(path, _, index) -> (path, ) <$> T.lookup index path)
-      =<< rightToMaybe tarB
+      =<< (join $ rightToMaybe <$> tarB)
+
   rightToMaybe (Right a) = Just a
   rightToMaybe (Left  _) = Nothing
 
@@ -200,17 +196,19 @@ rankIO core vers downs upl docs env tarCache pkg = do
     blob <- documentBlob
     return $ BlobStorage.filepath (serverBlobStore env) <$> blob
 
-authorScore :: UploadFeature -> PackageDescription -> ServerPartE Scorer
-authorScore upload desc =
+authorScore
+  :: PackageDescription -> IO (Maybe PackageItem) -> ServerPartE Scorer
+authorScore desc item =
   liftIO maintScore
     >>= (\x -> return $ boolScor 1 (not $ S.null $ author desc) <> x)
  where
   pkgNm = pkgName $ package desc
   maintScore :: IO Scorer
   maintScore = do
-    maint <- queryUserGroups [maintainersGroup upload pkgNm]
-
-    return $ boolScor 3 (size maint > 1) <> scorer 5 (int2Double $ size maint)
+    it <- item
+    return $ boolScor 3 (nMaint it > 1) <> scorer 5 (int2Double $ nMaint it)
+  nMaint (Just iT) = length $ itemMaintainer iT
+  nMaint Nothing   = 0
 
 codeScore
   :: ServerPartE Double
@@ -277,16 +275,18 @@ temporalScore
   :: PackageDescription
   -> ServerPartE [UTCTime]
   -> ServerPartE [Version]
-  -> ServerPartE Int
+  -> ServerPartE (Maybe Int)
   -> ServerPartE Scorer
-temporalScore p lastUploads versionList downloadsPerMonth = do
-  fresh <- freshnessScore
-  downs <- downloadScore
-  tract <- tractionScore
-  return $ tract <> fresh <> downs
+temporalScore p lastUploads versionList downloadsPM = do
+  download <- downloadsPM
+  fresh    <- freshnessScore
+  downS    <- downloadScore download
+  tract    <- tractionScore download
+  return $ tract <> fresh <> downS
  where
-  isApp         = (isNothing . library) p && (not . null . executables) p
-  downloadScore = calcDownScore <$> downloadsPerMonth
+  isApp = (isNothing . library) p && (not . null . executables) p
+  downloadScore Nothing          = return $ scorer 5 0
+  downloadScore (Just downloads) = return $ calcDownScore downloads
   calcDownScore i = Scorer 5 $ min
     ( (logBase 2 (int2Double $ max 0 (i - 100) + 100) - 6.6)
     / (if isApp then 5 else 6)
@@ -300,10 +300,10 @@ temporalScore p lastUploads versionList downloadsPerMonth = do
       _  -> liftIO $ freshness vers (head ups) isApp
   freshnessScore = fracScor 10 <$> packageFreshness
 -- Missing dependencyFreshnessScore for reasonable effectivity needs caching
-  tractionScore  = do
+  tractionScore Nothing          = return $ scorer 1 0
+  tractionScore (Just downloads) = do
     fresh <- packageFreshness
-    downs <- downloadsPerMonth
-    return $ boolScor 1 (fresh * int2Double downs > 1000)
+    return $ boolScor 1 (fresh * int2Double downloads > 1000)
 
 rankPackagePage :: PackageDescription -> Scorer
 rankPackagePage p = tests <> benchs <> desc <> homeP <> sourceRp <> cats
@@ -321,13 +321,12 @@ rankPackagePage p = tests <> benchs <> desc <> homeP <> sourceRp <> cats
 rankPackage
   :: CoreResource
   -> VersionsFeature
-  -> DownloadFeature
-  -> UploadFeature
   -> DocumentationFeature
   -> ServerEnv
   -> TarIndexCacheFeature
+  -> ListFeature
   -> PackageDescription
   -> ServerPartE Double
-rankPackage core versions download upload docs env tarCache p =
-  rankIO core versions download upload docs env tarCache p
+rankPackage core versions docs env tarCache list p =
+  rankIO core versions docs env tarCache list p
     >>= (\x -> return $ total x + total (rankPackagePage p))
