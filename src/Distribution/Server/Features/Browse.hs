@@ -26,6 +26,9 @@ import Distribution.Server.Features.PackageList (ListFeature(ListFeature), Packa
 import Distribution.Server.Features.Search (SearchFeature(SearchFeature), searchPackages)
 import Distribution.Server.Features.Tags (Tag(..), TagsFeature(TagsFeature), TagsResource, tagUri, tagsResource)
 import Distribution.Server.Features.Users (UserFeature(UserFeature), UserResource, userResource, userPageUri)
+import Distribution.Server.Features.PreferredVersions (VersionsFeature)
+import Distribution.Server.Features.Documentation (DocumentationFeature)
+import Distribution.Server.Features.TarIndexCache (TarIndexCacheFeature)
 import Distribution.Server.Framework.Error (ErrorResponse(ErrorResponse))
 import Distribution.Server.Framework.Feature (HackageFeature(..), emptyHackageFeature)
 import Distribution.Server.Framework.RequestContentTypes (expectAesonContent)
@@ -48,6 +51,10 @@ type BrowseFeature =
     -> SearchFeature
     -> DistroFeature
     -> PackageCandidatesFeature
+    -> VersionsFeature
+    -> DocumentationFeature
+    -> TarIndexCacheFeature
+    -> ServerEnv
     -> IO HackageFeature
 
 data ResponseFormatWithMethod
@@ -64,7 +71,7 @@ initBrowseFeature ServerEnv{serverTemplatesDir, serverTemplatesMode} = do
       , "noscript-search-form.html"
       , "noscript-next-page-form.html"
       ]
-  pure \coreFeature userFeature tagsFeature listFeature searchFeature distroFeature packageCandidatesFeature -> do
+  pure \coreFeature userFeature tagsFeature listFeature searchFeature distroFeature packageCandidatesFeature versionsFeature documentationFeature tarIndexCacheFeature serverEnv -> do
     let
       html = htmlUtilities coreFeature packageCandidatesFeature tagsFeature userFeature
       renderer :: ResponseFormatWithMethod -> ServerPartT (ExceptT ErrorResponse IO) Response
