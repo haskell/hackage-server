@@ -96,7 +96,7 @@ data PackageItem = PackageItem {
     -- Reference version (non-deprecated highest numbered version)
     itemReferenceVersion :: !String
     -- heuristic way to sort packages
-    itemPackageRank :: !Double
+    itemPackageRank :: !Float
 }
 
 instance MemSize PackageItem where

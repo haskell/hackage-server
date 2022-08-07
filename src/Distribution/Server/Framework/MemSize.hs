@@ -139,9 +139,6 @@ instance MemSize Integer where
 instance MemSize Float where
   memSize _ = 2
 
-instance MemSize Double where
-  memSize _ = 3
-
 instance MemSize UTCTime where
   memSize _ = 7
 
