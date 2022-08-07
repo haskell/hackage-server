@@ -139,7 +139,8 @@ packageIndexInfoToValue :: CoreResource -> TagsResource -> UserResource -> Packa
 packageIndexInfoToValue
   coreResource tagsResource userResource
   PackageItem{itemName, itemDownloads, itemVotes,
-    itemDesc, itemTags, itemLastUpload, itemReferenceVersion, itemMaintainer} =
+    itemDesc, itemTags, itemLastUpload, 
+    itemReferenceVersion, itemMaintainer, itemPackageRank} =
   object
     [ Key.fromString "name" .= renderPackage itemName
     , Key.fromString "downloads" .= itemDownloads
@@ -149,6 +150,7 @@ packageIndexInfoToValue
     , Key.fromString "lastUpload" .= iso8601Show itemLastUpload
     , Key.fromString "referenceVersion" .= itemReferenceVersion
     , Key.fromString "maintainers" .= map renderUser itemMaintainer
+    , Key.fromString "packageRank" .= itemPackageRank
     ]
   where
   renderTag :: Tag -> Value
