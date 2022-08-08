@@ -10,8 +10,8 @@ After your account is created, you will need to email the Hackage
 Trustees at hackage-trustees@haskell.org requesting addition to the
 uploader group. In this email, please include your Hackage username
 and a link to the package you'd like to upload (on a host like gitlab
-or github) that you'd like to upload. (This measure is unfortunately
-necessary to prevent spam accounts.)
+or github). This measure is unfortunately necessary to prevent spam
+accounts.
 
 For storage and bandwidth reasons, we ask uploaders to only upload
 packages they believe will be useful to others and that they intend to maintain.
