@@ -42,13 +42,13 @@ import           System.FilePath                ( isExtensionOf )
 import qualified System.IO                     as SIO
 
 data Scorer = Scorer
-  { maximum :: Float
+  { maximumS :: Float
   , score   :: Float
   }
   deriving Show
 
 instance Semigroup Scorer where
-  (Scorer a b) <> (Scorer c d) = Scorer (a + b) (c + d)
+  (Scorer a b) <> (Scorer c d) = Scorer (a + c) (b + d)
 
 scorer :: Float -> Float -> Scorer
 scorer maxim scr =
@@ -62,7 +62,7 @@ boolScor k True  = Scorer k k
 boolScor k False = Scorer k 0
 
 total :: Scorer -> Float
-total (Scorer a b) = a / b
+total (Scorer a b) = b / a
 
 major :: Num a => [a] -> a
 major (x : _) = x
@@ -257,7 +257,7 @@ rankPackagePage p = tests <> benchs <> desc <> homeP <> sourceRp <> cats
  where
   tests    = boolScor 50 (hasTests p)
   benchs   = boolScor 10 (hasBenchmarks p)
-  desc     = Scorer 30 (min 1 (int2Float (S.length $ description p) / 300))
+  desc     = scorer 30 (min 1 (int2Float (S.length $ description p) / 300))
   -- documentation = boolScor 30 ()
   homeP    = boolScor 30 (not $ S.null $ homepage p)
   sourceRp = boolScor 8 (not $ null $ sourceRepos p)
