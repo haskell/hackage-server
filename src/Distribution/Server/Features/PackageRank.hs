@@ -89,8 +89,8 @@ freshness (x : xs) lastUpd app =
   versionLatest = versionNumbers x
   daysPastExpiration =
     age >>= (\a -> return $ max 0 a - expectedUpdateInterval)
-  expectedUpdateInterval = int2Float
-    (min (versionStabilityInterval versionLatest) $ length (x : xs))
+  expectedUpdateInterval =
+    int2Float (min (versionStabilityInterval versionLatest) $ length (x : xs))
   versionStabilityInterval v | patches v > 3 && major v > 0 = 700
                              | patches v > 3                = 450
                              | patches v > 0                = 300
@@ -177,8 +177,7 @@ authorScore :: Int -> PackageDescription -> Scorer
 authorScore maintainers desc =
   boolScor 1 (not $ S.null $ author desc) <> maintScore
  where
-  maintScore =
-    boolScor 3 (maintainers > 1) <> scorer 5 (int2Float maintainers)
+  maintScore = boolScor 3 (maintainers > 1) <> scorer 5 (int2Float maintainers)
 
 codeScore :: IO Float -> IO Float -> IO Scorer
 codeScore documentL haskellL = do
@@ -218,7 +217,7 @@ versionScore versionList versions lastUploads desc = do
       <> scorer
            15
            (int2Float $ length $ filter (\x -> major x > 0 || minor x > 0)
-                                         intUse
+                                        intUse
            )
       <> scorer
            20
