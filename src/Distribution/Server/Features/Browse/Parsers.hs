@@ -85,7 +85,7 @@ allowedAfterOpeningBrace AllowNot = "not " <|> allowedAfterOpeningBrace Disallow
 allowedAfterOpeningBrace _ =
   asum
     [ "downloads", "rating", "lastUpload" , "ageOfLastUpload"
-    , "tag:", "maintainer:", "deprecated:", "distro:", "packageRank"
+    , "tag:", "maintainer:", "deprecated:", "distro:"
     ]
 
 -- Whether the 'not' operator can be used.
@@ -113,7 +113,6 @@ filterWith allowNot = do
         "maintainer:" -> MaintainerFilter <$> wordWoSpaceOrParens
         "deprecated:" -> DeprecatedFilter <$> deprecatedOption
         "distro:" -> DistroFilter <$> wordWoSpaceOrParens
-        "packageRank" -> DownloadsFilter <$> opAndSndParam decimal
         _ -> fail "Impossible since fieldName possibilities are known at compile time"
       pure filt
 
