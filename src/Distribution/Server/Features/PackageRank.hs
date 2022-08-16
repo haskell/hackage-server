@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, BangPatterns #-}
 
 -- TODO change the module name probably Distribution.Server.Features.PackageList.PackageRank
 
@@ -42,8 +42,8 @@ import           System.FilePath                ( isExtensionOf )
 import qualified System.IO                     as SIO
 
 data Scorer = Scorer
-  { maximumS :: Float
-  , score   :: Float
+  { maximumS :: !Float
+  , score   :: !Float
   }
   deriving Show
 
