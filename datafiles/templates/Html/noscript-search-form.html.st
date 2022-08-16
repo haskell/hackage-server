@@ -23,7 +23,7 @@
         <option $if(tags)$        selected $endif$ value=tags>tags</option>
         <option $if(lastUpload)$  selected $endif$ value=lastUpload>date of last upload</option>
         <option $if(maintainers)$ selected $endif$ value=maintainers>maintainers</option>
-        <option $if(packageRank)$ selected $endif$ value=packageRank>packageRank</option>
+        <option $if(packageRank)$ selected $endif$ value=packageRank>rank of the package</option>
       </select>
     </label>
   </div>
