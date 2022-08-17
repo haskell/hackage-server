@@ -284,7 +284,7 @@ htmlFeature env@ServerEnv{..}
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
     htmlDownloads  = mkHtmlDownloads  utilities download
     htmlReports    = mkHtmlReports    utilities core reportsCore templates
-    htmlCandidates = mkHtmlCandidates utilities core versions upload
+    htmlCandidates = mkHtmlCandidates env utilities core versions upload
                                       docsCandidates tarIndexCache
                                       candidates user templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
@@ -1083,7 +1083,8 @@ data HtmlCandidates = HtmlCandidates {
     htmlCandidatesResources :: [Resource]
   }
 
-mkHtmlCandidates :: HtmlUtilities
+mkHtmlCandidates :: ServerEnv
+                 -> HtmlUtilities
                  -> CoreFeature
                  -> VersionsFeature
                  -> UploadFeature
@@ -1093,7 +1094,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> UserFeature
                  -> Templates
                  -> HtmlCandidates
-mkHtmlCandidates utilities@HtmlUtilities{..}
+mkHtmlCandidates ServerEnv{..} utilities@HtmlUtilities{..}
                  CoreFeature{ coreResource = CoreResource{packageInPath}
                             , queryGetPackageIndex
                             }
@@ -1252,9 +1253,20 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       mdocIndex   <- maybe (return Nothing)
                            (liftM Just . liftIO . cachedTarIndex)
                            mdoctarblob
-      let docURL = packageDocsContentUri docs (packageId cand)
 
       mreadme     <- makeReadme render
+      let loadDocMeta
+            | Just doctarblob <- mdoctarblob
+            , Just docIndex   <- mdocIndex
+            = loadTarDocMeta
+                (BlobStorage.filepath serverBlobStore doctarblob)
+                docIndex
+                (packageId cand)
+            | otherwise
+            = return Nothing
+      mdocMeta <- loadDocMeta
+
+      let docURL = packageDocsContentUri docs (packageId cand)
 
       -- also utilize hasIndexedPackage :: Bool
       let warningBox = case renderWarnings candRender of
@@ -1267,7 +1279,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
         , "warningBox"        $= warningBox
         ] ++
         PagesNew.packagePageTemplate render
-            mdocIndex Nothing mreadme
+            mdocIndex mdocMeta mreadme
             docURL [] Nothing
             utilities
             True
