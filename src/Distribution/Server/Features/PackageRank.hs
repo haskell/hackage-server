@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections, BangPatterns #-}
+{-# LANGUAGE TupleSections #-}
 
 -- TODO change the module name probably Distribution.Server.Features.PackageList.PackageRank
 
@@ -43,7 +43,7 @@ import qualified System.IO                     as SIO
 
 data Scorer = Scorer
   { maximumS :: !Float
-  , score   :: !Float
+  , score    :: !Float
   }
   deriving Show
 
@@ -112,17 +112,18 @@ rankIO
   -> ServerEnv
   -> TarIndexCacheFeature
   -> [PkgInfo]
-  -> PkgInfo
+  -> Maybe PkgInfo
   -> IO Scorer
 
 rankIO _ _ _ _ _ _ _ Nothing = return (Scorer (118 + 16 + 4 + 1) 0)
-rankIO vers recentDownloads maintainers docs env tarCache pkgs pkg = do
+rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
   temp  <- temporalScore pkg lastUploads versionList recentDownloads
   versS <- versionScore versionList vers lastUploads pkg
   codeS <- codeScore documentLines srcLines
   return (temp <> versS <> codeS <> authorScore maintainers pkg)
 
  where
+  pkg   = packageDescription $ pkgDesc pkgI
   pkgId = package pkg
   lastUploads =
     sortBy (flip compare)
@@ -132,7 +133,7 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs pkg = do
   versionList = sortBy (flip compare)
     $ map (pkgVersion . package . packageDescription) (pkgDesc <$> pkgs)
   packageEntr = do
-    tarB <- packageTarball tarCache $ pkg
+    tarB <- packageTarball tarCache pkgI
     return
       $   (\(path, _, index) -> (path, ) <$> T.lookup index path)
       =<< rightToMaybe tarB
@@ -245,8 +246,8 @@ temporalScore p lastUploads versionList recentDownloads = do
     )
     5
   packageFreshness = case safeHead lastUploads of
-    Nothing -> return 0
-    (Just l)  -> freshness versionList l isApp
+    Nothing  -> return 0
+    (Just l) -> freshness versionList l isApp
   freshnessScore = fracScor 10 <$> packageFreshness
 -- Missing dependencyFreshnessScore for reasonable effectivity needs caching
   tractionScore  = do
@@ -254,7 +255,7 @@ temporalScore p lastUploads versionList recentDownloads = do
     return $ boolScor 1 (fresh * int2Float recentDownloads > 1000)
 
 rankPackagePage :: Maybe PackageDescription -> Scorer
-rankPackagePage Nothing = Scorer 233 0
+rankPackagePage Nothing  = Scorer 233 0
 rankPackagePage (Just p) = tests <> benchs <> desc <> homeP <> sourceRp <> cats
  where
   tests    = boolScor 50 (hasTests p)
@@ -277,7 +278,12 @@ rankPackage
   -> [PkgInfo]
   -> IO Float
 rankPackage versions recentDownloads maintainers docs tarCache env pkgs =
-  total
-    .   (<>) (rankPackagePage pkgD)
-    <$> rankIO versions recentDownloads maintainers docs env tarCache pkgs (safeLast pkgs)
+  total . (<>) (rankPackagePage pkgD) <$> rankIO versions
+                                                 recentDownloads
+                                                 maintainers
+                                                 docs
+                                                 env
+                                                 tarCache
+                                                 pkgs
+                                                 (safeLast pkgs)
   where pkgD = packageDescription . pkgDesc <$> safeLast pkgs
