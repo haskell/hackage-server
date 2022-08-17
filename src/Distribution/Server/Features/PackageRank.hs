@@ -112,17 +112,17 @@ rankIO
   -> ServerEnv
   -> TarIndexCacheFeature
   -> [PkgInfo]
+  -> PkgInfo
   -> IO Scorer
 
-rankIO _ _ _ _ _ _ [] = return (Scorer (118 + 16 + 4 + 1) 0)
-rankIO vers recentDownloads maintainers docs env tarCache pkgs = do
+rankIO _ _ _ _ _ _ _ Nothing = return (Scorer (118 + 16 + 4 + 1) 0)
+rankIO vers recentDownloads maintainers docs env tarCache pkgs pkg = do
   temp  <- temporalScore pkg lastUploads versionList recentDownloads
   versS <- versionScore versionList vers lastUploads pkg
   codeS <- codeScore documentLines srcLines
   return (temp <> versS <> codeS <> authorScore maintainers pkg)
 
  where
-  pkg   = packageDescription <$> pkgDesc $ last pkgs
   pkgId = package pkg
   lastUploads =
     sortBy (flip compare)
@@ -132,10 +132,10 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs = do
   versionList = sortBy (flip compare)
     $ map (pkgVersion . package . packageDescription) (pkgDesc <$> pkgs)
   packageEntr = do
-    tarB <- mapM (packageTarball tarCache) (safeHead pkgs)
+    tarB <- packageTarball tarCache $ pkg
     return
       $   (\(path, _, index) -> (path, ) <$> T.lookup index path)
-      =<< (join $ rightToMaybe <$> tarB)
+      =<< rightToMaybe tarB
   rightToMaybe (Right a) = Just a
   rightToMaybe (Left  _) = Nothing
 
@@ -279,5 +279,5 @@ rankPackage
 rankPackage versions recentDownloads maintainers docs tarCache env pkgs =
   total
     .   (<>) (rankPackagePage pkgD)
-    <$> rankIO versions recentDownloads maintainers docs env tarCache pkgs
+    <$> rankIO versions recentDownloads maintainers docs env tarCache pkgs (safeLast pkgs)
   where pkgD = packageDescription . pkgDesc <$> safeLast pkgs
