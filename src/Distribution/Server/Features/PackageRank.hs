@@ -114,6 +114,7 @@ rankIO
   -> [PkgInfo]
   -> IO Scorer
 
+rankIO _ _ _ _ _ _ [] = return (Scorer (118 + 16 + 4 + 1) 0)
 rankIO vers recentDownloads maintainers docs env tarCache pkgs = do
   temp  <- temporalScore pkg lastUploads versionList recentDownloads
   versS <- versionScore versionList vers lastUploads pkg
@@ -131,10 +132,10 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs = do
   versionList = sortBy (flip compare)
     $ map (pkgVersion . package . packageDescription) (pkgDesc <$> pkgs)
   packageEntr = do
-    tarB <- packageTarball tarCache . head $ pkgs
+    tarB <- mapM (packageTarball tarCache) (safeHead pkgs)
     return
       $   (\(path, _, index) -> (path, ) <$> T.lookup index path)
-      =<< rightToMaybe tarB
+      =<< (join $ rightToMaybe <$> tarB)
   rightToMaybe (Right a) = Just a
   rightToMaybe (Left  _) = Nothing
 
@@ -243,17 +244,18 @@ temporalScore p lastUploads versionList recentDownloads = do
     / (if isApp then 5 else 6)
     )
     5
-  packageFreshness = case lastUploads of
-    [] -> return 0
-    _  -> freshness versionList (head lastUploads) isApp
+  packageFreshness = case safeHead lastUploads of
+    Nothing -> return 0
+    (Just l)  -> freshness versionList l isApp
   freshnessScore = fracScor 10 <$> packageFreshness
 -- Missing dependencyFreshnessScore for reasonable effectivity needs caching
   tractionScore  = do
     fresh <- packageFreshness
     return $ boolScor 1 (fresh * int2Float recentDownloads > 1000)
 
-rankPackagePage :: PackageDescription -> Scorer
-rankPackagePage p = tests <> benchs <> desc <> homeP <> sourceRp <> cats
+rankPackagePage :: Maybe PackageDescription -> Scorer
+rankPackagePage Nothing = Scorer 233 0
+rankPackagePage (Just p) = tests <> benchs <> desc <> homeP <> sourceRp <> cats
  where
   tests    = boolScor 50 (hasTests p)
   benchs   = boolScor 10 (hasBenchmarks p)
@@ -278,4 +280,4 @@ rankPackage versions recentDownloads maintainers docs tarCache env pkgs =
   total
     .   (<>) (rankPackagePage pkgD)
     <$> rankIO versions recentDownloads maintainers docs env tarCache pkgs
-  where pkgD = packageDescription $ pkgDesc $ last pkgs
+  where pkgD = packageDescription . pkgDesc <$> safeLast pkgs
