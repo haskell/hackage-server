@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- TODO change the module name probably Distribution.Server.Features.PackageList.PackageRank
 
@@ -120,7 +120,7 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
   temp  <- temporalScore pkg lastUploads versionList recentDownloads
   versS <- versionScore versionList vers lastUploads pkg
   codeS <- codeScore documentLines srcLines
-  return (temp <> versS <> codeS <> authorScore maintainers pkg)
+  return $ temp <> versS <> codeS <> authorScore maintainers pkg
 
  where
   pkg   = packageDescription $ pkgDesc pkgI
@@ -132,13 +132,17 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
   versionList :: [Version]
   versionList = sortBy (flip compare)
     $ map (pkgVersion . package . packageDescription) (pkgDesc <$> pkgs)
-  packageEntr = do
-    tarB <- packageTarball tarCache pkgI
-    return
-      $   (\(path, _, index) -> (path, ) <$> T.lookup index path)
-      =<< rightToMaybe tarB
-  rightToMaybe (Right a) = Just a
-  rightToMaybe (Left  _) = Nothing
+  srcLines = do
+    Right (path, _, _) <- packageTarball tarCache pkgI
+    filterLines (isExtensionOf ".hs") . Tar.read <$> BSL.readFile path
+
+  filterLines f = Tar.foldEntries (countLines f) 0 (const 0)
+  countLines :: (FilePath -> Bool) -> Tar.Entry -> Float -> Float
+  countLines f entry l = if not . f . Tar.entryPath $ entry then l else lns
+   where
+    !lns = case Tar.entryContent entry of
+      (Tar.NormalFile str _) -> l + (int2Float . length $ BSL.split 10 str)
+      _                      -> l
 
   documentBlob :: IO (Maybe BlobStorage.BlobId)
   documentBlob      = queryDocumentation docs pkgId
@@ -149,8 +153,6 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
     return $ liftM2 (,) path (join $ liftM2 T.lookup index path)
   documentLines :: IO Float
   documentLines = documentationEntr >>= filterLinesTar (const True)
-  srcLines :: IO Float
-  srcLines = packageEntr >>= filterLinesTar (isExtensionOf ".hs")
 
   filterLinesTar
     :: (FilePath -> Bool) -> Maybe (FilePath, T.TarIndexEntry) -> IO Float
