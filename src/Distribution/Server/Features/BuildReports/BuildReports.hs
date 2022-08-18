@@ -218,10 +218,10 @@ lookupRunTests pkgid buildReports = do
   rp <- Map.lookup pkgid (reportsIndex buildReports)
   pure (runTests rp)
 
-setRunTests :: PackageId -> Bool -> BuildReports -> BuildReports
-setRunTests pkgid b buildReports =
-  let rp = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
-  in  BuildReports (Map.insert pkgid rp{runTests = b} (reportsIndex buildReports))
+setRunTests :: PackageId -> Bool -> BuildReports -> Maybe BuildReports
+setRunTests pkgid b buildReports = do
+  rp <- Map.lookup pkgid (reportsIndex buildReports)
+  pure $ BuildReports (Map.insert pkgid rp{runTests = b} (reportsIndex buildReports))
 
 -- addPkg::`
 -------------------

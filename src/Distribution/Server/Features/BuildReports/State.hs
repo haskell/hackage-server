@@ -83,11 +83,12 @@ lookupLatestReport pkgid = asks (BuildReports.lookupLatestReport pkgid)
 lookupRunTests :: PackageId -> Query BuildReports (Maybe Bool)
 lookupRunTests pkgid = asks (BuildReports.lookupRunTests pkgid)
 
-setRunTests :: PackageId -> Bool -> Update BuildReports ()
+setRunTests :: PackageId -> Bool -> Update BuildReports Bool
 setRunTests pkgid b = do
     buildReports <- State.get
-    let reports = BuildReports.setRunTests pkgid b buildReports
-    State.put reports
+    case BuildReports.setRunTests pkgid b buildReports of
+        Nothing      -> pure False
+        Just reports -> State.put reports >> pure True
 
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
