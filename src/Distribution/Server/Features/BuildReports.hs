@@ -206,7 +206,7 @@ buildReportsFeature name
         Just (_, brp, _, _) -> do
           let (CompilerId _ vrsn) = compiler brp
           return (time brp, Just vrsn)
-      return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId)
+      return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId {- TODO -}True)
 
     queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg))
     queryLastReportStats pkgid = do

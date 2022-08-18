@@ -623,7 +623,8 @@ data PkgDetails = PkgDetails {
     docs        :: Bool,
     failCnt     :: Maybe BuildStatus,
     buildTime   :: Maybe UTCTime,
-    ghcId      :: Maybe Version
+    ghcId       :: Maybe Version,
+    runTests    :: Bool
 } deriving(Show)
 
 instance Data.Aeson.ToJSON PkgDetails where
@@ -632,7 +633,8 @@ instance Data.Aeson.ToJSON PkgDetails where
     "docs"       .= docs p,
     "failCnt"    .= failCnt p,
     "buildTime"  .= buildTime p,
-    "ghcId"      .= k (ghcId p) ]
+    "ghcId"      .= k (ghcId p),
+    "runTests"   .= runTests p ]
     where
       k (Just a) = Just $ DT.display a
       k Nothing = Nothing
@@ -645,6 +647,7 @@ instance Data.Aeson.FromJSON PkgDetails where
       <*> o .:? "failCnt"
       <*> o .:? "buildTime"
       <*> fmap parseVersion (o .:? "ghcId")
+      <*> o .: "runTests"
     where
       parseVersion :: Maybe String -> Maybe Version
       parseVersion Nothing = Nothing
