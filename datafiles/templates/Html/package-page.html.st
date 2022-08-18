@@ -36,9 +36,15 @@
 
     $if(isDeprecated)$
     <div id="deprecated">
-      Deprecated.
+      <span style="color:#D00B3C">Deprecated.</span>
       $deprecatedMsg$
     </div>
+    $else$
+      $if(isDeprecatedVersion)$
+      <div id="deprecated-version">
+        <span style="color:#D00B3C">This version is deprecated.</span>
+      </div>
+      $endif$
     $endif$
 
     <div id="flex-container">
