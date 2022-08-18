@@ -624,7 +624,7 @@ data PkgDetails = PkgDetails {
     failCnt     :: Maybe BuildStatus,
     buildTime   :: Maybe UTCTime,
     ghcId       :: Maybe Version,
-    runTests    :: Bool
+    runTests    :: Maybe Bool
 } deriving(Show)
 
 instance Data.Aeson.ToJSON PkgDetails where

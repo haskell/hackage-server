@@ -457,7 +457,7 @@ getDocumentationStats verbosity opts config pkgs = do
             (False, Just (BR.BuildFailCnt a))
                 | a >= bo_buildAttempts opts  -> DocsFailed
             (False, _)                        -> DocsNotBuilt
-      in  (pkgId, hasDocs, BR.runTests pkgDetails)
+      in  (pkgId, hasDocs, fromMaybe True $ BR.runTests pkgDetails)
 
     setIsCandidate :: Bool -> (PackageIdentifier, HasDocs, Bool) -> DocInfo
     setIsCandidate isCandidate (pId, hasDocs, runTests) = DocInfo {

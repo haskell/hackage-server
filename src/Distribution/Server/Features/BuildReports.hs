@@ -201,12 +201,13 @@ buildReportsFeature name
     pkgReportDetails (pkgid, docs) = do
       failCnt   <- queryState reportsState $ LookupFailCount pkgid
       latestRpt <- queryState reportsState $ LookupLatestReport pkgid
+      runTests  <- queryState reportsState $ LookupRunTests pkgid
       (time, ghcId) <- case latestRpt of
         Nothing -> return (Nothing,Nothing)
         Just (_, brp, _, _) -> do
           let (CompilerId _ vrsn) = compiler brp
           return (time brp, Just vrsn)
-      return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId {- TODO -}True)
+      return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId runTests)
 
     queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg))
     queryLastReportStats pkgid = do

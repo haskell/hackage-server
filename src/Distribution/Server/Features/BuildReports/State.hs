@@ -80,6 +80,15 @@ lookupFailCount pkgid = asks (BuildReports.lookupFailCount pkgid)
 lookupLatestReport :: PackageId -> Query BuildReports (Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg))
 lookupLatestReport pkgid = asks (BuildReports.lookupLatestReport pkgid)
 
+lookupRunTests :: PackageId -> Query BuildReports (Maybe Bool)
+lookupRunTests pkgid = asks (BuildReports.lookupRunTests pkgid)
+
+setRunTests :: PackageId -> Bool -> Update BuildReports ()
+setRunTests pkgid b = do
+    buildReports <- State.get
+    let reports = BuildReports.setRunTests pkgid b buildReports
+    State.put reports
+
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
                           ,'deleteReport
@@ -93,5 +102,7 @@ makeAcidic ''BuildReports ['addReport
                           ,'resetFailCount
                           ,'lookupFailCount
                           ,'lookupLatestReport
+                          ,'lookupRunTests
+                          ,'setRunTests
                           ]
 
