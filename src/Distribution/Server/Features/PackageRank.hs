@@ -25,21 +25,17 @@ import           Distribution.Types.Version
 import qualified Distribution.Utils.ShortText  as S
 
 import qualified Codec.Archive.Tar             as Tar
-import qualified Codec.Archive.Tar.Entry       as Tar
-import           Control.Monad                  ( join
-                                                , liftM2
-                                                )
 import qualified Data.ByteString.Lazy          as BSL
 import           Data.List                      ( maximumBy
                                                 , sortBy
                                                 )
 import           Data.Maybe                     ( isNothing )
 import           Data.Ord                       ( comparing )
-import qualified Data.TarIndex                 as T
 import qualified Data.Time.Clock               as CL
 import           GHC.Float                      ( int2Float )
 import           System.FilePath                ( isExtensionOf )
-import qualified System.IO                     as SIO
+
+-- import Debug.Trace (trace)
 
 data Scorer = Scorer
   { maximumS :: !Float
@@ -119,7 +115,7 @@ rankIO _ _ _ _ _ _ _ Nothing = return (Scorer (118 + 16 + 4 + 1) 0)
 rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
   temp  <- temporalScore pkg lastUploads versionList recentDownloads
   versS <- versionScore versionList vers lastUploads pkg
-  codeS <- codeScore documentLines srcLines
+  codeS <- codeScore documSize srcLines
   return $ temp <> versS <> codeS <> authorScore maintainers pkg
 
  where
@@ -134,45 +130,34 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
     $ map (pkgVersion . package . packageDescription) (pkgDesc <$> pkgs)
   srcLines = do
     Right (path, _, _) <- packageTarball tarCache pkgI
-    filterLines (isExtensionOf ".hs") . Tar.read <$> BSL.readFile path
+    filterLines (isExtensionOf ".hs") countLines
+      .   Tar.read
+      <$> BSL.readFile path
+  documSize = do
+    path <- documentPath
+    case path of
+      Nothing -> return 0
+      Just pth ->
+        filterLines (isExtensionOf ".html") countSize
+          .   Tar.read
+          <$> BSL.readFile pth
 
-  filterLines f = Tar.foldEntries (countLines f) 0 (const 0)
+  filterLines f g = Tar.foldEntries (g f) 0 (const 0)
   countLines :: (FilePath -> Bool) -> Tar.Entry -> Float -> Float
   countLines f entry l = if not . f . Tar.entryPath $ entry then l else lns
    where
     !lns = case Tar.entryContent entry of
       (Tar.NormalFile str _) -> l + (int2Float . length $ BSL.split 10 str)
       _                      -> l
+  countSize :: (FilePath -> Bool) -> Tar.Entry -> Float -> Float
+  countSize f entry l = if not . f . Tar.entryPath $ entry then l else s
+   where
+    !s = case Tar.entryContent entry of
+      (Tar.NormalFile _ siz) -> l + fromInteger (toInteger siz)
+      _                      -> l
 
   documentBlob :: IO (Maybe BlobStorage.BlobId)
-  documentBlob      = queryDocumentation docs pkgId
-  documentIndex     = documentBlob >>= mapM (cachedTarIndex tarCache)
-  documentationEntr = do
-    index <- documentIndex
-    path  <- documentPath
-    return $ liftM2 (,) path (join $ liftM2 T.lookup index path)
-  documentLines :: IO Float
-  documentLines = documentationEntr >>= filterLinesTar (const True)
-
-  filterLinesTar
-    :: (FilePath -> Bool) -> Maybe (FilePath, T.TarIndexEntry) -> IO Float
-  filterLinesTar f (Just (path, T.TarFileEntry offset)) =
-    if f path then getLines path offset else return 0
-  filterLinesTar f (Just (_, T.TarDir dir)) =
-    sum <$> mapM (filterLinesTar f . Just) dir
-  filterLinesTar _ _ = return 0
-
-  -- TODO if size is too big give it a good score and do not read the file
-  getLines path offset = do
-    handle <- SIO.openFile path SIO.ReadMode
-    SIO.hSeek handle SIO.AbsoluteSeek (fromIntegral $ offset * 512)
-    header <- BSL.hGet handle 512
-    case Tar.read header of
-      (Tar.Next Tar.Entry { Tar.entryContent = Tar.NormalFile _ siz } _) -> do
-        body <- BSL.hGet handle (fromIntegral siz)
-        return $ int2Float . length . BSL.split 10 $ body
-      _ -> return 0
-
+  documentBlob = queryDocumentation docs pkgId
   documentPath = do
     blob <- documentBlob
     return $ BlobStorage.filepath (serverBlobStore env) <$> blob
