@@ -38,7 +38,7 @@ import Distribution.Pretty (Pretty (..), prettyShow)
 import Distribution.Version
 import Distribution.Compiler (CompilerFlavor)
 import Distribution.FieldGrammar (prettyFieldGrammar)
-import Distribution.Fields.Pretty (PrettyField (..), showFields)
+import Distribution.Fields.Pretty (PrettyField (..), showFields, CommentPosition (..))
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
 import Distribution.PackageDescription.FieldGrammar (sourceRepoFieldGrammar)
@@ -340,7 +340,7 @@ checkPackageDescriptions checkXRevision
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
   changesOk "bug-reports" fromShortText bugReportsA bugReportsB
-  changesOkList changesOk "source-repository" (showFields (const []) . (:[]) . ppSourceRepo)
+  changesOkList changesOk "source-repository" (showFields (const NoComment) . (:[]) . ppSourceRepo)
             sourceReposA sourceReposB
   changesOk "synopsis"    fromShortText synopsisA synopsisB
   changesOk "description" fromShortText descriptionA descriptionB
@@ -625,8 +625,8 @@ checkExecutable componentName
 
 checkTestSuite :: ComponentName -> Check TestSuite
 checkTestSuite componentName
-               (TestSuite _nameA interfaceA buildInfoA)
-               (TestSuite _nameB interfaceB buildInfoB) = do
+               (TestSuite _nameA interfaceA buildInfoA _codeGenA)
+               (TestSuite _nameB interfaceB buildInfoB _codeGenB) = do
   checkSame "Cannot change test-suite type" interfaceA interfaceB
   checkBuildInfo componentName buildInfoA buildInfoB
 
