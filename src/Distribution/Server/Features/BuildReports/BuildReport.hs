@@ -71,7 +71,7 @@ import Distribution.FieldGrammar
 import Distribution.Fields.Parser
          ( readFields )
 import Distribution.Fields.Pretty
-         ( showFields, CommentPosition (..) )
+         ( showFields )
 import Distribution.Fields.ParseResult
          (ParseResult, parseFatalFailure, runParseResult )
 import Distribution.Server.Framework.Instances ()
@@ -311,7 +311,7 @@ intPair = do
 -- Pretty-printing
 
 show :: BuildReport -> String
-show = showFields (const NoComment) . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
+show = showFields (const []) . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
 
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
