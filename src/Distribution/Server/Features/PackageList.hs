@@ -35,6 +35,7 @@ import Distribution.PackageDescription.Configuration
 import Distribution.Pretty (prettyShow)
 import Distribution.Types.Version (Version)
 import Distribution.Utils.ShortText (fromShortText)
+import Distribution.Simple.Utils (safeLast)
 
 import Control.Concurrent
 import qualified Data.List.NonEmpty as NE
@@ -306,7 +307,7 @@ listFeature CoreFeature{..}
         maintainers <- queryUserGroup (maintainersGroup pkgname)
         prefsinfo <- queryGetPreferredInfo pkgname
         packageR <- rankPackage versions (cmFind pkgname downs)
-            (UserIdSet.size maintainers) documentation tar env pkgs 
+            (UserIdSet.size maintainers) documentation tar env pkgs (safeLast pkgs)
 
         return $ (,) pkgname . updateReferenceVersion prefsinfo [pkgVersion (pkgInfoId pkg)] $ (updateDescriptionItem desc $ emptyPackageItem pkgname) {
             itemTags       = tags

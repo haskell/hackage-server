@@ -32,6 +32,7 @@ import           Data.List                      ( maximumBy
 import           Data.Maybe                     ( isNothing )
 import           Data.Ord                       ( comparing )
 import qualified Data.Time.Clock               as CL
+import           Distribution.Server.Packages.Readme
 import           GHC.Float                      ( int2Float )
 import           System.FilePath                ( isExtensionOf )
 
@@ -59,6 +60,9 @@ boolScor k False = Scorer k 0
 
 total :: Scorer -> Float
 total (Scorer a b) = b / a
+
+scale :: Float -> Scorer -> Scorer
+scale mx sc = fracScor mx (total sc)
 
 major :: Num a => [a] -> a
 major (x : _) = x
@@ -96,38 +100,46 @@ freshness (x : xs) lastUpd app =
   age       = flip numDays (Just lastUpd) . Just <$> CL.getCurrentTime
   decayDays = expectedUpdateInterval / 2 + (if app then 300 else 200)
 
--- lookupPackageId
--- queryHasDocumentation
+cabalScore :: PackageDescription -> IO Bool -> IO Scorer
+cabalScore p docum =
+  (<>) (tests <> benchs <> desc <> homeP <> sourceRp <> cats)
+    <$> (boolScor 30 <$> docum)
+ where
+  tests    = boolScor 50 (hasTests p)
+  benchs   = boolScor 10 (hasBenchmarks p)
+  desc     = scorer 30 (min 1 (int2Float (S.length $ description p) / 300))
+  -- documentation = boolScor 30 ()
+  homeP    = boolScor 30 (not $ S.null $ homepage p)
+  sourceRp = boolScor 8 (not $ null $ sourceRepos p)
+  cats     = boolScor 5 (not $ S.null $ category p)
 
--- TODO CoreFeature can be substituted by CoreResource
-rankIO
+readmeScore _ = Scorer 0 0
+
+-- queryHasDocumentation
+baseScore
   :: VersionsFeature
-  -> Int
   -> Int
   -> DocumentationFeature
   -> ServerEnv
   -> TarIndexCacheFeature
-  -> [PkgInfo]
-  -> Maybe PkgInfo
+  -> [Version]
+  -> [CL.UTCTime]
+  -> PkgInfo
   -> IO Scorer
 
-rankIO _ _ _ _ _ _ _ Nothing = return (Scorer (118 + 16 + 4 + 1) 0)
-rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
-  temp  <- temporalScore pkg lastUploads versionList recentDownloads
-  versS <- versionScore versionList vers lastUploads pkg
-  codeS <- codeScore documSize srcLines
-  return $ temp <> versS <> codeS <> authorScore maintainers pkg
-
+baseScore vers maintainers docs env tarCache versionList lastUploads pkgI = do
+  versS  <- versionScore versionList vers lastUploads pkg
+  codeS  <- codeScore documSize srcLines
+  cabalS <- cabalScore pkg documHas
+  return
+    $  scale 5 versS
+    <> scale 2 codeS
+    <> scale 3 (authorScore maintainers pkg)
+    <> scale 2 cabalS
+    <> scale 5 (readmeScore readme)
  where
-  pkg   = packageDescription $ pkgDesc pkgI
-  pkgId = package pkg
-  lastUploads =
-    sortBy (flip compare)
-      $  (fst . pkgOriginalUploadInfo <$> pkgs)
-      ++ (fst . pkgLatestUploadInfo <$> pkgs)
-  versionList :: [Version]
-  versionList = sortBy (flip compare)
-    $ map (pkgVersion . package . packageDescription) (pkgDesc <$> pkgs)
+  pkg      = packageDescription $ pkgDesc pkgI
+  pkgId    = package pkg
   srcLines = do
     Right (path, _, _) <- packageTarball tarCache pkgI
     filterLines (isExtensionOf ".hs") countLines
@@ -141,6 +153,8 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
         filterLines (isExtensionOf ".html") countSize
           .   Tar.read
           <$> BSL.readFile pth
+  readme = findToplevelFile tarCache pkgI isReadmeFile
+    >>= either (\_ -> return Nothing) (return . Just)
 
   filterLines f g = Tar.foldEntries (g f) 0 (const 0)
   countLines :: (FilePath -> Bool) -> Tar.Entry -> Float -> Float
@@ -161,6 +175,7 @@ rankIO vers recentDownloads maintainers docs env tarCache pkgs (Just pkgI) = do
   documentPath = do
     blob <- documentBlob
     return $ BlobStorage.filepath (serverBlobStore env) <$> blob
+  documHas = queryHasDocumentation docs pkgId
 
 authorScore :: Int -> PackageDescription -> Scorer
 authorScore maintainers desc =
@@ -169,14 +184,14 @@ authorScore maintainers desc =
   maintScore = boolScor 3 (maintainers > 1) <> scorer 5 (int2Float maintainers)
 
 codeScore :: IO Float -> IO Float -> IO Scorer
-codeScore documentL haskellL = do
-  docum   <- documentL
+codeScore documentS haskellL = do
+  docum   <- documentS
   haskell <- haskellL
   return
     $  boolScor 1 (haskell > 700)
     <> boolScor 1 (haskell < 80000)
     <> fracScor 2 (min 1 (haskell / 5000))
-    <> fracScor 2 (min 1 (10 * docum) / (3000 + haskell))
+    <> fracScor 2 (min 1 docum / ((3000 + haskell) * 200))
 
 versionScore
   :: [Version]
@@ -241,20 +256,6 @@ temporalScore p lastUploads versionList recentDownloads = do
     fresh <- packageFreshness
     return $ boolScor 1 (fresh * int2Float recentDownloads > 1000)
 
-rankPackagePage :: Maybe PackageDescription -> Scorer
-rankPackagePage Nothing  = Scorer 233 0
-rankPackagePage (Just p) = tests <> benchs <> desc <> homeP <> sourceRp <> cats
- where
-  tests    = boolScor 50 (hasTests p)
-  benchs   = boolScor 10 (hasBenchmarks p)
-  desc     = scorer 30 (min 1 (int2Float (S.length $ description p) / 300))
-  -- documentation = boolScor 30 ()
-  homeP    = boolScor 30 (not $ S.null $ homepage p)
-  sourceRp = boolScor 8 (not $ null $ sourceRepos p)
-  cats     = boolScor 5 (not $ S.null $ category p)
-
--- TODO fix the function Signature replace PackageDescription to PackageName/Identifier
-
 rankPackage
   :: VersionsFeature
   -> Int
@@ -263,14 +264,35 @@ rankPackage
   -> TarIndexCacheFeature
   -> ServerEnv
   -> [PkgInfo]
+  -> Maybe PkgInfo
   -> IO Float
-rankPackage versions recentDownloads maintainers docs tarCache env pkgs =
-  total . (<>) (rankPackagePage pkgD) <$> rankIO versions
-                                                 recentDownloads
-                                                 maintainers
-                                                 docs
-                                                 env
-                                                 tarCache
-                                                 pkgs
-                                                 (safeLast pkgs)
-  where pkgD = packageDescription . pkgDesc <$> safeLast pkgs
+rankPackage _ _ _ _ _ _ _ Nothing = return 0
+rankPackage versions recentDownloads maintainers docs tarCache env pkgs (Just pkgUsed)
+  = do
+    t <- temporalScore pkgD uploads versionList recentDownloads
+
+    b <- baseScore versions
+                   maintainers
+                   docs
+                   env
+                   tarCache
+                   versionList
+                   uploads
+                   pkgUsed
+    depr <- deprP
+    return $ sAverage t b * case depr of
+      Nothing -> 1
+      _       -> 0.2
+ where
+  pkgname = pkgName . package $ pkgD
+  pkgD    = packageDescription . pkgDesc $ pkgUsed
+  deprP   = queryGetDeprecatedFor versions pkgname
+  sAverage x y = (total x + total y) * 0.5
+
+  versionList :: [Version]
+  versionList = sortBy (flip compare)
+    $ map (pkgVersion . package . packageDescription) (pkgDesc <$> pkgs)
+  uploads =
+    sortBy (flip compare)
+      $  (fst . pkgOriginalUploadInfo <$> pkgs)
+      ++ (fst . pkgLatestUploadInfo <$> pkgs)
