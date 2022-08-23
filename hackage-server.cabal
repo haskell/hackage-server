@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC == { 9.2.3, 9.0.2, 8.10.7, 8.8.4 }
+tested-with: GHC == { 9.2.4, 9.0.2, 8.10.7, 8.8.4 }
 
 data-dir: datafiles
 data-files:
@@ -111,12 +111,12 @@ common defaults
     , process                >= 1.6   && < 1.7
     , text                  ^>= 1.2.5.0 || ^>= 2.0
     , time                   >= 1.9   && < 1.13
-    , transformers           >= 0.5   && < 0.6
-    , unix                   >= 2.7   && < 2.8
+    , transformers           >= 0.5   && < 0.7
+    , unix                   >= 2.7   && < 2.9
     , scientific
   -- other dependencies shared by most components
   build-depends:
-    , aeson                 ^>= 2.0.3.0
+    , aeson                 ^>= 2.0.3.0 || ^>= 2.1.0.0
     , Cabal                 ^>= 3.6.3.0
     , Cabal-syntax          ^>= 3.6.0.0
         -- Cabal-syntax needs to be bound to constrain hackage-security
@@ -129,7 +129,7 @@ common defaults
     , parsec                ^>= 3.1.13
     , tar                   ^>= 0.5
     , unordered-containers  ^>= 0.2.10
-    , vector                ^>= 0.12
+    , vector                ^>= 0.12 || ^>= 0.13.0.0
     , zlib                  ^>= 0.6.2
 
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags -funbox-strict-fields
@@ -378,7 +378,7 @@ library lib-server
     , async                 ^>= 2.2.1
     -- requires bumping http-io-streams
     , attoparsec            ^>= 0.14.4
-    , attoparsec-iso8601    ^>= 1.0
+    , attoparsec-iso8601    ^>= 1.0       || ^>= 1.1.0.0
     , base16-bytestring     ^>= 1.0
     -- requires bumping http-io-streams
     , base64-bytestring     ^>= 1.2.1.0
@@ -402,15 +402,15 @@ library lib-server
     , haddock-library        >= 1.7.0 && < 1.11
         -- haddock-library-1.11.0 changed type of markupOrderedList
         -- see https://github.com/haskell/hackage-server/issues/1128
-    , happstack-server      ^>= 7.7.1
-    , hashable              ^>= 1.3 || ^>= 1.4
+    , happstack-server      ^>= 7.7.1     || ^>= 7.8.0
+    , hashable              ^>= 1.3       || ^>= 1.4
     , hslogger              ^>= 1.3.1
     , lifted-base           ^>= 0.2.1
     , mime-mail             ^>= 0.5
     , random                ^>= 1.2
     , rss                   ^>= 3000.2.0.7
     , safecopy              ^>= 0.10
-    , semigroups            ^>= 0.19
+    , semigroups            ^>= 0.20
     , split                 ^>= 0.2
     , stm                   ^>= 2.5.0
     , tagged                ^>= 0.8.5
