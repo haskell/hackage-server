@@ -14,3 +14,8 @@ installed: +all -Cabal -text -parsec
 distribution: focal
 
 apt: libbrotli-dev
+
+-- Make sure the haddock step is included,
+-- even though we don't define any library.
+haddock-components: all
+  -- since haskell-ci 0.15.20220822
