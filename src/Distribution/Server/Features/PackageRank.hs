@@ -6,6 +6,8 @@ module Distribution.Server.Features.PackageRank
   ( rankPackage
   ) where
 
+import Distribution.Server.Features.PackageRank.Parser
+
 import           Distribution.Package
 import           Distribution.PackageDescription
 import           Distribution.Server.Features.Documentation
