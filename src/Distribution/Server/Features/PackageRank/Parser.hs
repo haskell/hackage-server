@@ -1,12 +1,17 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses, ConstraintKinds #-}
 module Distribution.Server.Features.PackageRank.Parser
   ( parseM
+  , sumMStat
+  , getListsTables
+  , getCode
+  , getHCode
+  , getSections
+  , MStats(..)
   ) where
 
 
 import           Commonmark
 import           Commonmark.Extensions
-import           Control.Monad
 import           Control.Monad.Identity
 import qualified Data.ByteString.Lazy          as BS
                                                 ( ByteString
@@ -16,13 +21,6 @@ import qualified Data.Text                     as T
 import qualified Data.Text.Encoding            as T
 import qualified Data.Text.Encoding.Error      as T
                                                 ( lenientDecode )
-import qualified Data.Text.IO                  as TIO
-import qualified Data.Text.Lazy.IO             as TLIO
-import           Data.Typeable                  ( Typeable )
-import           System.FilePath
-
-type MarkdownRenderable a b
-  = (Typeable a, HasPipeTable a b, IsBlock a b, IsInline a)
 
 parseM :: BS.ByteString -> FilePath -> Either ParseError [MarkdownStats]
 parseM md name = runIdentity
@@ -44,24 +42,51 @@ instance HasAttributes MStats where
 instance Semigroup MStats where
   (MStats a b) <> (MStats c d) = MStats (a + c) (b + d)
 
-data MarkdownStats = NotImportant |
+data MarkdownStats = NotImportant MStats |
                      HCode MStats |
                      Code MStats |
-                     Section | -- Int?
-                     Table Int |
+                     Section MStats |
+                     Table Int MStats | -- Int of rows
                      PText MStats |
-                     List Int
+                     List Int MStats -- Int of elements
         deriving (Show)
 
+getCode :: [MarkdownStats] -> (Int, Int) -- number of code blocks, size of code
+getCode []                           = (0, 0)
+getCode (Code  (MStats code _) : xs) = (1, code) >< getCode xs
+getCode (HCode (MStats code _) : xs) = (1, code) >< getCode xs
+getCode (_                     : xs) = getCode xs
+
+getHCode :: [MarkdownStats] -> (Int, Int) -- number of code blocks, size of code
+getHCode []                           = (0, 0)
+getHCode (HCode (MStats code _) : xs) = (1, code) >< getHCode xs
+getHCode (_                     : xs) = getHCode xs
+
+getSections :: [MarkdownStats] -> Int -- number of code blocks, size of code
+getSections []               = 0
+getSections (Section _ : xs) = 1 + getSections xs
+getSections (_         : xs) = getSections xs
+
+(><) :: (Int, Int) -> (Int, Int) -> (Int, Int)
+(><) (a, b) (c, d) = (a + c, b + d)
+
+
+sumMStat :: [MarkdownStats] -> MStats
 sumMStat []       = mempty
 sumMStat (x : xs) = case x of
-  NotImportant -> sumMStat xs
-  Section      -> sumMStat xs
-  (List  a)    -> sumMStat xs
-  (Table a)    -> sumMStat xs
-  (HCode a)    -> a <> sumMStat xs
-  (Code  a)    -> a <> sumMStat xs
-  (PText a)    -> a <> sumMStat xs
+  (NotImportant a) -> a <> sumMStat xs
+  (Section      a) -> a <> sumMStat xs
+  (List  _ a     ) -> a <> sumMStat xs
+  (Table _ a     ) -> a <> sumMStat xs
+  (HCode a       ) -> a <> sumMStat xs
+  (Code  a       ) -> a <> sumMStat xs
+  (PText a       ) -> a <> sumMStat xs
+
+getListsTables :: [MarkdownStats] -> Int
+getListsTables []                 = 0
+getListsTables ((List  a _) : ys) = a + getListsTables ys
+getListsTables ((Table a _) : ys) = a + getListsTables ys
+getListsTables (_           : ys) = getListsTables ys
 
 instance Rangeable [MarkdownStats] where
   ranged = const id
@@ -70,7 +95,7 @@ instance HasAttributes [MarkdownStats] where
   addAttributes = const id
 
 instance HasPipeTable MStats [MarkdownStats] where
-  pipeTable _ _ rows = [Table $ length rows]
+  pipeTable _ _ rows = [Table (length rows) (mconcat $ mconcat <$> rows)]
 
 instance IsInline MStats where
   lineBreak = MStats 0 1
@@ -88,17 +113,12 @@ instance IsInline MStats where
 instance IsBlock MStats [MarkdownStats] where
   paragraph a = [PText a]
   plain a = [PText a]
-  thematicBreak = [NotImportant]
+  thematicBreak = [NotImportant mempty]
   blockQuote    = id
   codeBlock language codeT | language == T.pack "haskell" = [HCode (code codeT)]
                            | otherwise                    = [Code (code codeT)]
-  heading _ _ = [Section]
-  rawBlock _ r = [NotImportant]
-  referenceLinkDefinition _ _ = [NotImportant]
-  list _ _ l = [List (length l + depSum l)]
-
-depSum []                   = 0
-depSum ([]            : xs) = depSum xs
-depSum ((List a : ys) : xs) = a + depSum (ys : xs)
-depSum ((_      : ys) : xs) = depSum (ys : xs)
-
+  heading _ a = [Section a]
+  rawBlock _ _ = [NotImportant mempty]
+  referenceLinkDefinition _ _ = [NotImportant mempty]
+  list _ _ l = [List (length l + sumLT l) (mconcat $ sumMStat <$> l)]
+    where sumLT a = sum (getListsTables <$> a)

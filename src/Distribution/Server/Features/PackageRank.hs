@@ -6,8 +6,9 @@ module Distribution.Server.Features.PackageRank
   ( rankPackage
   ) where
 
-import Distribution.Server.Features.PackageRank.Parser
+import           Distribution.Server.Features.PackageRank.Parser
 
+import           Data.TarIndex                  ( TarEntryOffset )
 import           Distribution.Package
 import           Distribution.PackageDescription
 import           Distribution.Server.Features.Documentation
@@ -17,9 +18,14 @@ import           Distribution.Server.Features.PreferredVersions.State
 import           Distribution.Server.Features.TarIndexCache
 import qualified Distribution.Server.Framework.BlobStorage
                                                as BlobStorage
+import           Distribution.Server.Framework.CacheControl
 import           Distribution.Server.Framework.ServerEnv
                                                 ( ServerEnv(..) )
 import           Distribution.Server.Packages.Types
+import           Distribution.Server.Util.Markdown
+                                                ( supposedToBeMarkdown )
+import           Distribution.Server.Util.ServeTarball
+                                                ( loadTarEntry )
 import           Distribution.Simple.Utils      ( safeHead
                                                 , safeLast
                                                 )
@@ -38,8 +44,6 @@ import           Distribution.Server.Packages.Readme
 import           GHC.Float                      ( int2Float )
 import           System.FilePath                ( isExtensionOf )
 
--- import Debug.Trace (trace)
-
 data Scorer = Scorer
   { maximumS :: !Float
   , score    :: !Float
@@ -54,7 +58,7 @@ scorer maxim scr =
   if maxim >= scr then Scorer maxim scr else Scorer maxim maxim
 
 fracScor :: Float -> Float -> Scorer
-fracScor maxim frac = scorer maxim (maxim * frac)
+fracScor maxim frac = scorer maxim (min (maxim * frac) maxim)
 
 boolScor :: Float -> Bool -> Scorer
 boolScor k True  = Scorer k k
@@ -102,10 +106,9 @@ freshness (x : xs) lastUpd app =
   age       = flip numDays (Just lastUpd) . Just <$> CL.getCurrentTime
   decayDays = expectedUpdateInterval / 2 + (if app then 300 else 200)
 
-cabalScore :: PackageDescription -> IO Bool -> IO Scorer
+cabalScore :: PackageDescription -> Bool -> Scorer
 cabalScore p docum =
-  (<>) (tests <> benchs <> desc <> homeP <> sourceRp <> cats)
-    <$> (boolScor 30 <$> docum)
+  tests <> benchs <> desc <> homeP <> sourceRp <> cats <> boolScor 30 docum
  where
   tests    = boolScor 50 (hasTests p)
   benchs   = boolScor 10 (hasBenchmarks p)
@@ -115,9 +118,38 @@ cabalScore p docum =
   sourceRp = boolScor 8 (not $ null $ sourceRepos p)
   cats     = boolScor 5 (not $ S.null $ category p)
 
-readmeScore _ = Scorer 0 0
+readmeScore
+  :: Maybe (FilePath, ETag, Data.TarIndex.TarEntryOffset, FilePath)
+  -> Bool
+  -> IO Scorer
+readmeScore Nothing                           _   = return $ Scorer 1 0 -- readmeScore is scaled so it does not need correct max
+readmeScore (Just (tarfile, _, offset, name)) app = do
+  entr <- loadTarEntry tarfile offset
+  case entr of
+    (Right (size, str)) -> return $ calcScore str size name
+    _                   -> return $ Scorer 1 0
+ where
+  calcScore str size filename =
+    scorer 75 (min 1 (fromInteger (toInteger size) / 3000))
+      <> if supposedToBeMarkdown filename
+           then case parseM str filename of
+             Left  _       -> Scorer 0 0
+             Right mdStats -> format mdStats
+           else Scorer 0 0
+  format stats =
+    fracScor (if app then 25 else 100) (min 1 $ int2Float hlength / 2000)
+      <> scorer (if app then 15 else 27) (int2Float blocks * 3)
+      <> boolScor (if app then 10 else 30) (clength > 150)
+      <> scorer 35 (int2Float images * 10)
+      <> scorer 30 (int2Float sections * 4)
+      <> scorer 25 (int2Float rows * 2)
+   where
+    (blocks, clength) = getCode stats
+    (_     , hlength) = getHCode stats
+    MStats _ images   = sumMStat stats
+    rows              = getListsTables stats
+    sections          = getSections stats
 
--- queryHasDocumentation
 baseScore
   :: VersionsFeature
   -> Int
@@ -130,18 +162,25 @@ baseScore
   -> IO Scorer
 
 baseScore vers maintainers docs env tarCache versionList lastUploads pkgI = do
-  versS  <- versionScore versionList vers lastUploads pkg
-  codeS  <- codeScore documSize srcLines
-  cabalS <- cabalScore pkg documHas
+
+  readM    <- readme
+  hasDocum <- documHas
+  documS   <- documSize
+  srcL     <- srcLines
+
+  versS    <- versionScore versionList vers lastUploads pkg
+  readmeS  <- readmeScore readM isApp
+
   return
     $  scale 5 versS
-    <> scale 2 codeS
+    <> scale 2 (codeScore documS srcL)
     <> scale 3 (authorScore maintainers pkg)
-    <> scale 2 cabalS
-    <> scale 5 (readmeScore readme)
+    <> scale 2 (cabalScore pkg hasDocum)
+    <> scale 5 readmeS
  where
   pkg      = packageDescription $ pkgDesc pkgI
   pkgId    = package pkg
+  isApp    = (isNothing . library) pkg && (not . null . executables) pkg
   srcLines = do
     Right (path, _, _) <- packageTarball tarCache pkgI
     filterLines (isExtensionOf ".hs") countLines
@@ -165,6 +204,7 @@ baseScore vers maintainers docs env tarCache versionList lastUploads pkgI = do
     !lns = case Tar.entryContent entry of
       (Tar.NormalFile str _) -> l + (int2Float . length $ BSL.split 10 str)
       _                      -> l
+      -- TODO might need to decode/add the other separator
   countSize :: (FilePath -> Bool) -> Tar.Entry -> Float -> Float
   countSize f entry l = if not . f . Tar.entryPath $ entry then l else s
    where
@@ -185,15 +225,12 @@ authorScore maintainers desc =
  where
   maintScore = boolScor 3 (maintainers > 1) <> scorer 5 (int2Float maintainers)
 
-codeScore :: IO Float -> IO Float -> IO Scorer
-codeScore documentS haskellL = do
-  docum   <- documentS
-  haskell <- haskellL
-  return
-    $  boolScor 1 (haskell > 700)
-    <> boolScor 1 (haskell < 80000)
-    <> fracScor 2 (min 1 (haskell / 5000))
-    <> fracScor 2 (min 1 docum / ((3000 + haskell) * 200))
+codeScore :: Float -> Float -> Scorer
+codeScore documentS haskellL =
+  boolScor 1 (haskellL > 700)
+    <> boolScor 1 (haskellL < 80000)
+    <> fracScor 2 (min 1 (haskellL / 5000))
+    <> fracScor 2 (min 1 documentS / ((3000 + haskellL) * 200))
 
 versionScore
   :: [Version]
