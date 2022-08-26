@@ -111,8 +111,8 @@ common defaults
     , process                >= 1.6   && < 1.7
     , text                  ^>= 1.2.5.0 || ^>= 2.0
     , time                   >= 1.9   && < 1.13
-    , transformers           >= 0.5   && < 0.7
-    , unix                   >= 2.7   && < 2.9
+    , transformers           >= 0.5   && < 0.6
+    , unix                   >= 2.7   && < 2.8
     , scientific
   -- other dependencies shared by most components
   build-depends:
@@ -398,7 +398,7 @@ library lib-server
         -- see https://github.com/haskell/hackage-server/issues/1130
         -- Thus, we need to include Cabal-syntax as dependency explicitly
     , hackage-security-HTTP ^>= 0.1.1
-    , haddock-library        >= 1.7.0 && < 1.11
+    , haddock-library       ^>= 1.11.0
         -- haddock-library-1.11.0 changed type of markupOrderedList
         -- see https://github.com/haskell/hackage-server/issues/1128
     , happstack-server      ^>= 7.7.1     || ^>= 7.8.0
