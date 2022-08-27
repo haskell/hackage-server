@@ -110,7 +110,7 @@ cabalScore :: PackageDescription -> Bool -> Scorer
 cabalScore p docum =
   tests <> benchs <> desc <> homeP <> sourceRp <> cats <> boolScor 30 docum
  where
-  tests    = boolScor 50 (hasTests p)
+  tests    = boolScor 30 (hasTests p)
   benchs   = boolScor 10 (hasBenchmarks p)
   desc     = scorer 30 (min 1 (int2Float (S.length $ description p) / 300))
   homeP    = boolScor 30 (not $ S.null $ homepage p)
@@ -169,7 +169,6 @@ baseScore vers maintainers docs env tarCache versionList lastUploads pkgI = do
 
   versS    <- versionScore versionList vers lastUploads pkg
   readmeS  <- readmeScore readM isApp
-
   return
     $  scale 5 versS
     <> scale 2 (codeScore documS srcL)
@@ -229,7 +228,7 @@ codeScore documentS haskellL =
   boolScor 1 (haskellL > 700)
     <> boolScor 1 (haskellL < 80000)
     <> fracScor 2 (min 1 (haskellL / 5000))
-    <> fracScor 2 (min 1 documentS / ((3000 + haskellL) * 1600))
+    <> fracScor 2 (min 1 (documentS / ((3000 + haskellL) * 1600)))
 
 versionScore
   :: [Version]
@@ -252,10 +251,9 @@ versionScore versionList versions lastUploads desc = do
     (_, deprecN, _) <- partVers
     return deprecN
   calculateScore :: [Version] -> [CL.UTCTime] -> [[Int]] -> Scorer
-  calculateScore [] _ _ = Scorer 118 0
   calculateScore depre lUps intUse =
     boolScor 20 (length intUse > 1)
-      <> scorer 40 (numDays (safeHead lUps) (safeLast lUps))
+      <> scorer 40 (numDays (safeHead lUps) (safeLast lUps) / 11)
       <> scorer
            15
            (int2Float $ length $ filter (\x -> major x > 0 || minor x > 0)
@@ -276,13 +274,16 @@ temporalScore
 temporalScore p lastUploads versionList recentDownloads = do
   fresh <- freshnessScore
   tract <- tractionScore
+  -- Reverse dependencies are to be done
+
+  f <- packageFreshness
   return $ tract <> fresh <> downloadScore
  where
   isApp         = (isNothing . library) p && (not . null . executables) p
   downloadScore = calcDownScore recentDownloads
-  calcDownScore i = scorer 5 $ min
-    ( (logBase 2 (int2Float $ max 0 (i - 100) + 100) - 6.6)
-    / (if isApp then 5 else 6)
+  calcDownScore i = fracScor 5 
+    ( (logBase 2 (int2Float $ max 0 (i - 32) + 32) - 5)
+    / (if isApp then 6 else 8)
     )
   packageFreshness = case safeHead lastUploads of
     Nothing  -> return 0
@@ -291,7 +292,7 @@ temporalScore p lastUploads versionList recentDownloads = do
 -- Missing dependencyFreshnessScore for reasonable effectivity needs caching
   tractionScore  = do
     fresh <- packageFreshness
-    return $ boolScor 1 (fresh * int2Float recentDownloads > 1000)
+    return $ boolScor 1 (fresh * int2Float recentDownloads > 200)
 
 rankPackage
   :: VersionsFeature
