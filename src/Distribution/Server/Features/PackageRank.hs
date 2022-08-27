@@ -113,7 +113,6 @@ cabalScore p docum =
   tests    = boolScor 50 (hasTests p)
   benchs   = boolScor 10 (hasBenchmarks p)
   desc     = scorer 30 (min 1 (int2Float (S.length $ description p) / 300))
-  -- documentation = boolScor 30 ()
   homeP    = boolScor 30 (not $ S.null $ homepage p)
   sourceRp = boolScor 8 (not $ null $ sourceRepos p)
   cats     = boolScor 5 (not $ S.null $ category p)
@@ -230,7 +229,7 @@ codeScore documentS haskellL =
   boolScor 1 (haskellL > 700)
     <> boolScor 1 (haskellL < 80000)
     <> fracScor 2 (min 1 (haskellL / 5000))
-    <> fracScor 2 (min 1 documentS / ((3000 + haskellL) * 200))
+    <> fracScor 2 (min 1 documentS / ((3000 + haskellL) * 1600))
 
 versionScore
   :: [Version]
@@ -281,11 +280,10 @@ temporalScore p lastUploads versionList recentDownloads = do
  where
   isApp         = (isNothing . library) p && (not . null . executables) p
   downloadScore = calcDownScore recentDownloads
-  calcDownScore i = Scorer 5 $ min
+  calcDownScore i = scorer 5 $ min
     ( (logBase 2 (int2Float $ max 0 (i - 100) + 100) - 6.6)
     / (if isApp then 5 else 6)
     )
-    5
   packageFreshness = case safeHead lastUploads of
     Nothing  -> return 0
     (Just l) -> freshness versionList l isApp
