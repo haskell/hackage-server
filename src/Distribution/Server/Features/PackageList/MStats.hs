@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses, ConstraintKinds #-}
-module Distribution.Server.Features.PackageRank.Parser
+module Distribution.Server.Features.PackageList.MStats
   ( parseM
   , sumMStat
   , getListsTables
@@ -53,13 +53,13 @@ data MarkdownStats = NotImportant MStats |
 
 getCode :: [MarkdownStats] -> (Int, Int) -- number of code blocks, size of code
 getCode []                           = (0, 0)
-getCode (Code  (MStats code _) : xs) = (1, code) >< getCode xs
-getCode (HCode (MStats code _) : xs) = (1, code) >< getCode xs
+getCode (Code  (MStats codeT _) : xs) = (1, codeT) >< getCode xs
+getCode (HCode (MStats codeT _) : xs) = (1, codeT) >< getCode xs
 getCode (_                     : xs) = getCode xs
 
 getHCode :: [MarkdownStats] -> (Int, Int) -- number of code blocks, size of code
 getHCode []                           = (0, 0)
-getHCode (HCode (MStats code _) : xs) = (1, code) >< getHCode xs
+getHCode (HCode (MStats codeT _) : xs) = (1, codeT) >< getHCode xs
 getHCode (_                     : xs) = getHCode xs
 
 getSections :: [MarkdownStats] -> Int -- number of code blocks, size of code

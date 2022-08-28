@@ -10,6 +10,7 @@ import qualified Data.Set as S
 import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import System.FilePath ((</>))
+import GHC.Float.RealFracMethods (roundFloatInteger)
 
 import Data.Aeson (Value(Array), object, toJSON, (.=))
 import qualified Data.Aeson.Key as Key
@@ -150,7 +151,7 @@ packageIndexInfoToValue
     , Key.fromString "lastUpload" .= iso8601Show itemLastUpload
     , Key.fromString "referenceVersion" .= itemReferenceVersion
     , Key.fromString "maintainers" .= map renderUser itemMaintainer
-    , Key.fromString "packageRank" .= itemPackageRank
+    , Key.fromString "packageRank" .= (roundFloatInteger (1000 * itemPackageRank))
     ]
   where
   renderTag :: Tag -> Value

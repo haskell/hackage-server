@@ -17,7 +17,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload(UploadFeature(..))
 import Distribution.Server.Features.Documentation (DocumentationFeature(..))
 import Distribution.Server.Features.TarIndexCache (TarIndexCacheFeature(..))
-import Distribution.Server.Features.PackageRank
+import Distribution.Server.Features.PackageList.PackageRank
 
 import Distribution.Server.Users.Users (userIdToName)
 import qualified Distribution.Server.Users.UserIdSet as UserIdSet

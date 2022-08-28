@@ -2,11 +2,11 @@
 
 -- TODO change the module name probably Distribution.Server.Features.PackageList.PackageRank
 
-module Distribution.Server.Features.PackageRank
+module Distribution.Server.Features.PackageList.PackageRank
   ( rankPackage
   ) where
 
-import           Distribution.Server.Features.PackageRank.Parser
+import           Distribution.Server.Features.PackageList.MStats
 
 import           Data.TarIndex                  ( TarEntryOffset )
 import           Distribution.Package
@@ -274,9 +274,7 @@ temporalScore
 temporalScore p lastUploads versionList recentDownloads = do
   fresh <- freshnessScore
   tract <- tractionScore
-  -- Reverse dependencies are to be done
-
-  f <- packageFreshness
+  -- Reverse dependencies are added
   return $ tract <> fresh <> downloadScore
  where
   isApp         = (isNothing . library) p && (not . null . executables) p
