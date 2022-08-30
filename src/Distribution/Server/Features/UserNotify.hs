@@ -26,14 +26,16 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Features.AdminLog
+import Distribution.Server.Features.BuildReports
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.Upload
-import Distribution.Server.Features.BuildReports
-import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
@@ -50,6 +52,7 @@ import Data.Aeson.TH ( defaultOptions, deriveJSON )
 import Data.Time (UTCTime(..), getCurrentTime, diffUTCTime, addUTCTime, defaultTimeLocale, formatTime)
 import Data.Time.Format.Internal (buildTime)
 
+import Data.Bifunctor ( Bifunctor(second) )
 import Data.Maybe(fromMaybe, mapMaybe, fromJust, listToMaybe, maybeToList)
 
 import Network.Mail.Mime
@@ -61,13 +64,11 @@ import qualified Data.Text as T
 import qualified Data.Vector as Vec
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
-import Data.Bifunctor
 
 -- A feature to manage notifications to users when package metadata, etc is updated.
 
 {-
 Some missing features:
- -- notifications on pending proposed tags
  -- better formatting with mail templates
 -}
 
@@ -344,6 +345,7 @@ initUserNotifyFeature :: ServerEnv
                           -> AdminLogFeature
                           -> UserDetailsFeature
                           -> ReportsFeature
+                          -> TagsFeature
                           -> IO UserNotifyFeature)
 initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
@@ -355,9 +357,9 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                    [serverTemplatesDir, serverTemplatesDir </> "UserNotify"]
                    [ "user-notify-form.html" ]
 
-    return $ \users core uploadfeature adminlog userdetails reports -> do
+    return $ \users core uploadfeature adminlog userdetails reports tags -> do
       let feature = userNotifyFeature env
-                      users core uploadfeature adminlog userdetails reports
+                      users core uploadfeature adminlog userdetails reports tags
                       notifyState templates
       return feature
 
@@ -369,6 +371,7 @@ userNotifyFeature :: ServerEnv
                   -> AdminLogFeature
                   -> UserDetailsFeature
                   -> ReportsFeature
+                  -> TagsFeature
                   -> StateComponent AcidState NotifyData
                   -> Templates
                   -> UserNotifyFeature
@@ -379,6 +382,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                   AdminLogFeature{..}
                   UserDetailsFeature{..}
                   ReportsFeature{..}
+                  TagsFeature{..}
                   notifyState templates
   = UserNotifyFeature {..}
 
@@ -479,7 +483,11 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         docReportNotifications <- foldM (genDocReportList notifyPrefs) Map.empty docReports
         let docReportEmails = map describeDocReport <$> docReportNotifications
 
-        mapM_ sendNotifyEmail . Map.toList $ foldr1 (Map.unionWith (++)) [revisionUploadEmails, groupActionEmails, docReportEmails]
+        tagProposals <- collectTagProposals
+        tagProposalNotifications <- foldM (genTagProposalList notifyPrefs) Map.empty tagProposals
+        let tagProposalEmails = map describeTagProposal <$> tagProposalNotifications
+
+        mapM_ sendNotifyEmail . Map.toList $ foldr1 (Map.unionWith (++)) [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails]
         updateState notifyState (SetNotifyTime now)
 
     formatTimeUser users t u =
@@ -510,6 +518,11 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
             pure rpt
         let isBuildOk BuildReport.BuildReport{..} = docsOutcome == BuildReport.Ok
         pure $ map (second (all isBuildOk)) $ filter (not . Prelude.null . snd) pkgRpts
+
+    collectTagProposals = do
+        logs <- readMemState tagProposalLog
+        writeMemState tagProposalLog Map.empty
+        pure $ Map.toList logs
 
     genRevUploadList notifyPrefs mp pkg = do
          pkgIndex <- queryGetPackageIndex
@@ -544,13 +557,22 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
               return $ foldr addNotification mp (toList (delete actor maintainers))
            _ -> return mp
 
-    genDocReportList notifyPrefs mp pkg = do
+    genDocReportList notifyPrefs mp pkgDoc = do
         let addNotification uid m =
                 if not (notifyOptOut npref) && notifyDocBuilderReport npref
-                then Map.insertWith (++) uid [pkg] m
+                then Map.insertWith (++) uid [pkgDoc] m
                 else m
                     where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
-        maintainers <- queryUserGroup $ maintainersGroup (packageName . pkgInfoId . fst $ pkg)
+        maintainers <- queryUserGroup $ maintainersGroup (packageName . pkgInfoId . fst $ pkgDoc)
+        return $ foldr addNotification mp (toList maintainers)
+
+    genTagProposalList notifyPrefs mp pkgTags = do
+        let addNotification uid m =
+                if not (notifyOptOut npref) && notifyPendingTags npref
+                then Map.insertWith (++) uid [pkgTags] m
+                else m
+                    where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+        maintainers <- queryUserGroup $ maintainersGroup (fst pkgTags)
         return $ foldr addNotification mp (toList maintainers)
 
     describeRevision users earlier now pkg =
@@ -580,6 +602,13 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         if doc
           then "Build successful."
           else "Build failed."
+
+    describeTagProposal (pkgName, (addTags, delTags)) =
+      "Pending tag propasal for " ++ display pkgName ++ ":\n" ++
+        "Addition: " ++ showTags addTags ++ "\n" ++
+        "Deletion: " ++ showTags delTags
+      where
+        showTags = intercalate ", " . map display . Set.toList
 
     sendNotifyEmail :: (UserId, [String]) -> IO ()
     sendNotifyEmail (uid, ebody) = do

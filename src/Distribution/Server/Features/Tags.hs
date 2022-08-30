@@ -39,7 +39,6 @@ import Data.Function (fix)
 import Data.List (foldl')
 import Data.Char (toLower)
 
-
 data TagsFeature = TagsFeature {
     tagsFeatureInterface :: HackageFeature,
 
@@ -63,6 +62,8 @@ data TagsFeature = TagsFeature {
     -- and license tags, as well as package categories on
     -- initial import.
     setCalculatedTag :: Tag -> Set PackageName -> IO (),
+
+    tagProposalLog :: MemState (Map PackageName (Set Tag, Set Tag)),
 
     withTagPath :: forall a. DynamicPath -> (Tag -> Set PackageName -> ServerPartE a) -> ServerPartE a,
     collectTags :: forall m. MonadIO m => Set PackageName -> m (Map PackageName (Set Tag)),
@@ -97,9 +98,10 @@ initTagsFeature ServerEnv{serverStateDir} = do
     tagAlias <- tagsAliasComponent serverStateDir
     specials  <- newMemStateWHNF emptyPackageTags
     updateTag <- newHook
+    tagProposalLog <- newMemStateWHNF Map.empty
 
     return $ \core@CoreFeature{..} upload user -> do
-      let feature = tagsFeature core upload user tagsState tagAlias specials updateTag
+      let feature = tagsFeature core upload user tagsState tagAlias specials updateTag tagProposalLog
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
@@ -148,6 +150,7 @@ tagsFeature :: CoreFeature
             -> StateComponent AcidState TagAlias
             -> MemState PackageTags
             -> Hook (Set PackageName, Set Tag) ()
+            -> MemState (Map PackageName (Set Tag, Set Tag))
             -> TagsFeature
 
 tagsFeature CoreFeature{ queryGetPackageIndex }
@@ -157,6 +160,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
             tagsAlias
             calculatedTags
             tagsUpdated
+            tagProposalLog
   = TagsFeature{..}
   where
     tagsResource = fix $ \r -> TagsResource
@@ -277,8 +281,10 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
                                         Nothing -> []
                                     addRev = Set.difference (fst revTags) (Set.fromList add `Set.union` Set.fromList radd')
                                     delRev = Set.difference (snd revTags) (Set.fromList del `Set.union` Set.fromList rdel')
-                                void $ updateState tagsState $ SetPackageTags pkgname tagSet
-                                void $ updateState tagsState $ InsertReviewTags' pkgname addRev delRev
+                                    modifyTags (a, d) = (a `Set.intersection` addRev, d `Set.intersection` delRev)
+                                updateState tagsState $ SetPackageTags pkgname tagSet
+                                updateState tagsState $ InsertReviewTags' pkgname addRev delRev
+                                modifyMemState tagProposalLog (Map.adjust modifyTags pkgname)
                                 runHook_ tagsUpdated (Set.singleton pkgname, tagSet)
                                 return ()
                             else if user
@@ -287,7 +293,9 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
                                     calcTags <- queryTagsForPackage pkgname
                                     let addTags = Set.fromList aliases `Set.difference` calcTags
                                         delTags = Set.fromList del `Set.intersection` calcTags
-                                    void $ updateState tagsState $ InsertReviewTags pkgname addTags delTags
+                                    updateState tagsState $ InsertReviewTags pkgname addTags delTags
+                                    modifyMemState tagProposalLog (Map.insertWith (<>) pkgname (addTags, delTags))
+                                    return ()
                                 else errBadRequest "Authorization Error" [MText "You need to be logged in to propose tags"]
                     _ -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
           Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
