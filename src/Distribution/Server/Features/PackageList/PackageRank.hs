@@ -1,24 +1,18 @@
-{-# LANGUAGE BangPatterns #-}
-
--- TODO change the module name probably Distribution.Server.Features.PackageList.PackageRank
-
+{-# LANGUAGE BangPatterns, ScopedTypeVariables #-}
 module Distribution.Server.Features.PackageList.PackageRank
   ( rankPackage
   ) where
 
-import           Distribution.Server.Features.PackageList.MStats
-
-import           Data.TarIndex                  ( TarEntryOffset )
 import           Distribution.Package
 import           Distribution.PackageDescription
 import           Distribution.Server.Features.Documentation
                                                 ( DocumentationFeature(..) )
+import           Distribution.Server.Features.PackageList.MStats
 import           Distribution.Server.Features.PreferredVersions
 import           Distribution.Server.Features.PreferredVersions.State
 import           Distribution.Server.Features.TarIndexCache
 import qualified Distribution.Server.Framework.BlobStorage
                                                as BlobStorage
-import           Distribution.Server.Framework.CacheControl
 import           Distribution.Server.Framework.ServerEnv
                                                 ( ServerEnv(..) )
 import           Distribution.Server.Packages.Types
@@ -33,6 +27,9 @@ import           Distribution.Types.Version
 import qualified Distribution.Utils.ShortText  as S
 
 import qualified Codec.Archive.Tar             as Tar
+import           Control.Exception              ( SomeException(..)
+                                                , handle
+                                                )
 import qualified Data.ByteString.Lazy          as BSL
 import           Data.List                      ( maximumBy
                                                 , sortBy
@@ -43,6 +40,9 @@ import qualified Data.Time.Clock               as CL
 import           Distribution.Server.Packages.Readme
 import           GHC.Float                      ( int2Float )
 import           System.FilePath                ( isExtensionOf )
+
+handleConst :: a -> IO a -> IO a
+handleConst c = handle (\(_ :: SomeException) -> return c)
 
 data Scorer = Scorer
   { maximumS :: !Float
@@ -117,17 +117,16 @@ cabalScore p docum =
   sourceRp = boolScor 8 (not $ null $ sourceRepos p)
   cats     = boolScor 5 (not $ S.null $ category p)
 
-readmeScore
-  :: Maybe (FilePath, ETag, Data.TarIndex.TarEntryOffset, FilePath)
-  -> Bool
-  -> IO Scorer
-readmeScore Nothing                           _   = return $ Scorer 1 0 -- readmeScore is scaled so it does not need correct max
-readmeScore (Just (tarfile, _, offset, name)) app = do
-  entr <- loadTarEntry tarfile offset
+readmeScore :: TarIndexCacheFeature -> PkgInfo -> Bool -> IO Scorer
+readmeScore tarCache pkgI app = do
+  Just (tarfile, _, offset, name) <- readme
+  entr                            <- loadTarEntry tarfile offset
   case entr of
     (Right (size, str)) -> return $ calcScore str size name
     _                   -> return $ Scorer 1 0
  where
+  readme = findToplevelFile tarCache pkgI isReadmeFile
+    >>= either (\_ -> return Nothing) (return . Just)
   calcScore str size filename =
     scorer 75 (min 1 (fromInteger (toInteger size) / 3000))
       <> if supposedToBeMarkdown filename
@@ -162,13 +161,13 @@ baseScore
 
 baseScore vers maintainers docs env tarCache versionList lastUploads pkgI = do
 
-  readM    <- readme
-  hasDocum <- documHas
-  documS   <- documSize
-  srcL     <- srcLines
+  hasDocum <- handleConst False documHas -- Probably redundant
+  documS   <- handleConst 0 documSize
+  srcL     <- handleConst 0 srcLines
 
-  versS    <- versionScore versionList vers lastUploads pkg
-  readmeS  <- readmeScore readM isApp
+  versS    <- handleConst (Scorer 1 0)
+                          (versionScore versionList vers lastUploads pkg)
+  readmeS <- handleConst (Scorer 1 0) (readmeScore tarCache pkgI isApp)
   return
     $  scale 5 versS
     <> scale 2 (codeScore documS srcL)
@@ -192,9 +191,6 @@ baseScore vers maintainers docs env tarCache versionList lastUploads pkgI = do
         filterLines (isExtensionOf ".html") countSize
           .   Tar.read
           <$> BSL.readFile pth
-  readme = findToplevelFile tarCache pkgI isReadmeFile
-    >>= either (\_ -> return Nothing) (return . Just)
-
   filterLines f g = Tar.foldEntries (g f) 0 (const 0)
   countLines :: (FilePath -> Bool) -> Tar.Entry -> Float -> Float
   countLines f entry l = if not . f . Tar.entryPath $ entry then l else lns
@@ -279,15 +275,16 @@ temporalScore p lastUploads versionList recentDownloads = do
  where
   isApp         = (isNothing . library) p && (not . null . executables) p
   downloadScore = calcDownScore recentDownloads
-  calcDownScore i = fracScor 5 
+  calcDownScore i = fracScor
+    5
     ( (logBase 2 (int2Float $ max 0 (i - 32) + 32) - 5)
     / (if isApp then 6 else 8)
     )
   packageFreshness = case safeHead lastUploads of
     Nothing  -> return 0
-    (Just l) -> freshness versionList l isApp
+    (Just l) -> freshness versionList l isApp -- Getting time hopefully does not throw Exc.
   freshnessScore = fracScor 10 <$> packageFreshness
--- Missing dependencyFreshnessScore for reasonable effectivity needs caching
+  -- Missing dependencyFreshnessScore for reasonable effectivity needs caching
   tractionScore  = do
     fresh <- packageFreshness
     return $ boolScor 1 (fresh * int2Float recentDownloads > 200)
@@ -315,7 +312,7 @@ rankPackage versions recentDownloads maintainers docs tarCache env pkgs (Just pk
                    versionList
                    uploads
                    pkgUsed
-    depr <- deprP
+    depr <- handleConst Nothing deprP
     return $ sAverage t b * case depr of
       Nothing -> 1
       _       -> 0.2
