@@ -347,6 +347,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                            uploadFeature
                            adminLogFeature
                            userDetailsFeature
+                           reportsCoreFeature
 
     packageFeedFeature <- mkPackageFeedFeature
                             coreFeature
