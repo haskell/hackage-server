@@ -373,8 +373,9 @@ library lib-server
       Distribution.Server.Features.Search.TermBag
       Distribution.Server.Features.Sitemap.Functions
       Distribution.Server.Features.Votes
-      Distribution.Server.Features.Votes.State
       Distribution.Server.Features.Votes.Render
+      Distribution.Server.Features.Votes.State
+      Distribution.Server.Features.Vouch
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
       Distribution.Server.Features.PreferredVersions.State
