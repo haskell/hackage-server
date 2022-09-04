@@ -21,19 +21,16 @@ import           Distribution.Server.Util.Markdown
 import           Distribution.Server.Util.ServeTarball
                                                 ( loadTarEntry )
 import           Distribution.Simple.Utils      ( safeHead
-                                                , safeLast
-                                                )
+                                                , safeLast )
 import           Distribution.Types.Version
 import qualified Distribution.Utils.ShortText  as S
 
 import qualified Codec.Archive.Tar             as Tar
 import           Control.Exception              ( SomeException(..)
-                                                , handle
-                                                )
+                                                , handle )
 import qualified Data.ByteString.Lazy          as BSL
 import           Data.List                      ( maximumBy
-                                                , sortBy
-                                                )
+                                                , sortBy )
 import           Data.Maybe                     ( isNothing )
 import           Data.Ord                       ( comparing )
 import qualified Data.Time.Clock               as CL
@@ -41,9 +38,12 @@ import           Distribution.Server.Packages.Readme
 import           GHC.Float                      ( int2Float )
 import           System.FilePath                ( isExtensionOf )
 
+-- HELPER FUNCTIONS
+
 handleConst :: a -> IO a -> IO a
 handleConst c = handle (\(_ :: SomeException) -> return c)
 
+-- Scorer stores rank information
 data Scorer = Scorer
   { maximumS :: !Float
   , score    :: !Float
@@ -70,6 +70,7 @@ total (Scorer a b) = b / a
 scale :: Float -> Scorer -> Scorer
 scale mx sc = fracScor mx (total sc)
 
+-- calculates number of versions from version list
 major :: Num a => [a] -> a
 major (x : _) = x
 major _       = 0
@@ -85,6 +86,8 @@ numDays (Just first) (Just end) =
   fromRational $ toRational $ CL.diffUTCTime first end / fromRational
     (toRational CL.nominalDay)
 numDays _ _ = 0
+
+-- Score Calculations
 
 freshness :: [Version] -> CL.UTCTime -> Bool -> IO Float
 freshness [] _ _ = return 0
@@ -147,6 +150,58 @@ readmeScore tarCache pkgI app = do
     MStats _ images   = sumMStat stats
     rows              = getListsTables stats
     sections          = getSections stats
+
+authorScore :: Int -> PackageDescription -> Scorer
+authorScore maintainers desc =
+  boolScor 1 (not $ S.null $ author desc) <> maintScore
+ where
+  maintScore = boolScor 3 (maintainers > 1) <> scorer 5 (int2Float maintainers)
+
+codeScore :: Float -> Float -> Scorer
+codeScore documentS haskellL =
+  boolScor 1 (haskellL > 700)
+    <> boolScor 1 (haskellL < 80000)
+    <> fracScor 2 (min 1 (haskellL / 5000))
+    <> fracScor 2 (min 1 (documentS / ((3000 + haskellL) * 1600)))
+
+versionScore
+  :: [Version]
+  -> VersionsFeature
+  -> [CL.UTCTime]
+  -> PackageDescription
+  -> IO Scorer
+versionScore versionList versions lastUploads desc = do
+  use   <- intUsable
+  depre <- deprec
+  return $ calculateScore depre lastUploads use
+ where
+  pkgNm = pkgName $ package desc
+  partVers =
+    flip partitionVersions versionList <$> queryGetPreferredInfo versions pkgNm
+  intUsable = do
+    (norm, _, unpref) <- partVers
+    return $ versionNumbers <$> norm ++ unpref
+  deprec = do
+    (_, deprecN, _) <- partVers
+    return deprecN
+  calculateScore :: [Version] -> [CL.UTCTime] -> [[Int]] -> Scorer
+  calculateScore depre lUps intUse =
+    boolScor 20 (length intUse > 1)
+      <> scorer 40 (numDays (safeHead lUps) (safeLast lUps) / 11)
+      <> scorer
+           15
+           (int2Float $ length $ filter (\x -> major x > 0 || minor x > 0)
+                                        intUse
+           )
+      <> scorer
+           20
+           (int2Float $ 4 * length
+             (filter (\x -> major x > 0 && patches x > 0) intUse)
+           )
+      <> scorer 10 (int2Float $ patches $ maximumBy (comparing patches) intUse)
+      <> boolScor 8 (any (\x -> major x == 0 && patches x > 0) intUse)
+      <> boolScor 10 (any (\x -> major x > 0 && major x < 20) intUse)
+      <> boolScor 5  (not $ null depre)
 
 baseScore
   :: VersionsFeature
@@ -212,58 +267,6 @@ baseScore vers maintainers docs env tarCache versionList lastUploads pkgI = do
     blob <- documentBlob
     return $ BlobStorage.filepath (serverBlobStore env) <$> blob
   documHas = queryHasDocumentation docs pkgId
-
-authorScore :: Int -> PackageDescription -> Scorer
-authorScore maintainers desc =
-  boolScor 1 (not $ S.null $ author desc) <> maintScore
- where
-  maintScore = boolScor 3 (maintainers > 1) <> scorer 5 (int2Float maintainers)
-
-codeScore :: Float -> Float -> Scorer
-codeScore documentS haskellL =
-  boolScor 1 (haskellL > 700)
-    <> boolScor 1 (haskellL < 80000)
-    <> fracScor 2 (min 1 (haskellL / 5000))
-    <> fracScor 2 (min 1 (documentS / ((3000 + haskellL) * 1600)))
-
-versionScore
-  :: [Version]
-  -> VersionsFeature
-  -> [CL.UTCTime]
-  -> PackageDescription
-  -> IO Scorer
-versionScore versionList versions lastUploads desc = do
-  use   <- intUsable
-  depre <- deprec
-  return $ calculateScore depre lastUploads use
- where
-  pkgNm = pkgName $ package desc
-  partVers =
-    flip partitionVersions versionList <$> queryGetPreferredInfo versions pkgNm
-  intUsable = do
-    (norm, _, unpref) <- partVers
-    return $ versionNumbers <$> norm ++ unpref
-  deprec = do
-    (_, deprecN, _) <- partVers
-    return deprecN
-  calculateScore :: [Version] -> [CL.UTCTime] -> [[Int]] -> Scorer
-  calculateScore depre lUps intUse =
-    boolScor 20 (length intUse > 1)
-      <> scorer 40 (numDays (safeHead lUps) (safeLast lUps) / 11)
-      <> scorer
-           15
-           (int2Float $ length $ filter (\x -> major x > 0 || minor x > 0)
-                                        intUse
-           )
-      <> scorer
-           20
-           (int2Float $ 4 * length
-             (filter (\x -> major x > 0 && patches x > 0) intUse)
-           )
-      <> scorer 10 (int2Float $ patches $ maximumBy (comparing patches) intUse)
-      <> boolScor 8 (any (\x -> major x == 0 && patches x > 0) intUse)
-      <> boolScor 10 (any (\x -> major x > 0 && major x < 20) intUse)
-      <> boolScor 5  (not $ null depre)
 
 temporalScore
   :: PackageDescription -> [CL.UTCTime] -> [Version] -> Int -> IO Scorer

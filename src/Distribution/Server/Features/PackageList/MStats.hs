@@ -9,23 +9,31 @@ module Distribution.Server.Features.PackageList.MStats
   , MStats(..)
   ) where
 
-
 import           Commonmark
 import           Commonmark.Extensions
 import           Control.Monad.Identity
 import qualified Data.ByteString.Lazy          as BS
                                                 ( ByteString
-                                                , toStrict
-                                                )
+                                                , toStrict )
 import qualified Data.Text                     as T
 import qualified Data.Text.Encoding            as T
 import qualified Data.Text.Encoding.Error      as T
                                                 ( lenientDecode )
 
+-- parses markdown into statistics needed for readmeScore
 parseM :: BS.ByteString -> FilePath -> Either ParseError [MarkdownStats]
 parseM md name = runIdentity
   (commonmarkWith (pipeTableSpec <> defaultSyntaxSpec) name txt)
   where txt = T.decodeUtf8With T.lenientDecode . BS.toStrict $ md
+
+data MarkdownStats = NotImportant MStats |
+                     HCode MStats |
+                     Code MStats |
+                     Section MStats |
+                     Table Int MStats | -- Int of rows
+                     PText MStats |
+                     List Int MStats -- Int of elements
+    deriving (Show)
 
 data MStats = MStats Int Int --number of pictures, number of chars
   deriving Show
@@ -42,14 +50,7 @@ instance HasAttributes MStats where
 instance Semigroup MStats where
   (MStats a b) <> (MStats c d) = MStats (a + c) (b + d)
 
-data MarkdownStats = NotImportant MStats |
-                     HCode MStats |
-                     Code MStats |
-                     Section MStats |
-                     Table Int MStats | -- Int of rows
-                     PText MStats |
-                     List Int MStats -- Int of elements
-        deriving (Show)
+-- Getter functions
 
 getCode :: [MarkdownStats] -> (Int, Int) -- number of code blocks, size of code
 getCode []                           = (0, 0)
@@ -66,10 +67,6 @@ getSections :: [MarkdownStats] -> Int -- number of code blocks, size of code
 getSections []               = 0
 getSections (Section _ : xs) = 1 + getSections xs
 getSections (_         : xs) = getSections xs
-
-(><) :: (Int, Int) -> (Int, Int) -> (Int, Int)
-(><) (a, b) (c, d) = (a + c, b + d)
-
 
 sumMStat :: [MarkdownStats] -> MStats
 sumMStat []       = mempty
@@ -88,6 +85,11 @@ getListsTables ((List  a _) : ys) = a + getListsTables ys
 getListsTables ((Table a _) : ys) = a + getListsTables ys
 getListsTables (_           : ys) = getListsTables ys
 
+-- helper
+(><) :: (Int, Int) -> (Int, Int) -> (Int, Int)
+(><) (a, b) (c, d) = (a + c, b + d)
+
+-- INSTANCES
 instance Rangeable [MarkdownStats] where
   ranged = const id
 
