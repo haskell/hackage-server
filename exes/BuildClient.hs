@@ -474,6 +474,9 @@ buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
     notice verbosity "Initialising"
 
+    handleDoesNotExist () $
+        removeDirectoryRecursive $ installDirectory opts
+
     updatePackageIndex
     -- Due to caching sometimes the package repository state may lag behind the
     -- documentation index. Consequently, we make sure that the packages we are
@@ -591,7 +594,8 @@ processPkg verbosity opts config docInfo = do
       createDirectoryIfMissing True $ resultsDirectory opts
       notice verbosity $ "Writing cabal.project for " ++ display (docInfoPackage docInfo)
       let projectFile = installDirectory opts </> "cabal.project"
-      writeFile projectFile $ "packages: " ++ show (docInfoTarGzURI config docInfo)
+      cabal opts "unpack" [show (docInfoTarGzURI config docInfo)] Nothing
+      writeFile projectFile $ "packages: */*.cabal" -- ++ show (docInfoTarGzURI config docInfo)
 
     setTestOutcome :: String -> [String] -> [String]
     setTestOutcome _ []                  = []
