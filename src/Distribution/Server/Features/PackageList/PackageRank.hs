@@ -71,6 +71,7 @@ scale :: Float -> Scorer -> Scorer
 scale mx sc = fracScor mx (total sc)
 
 -- calculates number of versions from version list
+
 major :: Num a => [a] -> a
 major (x : _) = x
 major _       = 0
