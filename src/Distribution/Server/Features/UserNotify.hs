@@ -613,7 +613,6 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
     sendNotifyEmail :: (UserId, [String]) -> IO ()
     sendNotifyEmail (uid, ebody) = do
         mudetails <- queryUserDetails uid
-        print (uid, ebody, mudetails)
         case mudetails of
              Nothing -> return ()
              Just (AccountDetails{accountContactEmail=eml, accountName=aname})-> do
