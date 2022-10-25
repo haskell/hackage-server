@@ -1,9 +1,11 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -57,6 +59,10 @@ import Distribution.CabalSpecVersion
          ( CabalSpecVersion(CabalSpecV2_4) )
 import Distribution.Pretty
          ( Pretty(..), pretty, prettyShow )
+#if MIN_VERSION_Cabal(3,7,0)
+import Distribution.Fields.Pretty
+         ( pattern NoComment )
+#endif
 import qualified Text.PrettyPrint as Disp
 
 import Distribution.Parsec
@@ -311,7 +317,13 @@ intPair = do
 -- Pretty-printing
 
 show :: BuildReport -> String
-show = showFields (const []) . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
+show = showFields noComment . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
+  where
+#if MIN_VERSION_Cabal(3,7,0)
+    noComment _ = NoComment
+#else
+    noComment _ = []
+#endif
 
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
