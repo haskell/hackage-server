@@ -1,11 +1,8 @@
 branches: master ci*
 
-installed: -all +ghc
--- installed: +all -Cabal -text -parsec
-
--- -- irc-channels works with GHA, but why send to a channel
--- -- when one can subscribe to github notifications?
--- irc-channels: irc.libera.chat#hackage
+installed: +all -Cabal -text -parsec
+-- Did not help to salvage ghc-9.2 and below:
+-- installed: -all +ghc
 
 -- Does not work with GHA:
 -- -- allow failures with ghc-7.6 and ghc-7.8
@@ -20,3 +17,8 @@ apt: libbrotli-dev
 -- even though we don't define any library.
 haddock-components: all
   -- since haskell-ci 0.15.20220822
+
+tests: >= 9.4
+  -- parallel-doctest uses the ghc package
+  -- and thus does not build with Cabal-3.8.1.0 below GHC 9.4
+  -- See: https://github.com/haskell/cabal/issues/8554
