@@ -1,6 +1,8 @@
 branches: master ci*
 
-installed: +all -Cabal -text -parsec
+installed: +all -Cabal -text -parsec -process
+  -- Cabal-3.8.1.0 wants process-1.6.14 or newer
+
 -- Did not help to salvage ghc-9.2 and below:
 -- installed: -all +ghc
 
