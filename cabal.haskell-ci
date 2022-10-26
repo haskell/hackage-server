@@ -1,6 +1,6 @@
 branches: master ci*
 
-installed: -all
+installed: -all +ghc
 -- installed: +all -Cabal -text -parsec
 
 -- -- irc-channels works with GHA, but why send to a channel
