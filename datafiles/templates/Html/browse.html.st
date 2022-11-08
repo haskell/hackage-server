@@ -130,6 +130,9 @@
     #arrow-maintainers {
       width: 100px;
     }
+    #arrow-packageRank {
+      width: 150px;
+    }
     .lastUpload, #sliderAndOutput {
       white-space: nowrap;
     }
@@ -250,6 +253,7 @@
               <th id=arrow-tags><a href="javascript: sort('tags')">Tags</a></th>
               <th id=arrow-lastUpload><a href="javascript: sort('lastUpload')">Last U/L</a></th>
               <th id=arrow-maintainers><a href="javascript: sort('maintainers')">Maintainers</a></th>
+              <th id=arrow-packageRank><a href="javascript: sort('packageRank')">Package Rank</a></th>
             </tr>
           </thead>
           <tbody id="listing"></tbody>

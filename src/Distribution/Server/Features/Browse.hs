@@ -9,6 +9,7 @@ import qualified Data.Set as S
 import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import System.FilePath ((</>))
+import GHC.Float.RealFracMethods (roundFloatInteger)
 
 import Data.Aeson (Value(Array), object, toJSON, (.=))
 import qualified Data.Aeson.Key as Key
@@ -138,7 +139,7 @@ packageIndexInfoToValue :: CoreResource -> TagsResource -> UserResource -> Packa
 packageIndexInfoToValue
   coreResource tagsResource userResource
   PackageItem{itemName, itemDownloads, itemVotes,
-    itemDesc, itemTags, itemLastUpload, itemMaintainer} =
+    itemDesc, itemTags, itemLastUpload, itemMaintainer, itemPackageRank} =
   object
     [ Key.fromString "name" .= renderPackage itemName
     , Key.fromString "downloads" .= itemDownloads
@@ -147,6 +148,7 @@ packageIndexInfoToValue
     , Key.fromString "tags" .= map renderTag (S.toAscList itemTags)
     , Key.fromString "lastUpload" .= iso8601Show itemLastUpload
     , Key.fromString "maintainers" .= map renderUser itemMaintainer
+    , Key.fromString "packageRank" .= (roundFloatInteger (1000 * itemPackageRank))
     ]
   where
   renderTag :: Tag -> Value

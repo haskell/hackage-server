@@ -9,7 +9,7 @@ import Distribution.Server.Features.Browse.Parsers (Filter, conditions, condsToF
 
 data IsSearch = IsSearch | IsNotSearch
 
-data NormalColumn = Name | Downloads | Rating | Description | Tags | LastUpload | Maintainers
+data NormalColumn = Name | Downloads | Rating | Description | Tags | LastUpload | Maintainers | PackageRank
   deriving (Show, Eq)
 
 data Column = DefaultColumn | NormalColumn NormalColumn
@@ -37,6 +37,7 @@ instance FromJSON Column where
         "tags" -> pure $ NormalColumn Tags
         "lastUpload" -> pure $ NormalColumn LastUpload
         "maintainers" -> pure $ NormalColumn Maintainers
+        "packageRank" -> pure $ NormalColumn PackageRank
         t -> fail $ "Column invalid: " ++ T.unpack t
 
 columnToTemplateName :: Column -> String
@@ -49,6 +50,7 @@ columnToTemplateName = \case
   NormalColumn Tags -> "tags"
   NormalColumn LastUpload -> "lastUpload"
   NormalColumn Maintainers -> "maintainers"
+  NormalColumn PackageRank -> "packageRank"
 
 instance FromJSON Direction where
   parseJSON =

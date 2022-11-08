@@ -134,6 +134,7 @@ const replaceRows = (response) => {
     tr.appendChild(createTags(row.tags));
     tr.appendChild(createLastUpload(row.lastUpload));
     tr.appendChild(createMaintainers(row.maintainers));
+    tr.appendChild(createSimpleText(row.packageRank));
     l.appendChild(tr);
   }
 };

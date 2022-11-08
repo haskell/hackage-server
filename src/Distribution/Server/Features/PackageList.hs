@@ -15,6 +15,10 @@ import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload(UploadFeature(..))
+import Distribution.Server.Features.Documentation (DocumentationFeature(..))
+import Distribution.Server.Features.TarIndexCache (TarIndexCacheFeature(..))
+import Distribution.Server.Features.PackageList.PackageRank
+
 import Distribution.Server.Users.Users (userIdToName)
 import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Users.Group(UserGroup(..), GroupDescription(..))
@@ -32,13 +36,14 @@ import Distribution.PackageDescription.Configuration
 import Distribution.Utils.ShortText (fromShortText)
 
 import Control.Concurrent
+import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe (mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock (UTCTime(..))
-
 
 data ListFeature = ListFeature {
     listFeatureInterface :: HackageFeature,
@@ -85,18 +90,20 @@ data PackageItem = PackageItem {
     -- How many benchmarks (>=0) this package has.
     itemNumBenchmarks :: !Int,
     -- Last upload date
-    itemLastUpload :: !UTCTime
+    itemLastUpload :: !UTCTime,
     -- Hotness: a more heuristic way to sort packages. presently non-existent.
-  --itemHotness :: Int
+    --itemHotness :: Int
+    -- heuristic way to sort packages
+    itemPackageRank :: !Float
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k l) = memSize12 a b c d e f g h i j k l
+    memSize (PackageItem a b c d e f g h i j k l m) = memSize13 a b c d e f g h i j k l m
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" []
-                                   0 0 False 0 0 0 (UTCTime (toEnum 0) 0)
+                                   0 0 False 0 0 0 (UTCTime (toEnum 0) 0) 0
 
 
 initListFeature :: ServerEnv
@@ -108,6 +115,8 @@ initListFeature :: ServerEnv
                     -> VersionsFeature
                     -> UserFeature
                     -> UploadFeature
+                    -> DocumentationFeature
+                    -> TarIndexCacheFeature
                     -> IO ListFeature)
 initListFeature _env = do
     itemCache  <- newMemStateWHNF Map.empty
@@ -120,11 +129,12 @@ initListFeature _env = do
               tagsf@TagsFeature{..}
               versions@VersionsFeature{..}
               users@UserFeature{..}
-              uploads@UploadFeature{..} -> do
+              uploads@UploadFeature{..} 
+              documentation tar -> do
 
       let (feature, modifyItem, updateDesc) =
             listFeature core download votesf tagsf versions users uploads
-                        itemCache itemUpdate
+                        itemCache itemUpdate documentation tar _env
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
         updateDesc (packageName pkgid)
@@ -180,6 +190,9 @@ listFeature :: CoreFeature
             -> UploadFeature
             -> MemState (Map PackageName PackageItem)
             -> Hook (Set PackageName) ()
+            -> DocumentationFeature
+            -> TarIndexCacheFeature
+            -> ServerEnv
             -> (ListFeature,
                 PackageName -> (PackageItem -> PackageItem) -> IO (),
                 PackageName -> IO ())
@@ -188,10 +201,11 @@ listFeature CoreFeature{..}
             DownloadFeature{..}
             VotesFeature{..}
             TagsFeature{..}
-            VersionsFeature{..}
+            versions@VersionsFeature{..}
             UserFeature{..}
             UploadFeature{..}
             itemCache itemUpdate
+            documentation tar env
   = (ListFeature{..}, modifyItem, updateDesc)
   where
     listFeatureInterface = (emptyHackageFeature "list") {
@@ -220,9 +234,9 @@ listFeature CoreFeature{..}
             False -> do
                 index <- queryGetPackageIndex
                 let pkgs = PackageIndex.lookupPackageName index pkgname
-                case pkgs of
-                    [] -> return () --this shouldn't happen
-                    _  -> modifyMemState itemCache . uncurry Map.insert =<< constructItem (last pkgs)
+                case NE.nonEmpty pkgs of
+                    Nothing -> return () --this shouldn't happen
+                    Just ne -> modifyMemState itemCache . uncurry Map.insert =<< constructItem ne
 
     updateDesc pkgname = do
         index <- queryGetPackageIndex
@@ -243,12 +257,14 @@ listFeature CoreFeature{..}
     constructItemIndex :: IO (Map PackageName PackageItem)
     constructItemIndex = do
         index <- queryGetPackageIndex
-        items <- mapM (constructItem . last) $ PackageIndex.allPackagesByName index
-        return $ Map.fromList items
+        let byName = PackageIndex.allPackagesByNameNE index
+        mPkgInfos <- traverse (mapM constructItem) (NE.nonEmpty byName)
+        pure $ foldMap (Map.fromList . NE.toList) mPkgInfos
 
-    constructItem :: PkgInfo -> IO (PackageName, PackageItem)
-    constructItem pkg = do
+    constructItem :: NonEmpty PkgInfo -> IO (PackageName, PackageItem)
+    constructItem pkgs = do
         let pkgname = packageName pkg
+            pkg = NE.last pkgs
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
@@ -256,6 +272,8 @@ listFeature CoreFeature{..}
         votes <- pkgNumScore pkgname
         deprs <- queryGetDeprecatedFor pkgname
         maintainers <- queryUserGroup (maintainersGroup pkgname)
+        packageR <- rankPackage versions (cmFind pkgname downs) 
+            (UserIdSet.size maintainers) documentation tar env pkgs
 
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags       = tags
@@ -265,6 +283,7 @@ listFeature CoreFeature{..}
             -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
           , itemVotes      = votes
           , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
+          , itemPackageRank = packageR
           }
 
     ------------------------------

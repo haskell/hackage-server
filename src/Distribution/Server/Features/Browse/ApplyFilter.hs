@@ -64,6 +64,7 @@ sort isSearch sortColumn sortDirection =
             Tags -> comparing (S.toAscList . itemTags)
             LastUpload -> comparing itemLastUpload
             Maintainers -> comparing itemMaintainer
+            PackageRank -> comparing itemPackageRank
        in sortBy (maybeReverse comparer)
   where
     maybeReverse =

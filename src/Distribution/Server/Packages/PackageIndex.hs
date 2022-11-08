@@ -44,7 +44,8 @@ module Distribution.Server.Packages.PackageIndex (
     -- ** Bulk queries
     allPackageNames,
     allPackages,
-    allPackagesByName
+    allPackagesByName,
+    allPackagesByNameNE
   ) where
 
 import Distribution.Server.Prelude hiding (lookup)
@@ -58,6 +59,8 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Foldable as Foldable
 import Data.List (groupBy, find, isInfixOf)
+import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty (NonEmpty)
 import Data.SafeCopy
 
 import Distribution.Types.PackageName
@@ -257,6 +260,11 @@ allPackages (PackageIndex m) = concat (Map.elems m)
 --
 allPackagesByName :: Package pkg => PackageIndex pkg -> [[pkg]]
 allPackagesByName (PackageIndex m) = Map.elems m
+
+allPackagesByNameNE :: Package pkg => PackageIndex pkg -> [NonEmpty pkg]
+allPackagesByNameNE (PackageIndex m) =
+  -- This is safe because there will always be at least one version of a package
+  NE.fromList <$> Map.elems m
 
 allPackageNames :: PackageIndex pkg -> [PackageName]
 allPackageNames (PackageIndex m) = Map.keys m
