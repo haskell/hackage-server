@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC == { 9.4.2, 9.2.4, 9.0.2, 8.10.7, 8.8.4 }
+tested-with: GHC == { 9.4.4, 9.2.5, 9.0.2, 8.10.7, 8.8.4 }
 
 data-dir: datafiles
 data-files:
@@ -123,7 +123,7 @@ common defaults
         -- see https://github.com/haskell/hackage-server/issues/1130
     , fail                  ^>= 4.9.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
-    , network               >=  3 && < 3.2
+    , network                >= 3 && < 3.2
     , network-bsd           ^>= 2.8
     , network-uri           ^>= 2.6
     , parsec                ^>= 3.1.13
