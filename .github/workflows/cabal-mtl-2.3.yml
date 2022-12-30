@@ -50,4 +50,4 @@ jobs:
     - name: Build w/o tests with mtl-2.3
       # 2022-12-30: 'transformers >= 0.6' is needed because of happstack-server
       run: |
-        cabal build -O0 --disable-tests -c 'mtl >= 2.3.1' -c 'transformers >= 0.6' --allow-newer='Cabal:mtl' --allow-newer='Cabal:transformers'
+        cabal build -O0 --disable-tests --constraint 'mtl >= 2.3.1' --constraint 'transformers >= 0.6' --allow-newer='Cabal:mtl' --allow-newer='Cabal:transformers'
