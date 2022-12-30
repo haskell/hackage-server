@@ -130,6 +130,12 @@
     $downloadSection$
 
     <h4>Maintainer's Corner</h4>
+    <p>Package maintainers</p>
+    <ul>
+      <li>
+        $maintainers$
+      </li>
+    </ul>
     <p>For package maintainers and hackage trustees</p>
     <ul>
       <li>

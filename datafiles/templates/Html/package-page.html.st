@@ -94,7 +94,13 @@
 
         <div id="maintainer-corner">
           <h4>Maintainer's Corner</h4>
-          <p>For $package.maintainerURL$ and hackage trustees</p>
+          <p><a href="$package.maintainerURL$">Package maintainers</a></p>
+          <ul>
+            <li>
+              $maintainers$
+            </li>
+          </ul>
+          <p>For package maintainers and hackage trustees</p>
           <ul>
             <li>
               <a href="$baseurl$/package/$package.name$/maintain">
