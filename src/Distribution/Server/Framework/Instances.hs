@@ -136,6 +136,7 @@ instance SafeCopy OS where
     putCopy Ghcjs       = contain $ putWord8 14
     putCopy Hurd        = contain $ putWord8 15
     putCopy Android     = contain $ putWord8 16
+    putCopy Wasi        = contain $ putWord8 17
 
     getCopy = contain $ do
       tag <- getWord8
@@ -157,6 +158,7 @@ instance SafeCopy OS where
         14 -> return Ghcjs
         15 -> return Hurd
         16 -> return Android
+        17 -> return Wasi
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
@@ -180,7 +182,9 @@ instance SafeCopy  Arch where
     putCopy Vax           = contain $ putWord8 15
     putCopy JavaScript    = contain $ putWord8 16
     putCopy AArch64       = contain $ putWord8 17
-    putCopy RISCV64       = contain $ putWord8 18
+    putCopy S390X         = contain $ putWord8 18
+    putCopy Wasm32        = contain $ putWord8 19
+    putCopy RISCV64       = contain $ putWord8 20
 
     getCopy = contain $ do
       tag <- getWord8
@@ -203,7 +207,9 @@ instance SafeCopy  Arch where
         15 -> return Vax
         16 -> return JavaScript
         17 -> return AArch64
-        18 -> return RISCV64
+        18 -> return S390X
+        19 -> return Wasm32
+        20 -> return RISCV64
         _  -> fail "SafeCopy Arch getCopy: unexpected tag"
 
 instance SafeCopy CompilerFlavor where

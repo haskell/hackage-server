@@ -22,7 +22,7 @@ import qualified Data.Text.Encoding.Error as T (lenientDecode)
 import qualified Data.Text.Lazy as TL
 import Data.Typeable (Typeable)
 import Network.URI (isRelativeReference)
-import Control.Monad.Identity
+import Control.Monad.Identity (runIdentity)
 import Text.HTML.SanitizeXSS as XSS
 import System.FilePath.Posix  (takeExtension)
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)

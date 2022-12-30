@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC == { 9.2.4, 9.0.2, 8.10.7, 8.8.4 }
+tested-with: GHC == { 9.4.4, 9.2.5, 9.0.2, 8.10.7, 8.8.4 }
 
 data-dir: datafiles
 data-files:
@@ -99,31 +99,31 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.13  && < 4.17
+    , base                   >= 4.13  && < 4.18
     , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.10  && < 0.12
     , containers            ^>= 0.6.0
     , deepseq                >= 1.4   && < 1.5
     , directory              >= 1.3   && < 1.4
     , filepath               >= 1.4   && < 1.5
-    , mtl                   ^>= 2.2.1
+    , mtl                    >= 2.2.1 && < 2.4
     , pretty                 >= 1.1   && < 1.2
     , process                >= 1.6   && < 1.7
     , text                  ^>= 1.2.5.0 || ^>= 2.0
     , time                   >= 1.9   && < 1.13
-    , transformers           >= 0.5   && < 0.6
+    , transformers           >= 0.5   && < 0.7
     , unix                   >= 2.7   && < 2.8
     , scientific
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 2.0.3.0 || ^>= 2.1.0.0
-    , Cabal                 ^>= 3.6.3.0
-    , Cabal-syntax          ^>= 3.6.0.0
+    , Cabal                 ^>= 3.8.1.0
+    , Cabal-syntax          ^>= 3.8.1.0
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
     , fail                  ^>= 4.9.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
-    , network               >=  3 && < 3.2
+    , network                >= 3 && < 3.2
     , network-bsd           ^>= 2.8
     , network-uri           ^>= 2.6
     , parsec                ^>= 3.1.13
@@ -371,7 +371,7 @@ library lib-server
   -- NB: see also build-depends in `common defaults`!
   build-depends:
     , HStringTemplate       ^>= 0.8
-    , HTTP                  ^>= 4000.3.16
+    , HTTP                  ^>= 4000.3.16 || ^>= 4000.4.1
     , QuickCheck            ^>= 2.14
     , acid-state            ^>= 0.16
     , async                 ^>= 2.2.1
