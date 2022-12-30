@@ -47,6 +47,10 @@ jobs:
         restore-keys: |
           cabal-${{ env.CABAL_VER }}-ghc-${{ env.GHC_VER }}-commit-
 
+    - name: Prepare cabal
+      run: |
+        cabal update
+
     - name: Build w/o tests with mtl-2.3
       # 2022-12-30: 'transformers >= 0.6' is needed because of happstack-server
       run: |
