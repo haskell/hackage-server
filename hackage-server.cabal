@@ -106,12 +106,12 @@ common defaults
     , deepseq                >= 1.4   && < 1.5
     , directory              >= 1.3   && < 1.4
     , filepath               >= 1.4   && < 1.5
-    , mtl                   ^>= 2.2.1
+    , mtl                    >= 2.2.1 && < 2.4
     , pretty                 >= 1.1   && < 1.2
     , process                >= 1.6   && < 1.7
     , text                  ^>= 1.2.5.0 || ^>= 2.0
     , time                   >= 1.9   && < 1.13
-    , transformers           >= 0.5   && < 0.6
+    , transformers           >= 0.5   && < 0.7
     , unix                   >= 2.7   && < 2.8
     , scientific
   -- other dependencies shared by most components

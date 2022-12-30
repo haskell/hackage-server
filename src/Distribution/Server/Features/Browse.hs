@@ -1,7 +1,8 @@
 {-# LANGUAGE BlockArguments, NamedFieldPuns #-}
 module Distribution.Server.Features.Browse (initBrowseFeature, PaginationConfig(..), StartIndex(..), NumElems(..), paginate) where
 
-import Control.Monad.Except (ExceptT, liftIO, throwError)
+import Control.Monad.Except (ExceptT, throwError)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Map as Map
 import Data.Maybe (isJust)
