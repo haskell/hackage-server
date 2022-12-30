@@ -70,11 +70,11 @@ removeUser uname uri =
     ]
 
 listGroup :: [Users.UserName] -> Maybe String -> Html
-listGroup [] _ = p << "No member exist presently"
+listGroup [] _ = p << "No current members of group"
 listGroup users muri = unordList (map (displayName muri) users)
 
 listGroupCompact :: [Users.UserName] -> Html
-listGroupCompact [] = toHtml "No member exist presently"
+listGroupCompact [] = toHtml "No current members of group"
 listGroupCompact users = foldr1 (\a b -> a +++ ", " +++ b) (map (displayName Nothing) users)
 
 displayName :: Maybe String -> Users.UserName -> Html
