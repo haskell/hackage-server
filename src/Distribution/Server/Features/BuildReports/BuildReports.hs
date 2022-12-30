@@ -50,6 +50,7 @@ import Data.SafeCopy
 import Data.Typeable (Typeable)
 import qualified Data.List as L
 import qualified Data.Char as Char
+import Data.Maybe (fromMaybe)
 
 import Text.StringTemplate (ToSElem(..))
 
@@ -94,7 +95,7 @@ data PkgBuildReports = PkgBuildReports {
 
 data BuildReports = BuildReports {
     reportsIndex :: !(Map.Map PackageId PkgBuildReports)
-  
+
 } deriving (Eq, Typeable, Show)
 
 emptyPkgReports :: PkgBuildReports
@@ -213,15 +214,13 @@ lookupLatestReport pkgid buildReports = do
       else Just $ Map.findMax rs
   Just (maxKey, rep, buildLog, covg)
 
-lookupRunTests :: PackageId -> BuildReports -> Maybe Bool
-lookupRunTests pkgid buildReports = do
-  rp <- Map.lookup pkgid (reportsIndex buildReports)
-  pure (runTests rp)
+lookupRunTests :: PackageId -> BuildReports -> Bool
+lookupRunTests pkgid buildReports = maybe True runTests $ Map.lookup pkgid (reportsIndex buildReports)
 
 setRunTests :: PackageId -> Bool -> BuildReports -> Maybe BuildReports
-setRunTests pkgid b buildReports = do
-  rp <- Map.lookup pkgid (reportsIndex buildReports)
-  pure $ BuildReports (Map.insert pkgid rp{runTests = b} (reportsIndex buildReports))
+setRunTests pkgid b buildReports =
+  let rp = fromMaybe emptyPkgReports $ Map.lookup pkgid (reportsIndex buildReports)
+  in Just $ BuildReports (Map.insert pkgid rp{runTests = b} (reportsIndex buildReports))
 
 -- addPkg::`
 -------------------

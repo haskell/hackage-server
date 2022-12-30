@@ -80,7 +80,7 @@ lookupFailCount pkgid = asks (BuildReports.lookupFailCount pkgid)
 lookupLatestReport :: PackageId -> Query BuildReports (Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg))
 lookupLatestReport pkgid = asks (BuildReports.lookupLatestReport pkgid)
 
-lookupRunTests :: PackageId -> Query BuildReports (Maybe Bool)
+lookupRunTests :: PackageId -> Query BuildReports (Bool)
 lookupRunTests pkgid = asks (BuildReports.lookupRunTests pkgid)
 
 setRunTests :: PackageId -> Bool -> Update BuildReports Bool
@@ -106,4 +106,3 @@ makeAcidic ''BuildReports ['addReport
                           ,'lookupRunTests
                           ,'setRunTests
                           ]
-

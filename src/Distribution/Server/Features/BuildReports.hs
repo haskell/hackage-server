@@ -48,7 +48,7 @@ data ReportsFeature = ReportsFeature {
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
     pkgReportDetails    :: forall m. MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails,
     queryLastReportStats:: forall m. MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg)),
-    queryRunTests       :: forall m. MonadIO m =>  PackageId -> m (Maybe Bool),
+    queryRunTests       :: forall m. MonadIO m =>  PackageId -> m Bool,
     reportsResource :: ReportsResource
 }
 
@@ -212,7 +212,7 @@ buildReportsFeature name
     pkgReportDetails (pkgid, docs) = do
       failCnt   <- queryState reportsState $ LookupFailCount pkgid
       latestRpt <- queryState reportsState $ LookupLatestReport pkgid
-      runTests  <- queryState reportsState $ LookupRunTests pkgid
+      runTests  <- fmap Just . queryState reportsState $ LookupRunTests pkgid
       (time, ghcId) <- case latestRpt of
         Nothing -> return (Nothing,Nothing)
         Just (_, brp, _, _) -> do
@@ -227,7 +227,7 @@ buildReportsFeature name
         Nothing -> return Nothing
         Just (rptId, rpt, _, covg) -> return (Just (rptId, rpt, covg))
 
-    queryRunTests :: MonadIO m =>  PackageId -> m (Maybe Bool)
+    queryRunTests :: MonadIO m =>  PackageId -> m Bool
     queryRunTests pkgid = queryState reportsState $ LookupRunTests pkgid
 
     ---------------------------------------------------------------------------
@@ -337,18 +337,16 @@ buildReportsFeature name
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-      mRunTest <- queryRunTests pkgid
-      case mRunTest of
-        Nothing -> errNotFound "Package not found" [MText "Package does not exist"]
-        Just runTest -> pure $ toResponse $ toJSON runTest
+      runTest <- queryRunTests pkgid
+      pure $ toResponse $ toJSON runTest
 
     postReportsTest :: DynamicPath -> ServerPartE Response
     postReportsTest dpath = do
       pkgid <- packageInPath dpath
-      runTests <- body $ look "runTests"
+      runTests <- body $ looks "runTests"
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-      success <- updateState reportsState $ SetRunTests pkgid (runTests == "on")
+      success <- updateState reportsState $ SetRunTests pkgid ("on" `elem` runTests)
       if success
           then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
           else errNotFound "Package not found" [MText "Package does not exist"]
