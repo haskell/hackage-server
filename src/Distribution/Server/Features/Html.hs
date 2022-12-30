@@ -644,6 +644,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "analyticsPixels"   $= map analyticsPixelUrl (Set.toList analyticsPixels)
           , "versions"          $= (PagesNew.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
+          , "isDeprecatedVersion" $= getVersionStatus prefInfo (packageVersion realpkg) == DeprecatedVersion
           , "totalDownloads"    $= totalDown
           , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
