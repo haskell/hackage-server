@@ -30,10 +30,11 @@ jobs:
         echo "GHC_VER=${GHC_VER}"       >> "${GITHUB_ENV}"
         echo "CABAL_VER=${CABAL_VER}"   >> "${GITHUB_ENV}"
 
-    - name: Install the brotli library
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libbrotli-dev
+    # Brotli is already installed on ubuntu-22.04
+    # - name: Install the brotli library
+    #   run: |
+    #     sudo apt-get update
+    #     sudo apt-get install -y libbrotli-dev
 
     - uses: actions/checkout@v3
 
@@ -50,6 +51,11 @@ jobs:
     - name: Prepare cabal
       run: |
         cabal update
+
+    - name: Build dependencies w/o tests with mtl-2.3
+      # 2022-12-30: 'transformers >= 0.6' is needed because of happstack-server
+      run: |
+        cabal build --dependencies-only -O0 --disable-tests --constraint 'mtl >= 2.3.1' --constraint 'transformers >= 0.6' --allow-newer='Cabal:mtl' --allow-newer='Cabal:transformers'
 
     - name: Build w/o tests with mtl-2.3
       # 2022-12-30: 'transformers >= 0.6' is needed because of happstack-server
