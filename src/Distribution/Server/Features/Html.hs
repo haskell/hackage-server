@@ -123,7 +123,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]
                    [ "maintain.html", "maintain-candidate.html"
-                   , "reports.html", "report.html"
+                   , "reports.html", "report.html", "reports-test.html"
                    , "maintain-docs.html"
                    , "distro-monitor.html"
                    , "revisions.html"
@@ -283,7 +283,7 @@ htmlFeature env@ServerEnv{..}
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
     htmlDownloads  = mkHtmlDownloads  utilities download
-    htmlReports    = mkHtmlReports    utilities core reportsCore templates
+    htmlReports    = mkHtmlReports    utilities core upload user reportsCore templates
     htmlCandidates = mkHtmlCandidates utilities core versions upload
                                       docsCandidates tarIndexCache
                                       candidates user templates
@@ -1014,10 +1014,10 @@ data HtmlReports = HtmlReports {
     htmlReportsResources :: [Resource]
   }
 
-mkHtmlReports :: HtmlUtilities -> CoreFeature -> ReportsFeature -> Templates -> HtmlReports
-mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = HtmlReports{..}
+mkHtmlReports :: HtmlUtilities -> CoreFeature -> UploadFeature -> UserFeature -> ReportsFeature -> Templates -> HtmlReports
+mkHtmlReports HtmlUtilities{..} CoreFeature{..} UploadFeature{..} UserFeature{..} ReportsFeature{..} templates = HtmlReports{..}
   where
-    CoreResource{packageInPath} = coreResource
+    CoreResource{packageInPath, guardValidPackageId} = coreResource
     ReportsResource{..} = reportsResource
 
     htmlReportsResources = [
@@ -1026,6 +1026,9 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
           }
       , (extendResource reportsPage) {
             resourceGet = [ ("html", servePackageReport) ]
+          }
+      , (extendResource reportsTest) {
+            resourceGet = [ ("html", servePackageReportTests) ]
           }
       ]
 
@@ -1074,6 +1077,18 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
         det::(Int,Int)->(Int,Int,Int)
         det (_,0) = (100,0,0)
         det (a,b) = ((a * 100) `div` b ,a,b)
+    
+    servePackageReportTests :: DynamicPath -> ServerPartE Response
+    servePackageReportTests dpath = do
+        pkgid <- packageInPath dpath
+        guardValidPackageId pkgid
+        guardAuthorised_ [InGroup (maintainersGroup (packageName pkgid)), InGroup trusteesGroup]
+        template <- getTemplate templates "reports-test.html"
+        runTests <- queryRunTests pkgid
+        return $ toResponse $ template
+          [ "pkgid"    $= pkgid
+          , "runTests" $= runTests
+          ]
 
 {-------------------------------------------------------------------------------
   Candidates

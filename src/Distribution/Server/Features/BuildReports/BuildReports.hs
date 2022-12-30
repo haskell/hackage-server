@@ -22,7 +22,9 @@ module Distribution.Server.Features.BuildReports.BuildReports (
     setFailStatus,
     resetFailCount,
     lookupLatestReport,
-    lookupFailCount
+    lookupFailCount,
+    lookupRunTests,
+    setRunTests
   ) where
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -48,6 +50,7 @@ import Data.SafeCopy
 import Data.Typeable (Typeable)
 import qualified Data.List as L
 import qualified Data.Char as Char
+import Data.Maybe (fromMaybe)
 
 import Text.StringTemplate (ToSElem(..))
 
@@ -86,18 +89,21 @@ data PkgBuildReports = PkgBuildReports {
     reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg )),
     -- one more than the maximum report id used
     nextReportId :: !BuildReportId,
-    buildStatus :: !BuildStatus
+    buildStatus :: !BuildStatus,
+    runTests     :: !Bool
 } deriving (Eq, Typeable, Show)
 
 data BuildReports = BuildReports {
     reportsIndex :: !(Map.Map PackageId PkgBuildReports)
+
 } deriving (Eq, Typeable, Show)
 
 emptyPkgReports :: PkgBuildReports
 emptyPkgReports = PkgBuildReports {
     reports = Map.empty,
     nextReportId = BuildReportId 1,
-    buildStatus = BuildFailCnt 0
+    buildStatus = BuildFailCnt 0,
+    runTests = True
 }
 
 emptyReports :: BuildReports
@@ -126,7 +132,8 @@ addReport pkgid (brpt,blog) buildReports =
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
                                       , nextReportId = incrementReportId reportId
-                                      , buildStatus = buildStatus pkgReports }
+                                      , buildStatus = buildStatus pkgReports
+                                      , runTests = runTests pkgReports }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
 unsafeSetReport :: PackageId -> BuildReportId -> (BuildReport, Maybe BuildLog) -> BuildReports -> BuildReports
@@ -134,7 +141,8 @@ unsafeSetReport pkgid reportId (brpt,blog) buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
                                       , nextReportId = max (incrementReportId reportId) (nextReportId pkgReports)
-                                      , buildStatus = buildStatus pkgReports }
+                                      , buildStatus = buildStatus pkgReports
+                                      , runTests = runTests pkgReports }
     in buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
 deleteReport :: PackageId -> BuildReportId -> BuildReports -> Maybe BuildReports
@@ -159,7 +167,8 @@ addRptLogCovg pkgid report buildReports =
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
                                       , nextReportId = incrementReportId reportId
-                                      , buildStatus = buildStatus pkgReports }
+                                      , buildStatus = buildStatus pkgReports
+                                      , runTests = runTests pkgReports }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
 lookupReportCovg :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg )
@@ -170,7 +179,8 @@ setFailStatus pkgid fStatus buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         pkgReports' = PkgBuildReports { reports = (reports pkgReports)
                                       , nextReportId = (nextReportId pkgReports)
-                                      , buildStatus = (getfst fStatus (buildStatus pkgReports)) }
+                                      , buildStatus = (getfst fStatus (buildStatus pkgReports))
+                                      , runTests = runTests pkgReports }
     in buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
     where
       getfst nfst cfst = do
@@ -185,7 +195,8 @@ resetFailCount pkgid buildReports = case Map.lookup pkgid (reportsIndex buildRep
     Just pkgReports -> do
       let pkgReports' = PkgBuildReports { reports = (reports pkgReports)
                                       , nextReportId = (nextReportId pkgReports)
-                                      , buildStatus = BuildFailCnt 0 }
+                                      , buildStatus = BuildFailCnt 0
+                                      , runTests = runTests pkgReports }
       return buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
 lookupFailCount :: PackageId -> BuildReports -> Maybe BuildStatus
@@ -202,6 +213,14 @@ lookupLatestReport pkgid buildReports = do
       then Nothing
       else Just $ Map.findMax rs
   Just (maxKey, rep, buildLog, covg)
+
+lookupRunTests :: PackageId -> BuildReports -> Bool
+lookupRunTests pkgid buildReports = maybe True runTests $ Map.lookup pkgid (reportsIndex buildReports)
+
+setRunTests :: PackageId -> Bool -> BuildReports -> Maybe BuildReports
+setRunTests pkgid b buildReports =
+  let rp = fromMaybe emptyPkgReports $ Map.lookup pkgid (reportsIndex buildReports)
+  in Just $ BuildReports (Map.insert pkgid rp{runTests = b} (reportsIndex buildReports))
 
 -- addPkg::`
 -------------------
@@ -247,20 +266,41 @@ deriveSafeCopy 2 'extension ''BuildLog
 -- however, upon importing, nextReportId will = 3, one more than the maximum present
 -- this is also a problem in ReportsBackup.hs. but it's not a major issue I think.
 instance SafeCopy PkgBuildReports where
-    version = 3
+    version = 4
     kind    = extension
-    putCopy (PkgBuildReports x _ y) = contain $ safePut (x,y)
+    putCopy (PkgBuildReports x _ y z) = contain $ safePut (x,y,z)
     getCopy = contain $ mkReports <$> safeGet
       where
-        mkReports (rs,f) = PkgBuildReports rs
+        mkReports (rs,f,b) = PkgBuildReports rs
+                         (if Map.null rs
+                            then BuildReportId 1
+                            else incrementReportId (fst $ Map.findMax rs))
+                          f b
+
+instance MemSize PkgBuildReports where
+    memSize (PkgBuildReports a b c d) = memSize4 a b c d
+
+
+data PkgBuildReports_v3 = PkgBuildReports_v3 {
+    reports_v3      :: !(Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg )),
+    nextReportId_v3 :: !BuildReportId,
+    buildStatus_v3 :: !BuildStatus
+} deriving (Eq, Typeable, Show)
+
+instance SafeCopy PkgBuildReports_v3 where
+    version = 3
+    kind    = extension
+    putCopy (PkgBuildReports_v3 x _ y) = contain $ safePut (x,y)
+    getCopy = contain $ mkReports <$> safeGet
+      where
+        mkReports (rs,f) = PkgBuildReports_v3 rs
                          (if Map.null rs
                             then BuildReportId 1
                             else incrementReportId (fst $ Map.findMax rs))
                           f
 
-instance MemSize PkgBuildReports where
-    memSize (PkgBuildReports a b c) = memSize3 a b c
-
+instance MemSize PkgBuildReports_v3 where
+    memSize (PkgBuildReports_v3 a b c) = memSize3 a b c
 
 data PkgBuildReports_v2 = PkgBuildReports_v2 {
     reports_v2      :: !(Map BuildReportId (BuildReport, Maybe BuildLog)),
@@ -309,16 +349,20 @@ instance Migrate PkgBuildReports_v2 where
                     . Map.map (\(br, l) -> (migrate (migrate br),
                                             fmap migrate  l))
 
-instance Migrate PkgBuildReports where
-     type MigrateFrom PkgBuildReports = PkgBuildReports_v2
+instance Migrate PkgBuildReports_v3 where
+     type MigrateFrom PkgBuildReports_v3 = PkgBuildReports_v2
      migrate (PkgBuildReports_v2 m n) =
-         PkgBuildReports (migrateMap m) n BuildOK
+         PkgBuildReports_v3 (migrateMap m) n BuildOK
        where
          migrateMap :: Map BuildReportId (BuildReport, Maybe BuildLog)
                     -> Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg)
          migrateMap = Map.mapKeys (\x->x)
                     . Map.map (\(br, l) -> (br, l, Nothing))
 
+instance Migrate PkgBuildReports where
+     type MigrateFrom PkgBuildReports = PkgBuildReports_v3
+     migrate (PkgBuildReports_v3 m n c) =
+         PkgBuildReports m n c True
 
 data BuildReports_v0 = BuildReports_v0
                          !(Map.Map PackageIdentifier_v0 PkgBuildReports_v0)
@@ -345,12 +389,26 @@ instance MemSize BuildReports_v2 where
 
 deriveSafeCopy 2 'extension ''BuildReports_v2
 
-instance Migrate BuildReports where
-    type MigrateFrom BuildReports = BuildReports_v2
+data BuildReports_v3 = BuildReports_v3
+  { reportsIndex_v3 :: !(Map.Map PackageId PkgBuildReports_v3)
+  } deriving (Eq, Typeable, Show)
+
+instance Migrate BuildReports_v3 where
+    type MigrateFrom BuildReports_v3 = BuildReports_v2
     migrate (BuildReports_v2 m) =
+      BuildReports_v3 (Map.mapKeys id $ Map.map migrate m)
+
+instance MemSize BuildReports_v3 where
+    memSize (BuildReports_v3 a) = memSize1 a
+
+deriveSafeCopy 3 'extension ''BuildReports_v3
+
+instance Migrate BuildReports where
+    type MigrateFrom BuildReports = BuildReports_v3
+    migrate (BuildReports_v3 m) =
       BuildReports (Map.mapKeys id $ Map.map migrate m)
 
 instance MemSize BuildReports where
     memSize (BuildReports a) = memSize1 a
 
-deriveSafeCopy 3 'extension ''BuildReports
+deriveSafeCopy 4 'extension ''BuildReports
