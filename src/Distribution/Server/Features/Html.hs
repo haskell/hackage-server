@@ -1035,7 +1035,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} UploadFeature{..} UserFeature{..
       , (extendResource reportsPage) {
             resourceGet = [ ("html", servePackageReport) ]
           }
-      , (extendResource reportsTest) {
+      , (extendResource reportsTestsEnabled) {
             resourceGet = [ ("html", servePackageReportTests) ]
           }
       ]
@@ -1059,8 +1059,9 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} UploadFeature{..} UserFeature{..
 
     servePackageReport :: DynamicPath -> ServerPartE Response
     servePackageReport dpath = do
-        (repid, report, mlog, covg) <- packageReport dpath
+        (repid, report, mlog, mtest, covg) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
+        mtest' <- traverse queryTestLog mtest
         let covg' = fmap getCvgDet covg
         pkgid <- packageInPath dpath
         cacheControlWithoutETag [Public, maxAgeDays 30]
@@ -1069,6 +1070,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} UploadFeature{..} UserFeature{..
           [ "pkgid" $= (pkgid :: PackageIdentifier)
           , "report" $= (repid, report)
           , "log" $= toMessage <$> mlog'
+          , "test" $= toMessage <$> mtest'
           , "covg" $= covg'
           ]
       where
@@ -1085,7 +1087,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} UploadFeature{..} UserFeature{..
         det::(Int,Int)->(Int,Int,Int)
         det (_,0) = (100,0,0)
         det (a,b) = ((a * 100) `div` b ,a,b)
-    
+
     servePackageReportTests :: DynamicPath -> ServerPartE Response
     servePackageReportTests dpath = do
         pkgid <- packageInPath dpath

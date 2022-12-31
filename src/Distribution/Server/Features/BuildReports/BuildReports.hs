@@ -4,18 +4,21 @@
 module Distribution.Server.Features.BuildReports.BuildReports (
     BuildReport(..),
     BuildReports(..),
+    BuildReports_v3,
     BuildReportId(..),
     PkgBuildReports(..),
     BuildLog(..),
+    TestLog(..),
     BuildCovg(..),
     BuildStatus(..),
-    addRptLogCovg,
+    addRptLogTestCovg,
     lookupReportCovg,
     emptyReports,
     emptyPkgReports,
     addReport,
     deleteReport,
     setBuildLog,
+    setTestLog,
     lookupReport,
     lookupPackageReports,
     unsafeSetReport,
@@ -80,13 +83,15 @@ instance Parsec BuildReportId where
 newtype BuildLog = BuildLog BlobStorage.BlobId
   deriving (Eq, Typeable, Show, MemSize)
 
+newtype TestLog = TestLog BlobStorage.BlobId
+  deriving (Eq, Typeable, Show, MemSize)
 
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
     -- perhaps deserving its own data structure (SubmittedReport?)
     -- When a report was submitted is very useful information.
     -- also, use IntMap instead of Map BuildReportId?
-    reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg )),
+    reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg )),
     -- one more than the maximum report id used
     nextReportId :: !BuildReportId,
     buildStatus :: !BuildStatus,
@@ -111,26 +116,26 @@ emptyReports = BuildReports {
     reportsIndex = Map.empty
 }
 
-lookupReport :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog)
+lookupReport :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe TestLog)
 lookupReport pkgid reportId buildReports = remCvg.Map.lookup reportId . reports =<< Map.lookup pkgid (reportsIndex buildReports)
     where
         remCvg Nothing = Nothing
-        remCvg (Just (brpt,blog,_)) = Just (brpt,blog)
+        remCvg (Just (brpt,blog,btest,_)) = Just (brpt,blog,btest)
 
-lookupPackageReports :: PackageId -> BuildReports -> [(BuildReportId, (BuildReport, Maybe BuildLog))]
+lookupPackageReports :: PackageId -> BuildReports -> [(BuildReportId, (BuildReport, Maybe BuildLog, Maybe TestLog))]
 lookupPackageReports pkgid buildReports = case Map.lookup pkgid (reportsIndex buildReports) of
     Nothing -> []
     Just rs -> map removeCovg $ Map.toList (reports rs)
     where
-        removeCovg (brid,(brpt,blog,_)) = (brid,(brpt,blog))
+        removeCovg (brid,(brpt,blog,btest,_)) = (brid,(brpt,blog,btest))
 
 -------------------------
 -- PackageIds should /not/ have empty Versions. Caller should ensure this.
-addReport :: PackageId -> (BuildReport, Maybe BuildLog) -> BuildReports -> (BuildReports, BuildReportId)
-addReport pkgid (brpt,blog) buildReports =
+addReport :: PackageId -> (BuildReport, Maybe BuildLog, Maybe TestLog) -> BuildReports -> (BuildReports, BuildReportId)
+addReport pkgid (brpt,blog,btest) buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         reportId    = nextReportId pkgReports
-        pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
+        pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,btest,Nothing) (reports pkgReports)
                                       , nextReportId = incrementReportId reportId
                                       , buildStatus = buildStatus pkgReports
                                       , runTests = runTests pkgReports }
@@ -139,7 +144,7 @@ addReport pkgid (brpt,blog) buildReports =
 unsafeSetReport :: PackageId -> BuildReportId -> (BuildReport, Maybe BuildLog) -> BuildReports -> BuildReports
 unsafeSetReport pkgid reportId (brpt,blog) buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
-        pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
+        pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing,Nothing) (reports pkgReports)
                                       , nextReportId = max (incrementReportId reportId) (nextReportId pkgReports)
                                       , buildStatus = buildStatus pkgReports
                                       , runTests = runTests pkgReports }
@@ -158,11 +163,19 @@ setBuildLog pkgid reportId buildLog buildReports = case Map.lookup pkgid (report
     Nothing -> Nothing
     Just pkgReports -> case Map.lookup reportId (reports pkgReports) of
         Nothing -> Nothing
-        Just (rlog, _, covg) -> let pkgReports' = pkgReports { reports = Map.insert reportId (rlog, buildLog, covg) (reports pkgReports) }
+        Just (rlog, _, btest, covg) -> let pkgReports' = pkgReports { reports = Map.insert reportId (rlog, buildLog, btest, covg) (reports pkgReports) }
                          in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
-addRptLogCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe BuildCovg ) -> BuildReports -> (BuildReports, BuildReportId)
-addRptLogCovg pkgid report buildReports =
+setTestLog :: PackageId -> BuildReportId -> Maybe TestLog -> BuildReports -> Maybe BuildReports
+setTestLog pkgid reportId testLog buildReports = case Map.lookup pkgid (reportsIndex buildReports) of
+    Nothing -> Nothing
+    Just pkgReports -> case Map.lookup reportId (reports pkgReports) of
+        Nothing -> Nothing
+        Just (rlog, blog, _, covg) -> let pkgReports' = pkgReports { reports = Map.insert reportId (rlog, blog, testLog, covg) (reports pkgReports) }
+                         in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
+
+addRptLogTestCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg ) -> BuildReports -> (BuildReports, BuildReportId)
+addRptLogTestCovg pkgid report buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
@@ -171,7 +184,7 @@ addRptLogCovg pkgid report buildReports =
                                       , runTests = runTests pkgReports }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
-lookupReportCovg :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg )
+lookupReportCovg :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg )
 lookupReportCovg pkgid reportId buildReports = Map.lookup reportId . reports =<< Map.lookup pkgid (reportsIndex buildReports)
 
 setFailStatus :: PackageId -> Bool -> BuildReports -> BuildReports
@@ -204,15 +217,15 @@ lookupFailCount pkgid buildReports = do
   rp <- Map.lookup pkgid (reportsIndex buildReports)
   return $ buildStatus rp
 
-lookupLatestReport :: PackageId -> BuildReports -> Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg)
+lookupLatestReport :: PackageId -> BuildReports -> Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg)
 lookupLatestReport pkgid buildReports = do
   rp <- Map.lookup pkgid (reportsIndex buildReports)
   let rs = reports rp
-  (maxKey, (rep, buildLog, covg)) <-
+  (maxKey, (rep, buildLog, testLog, covg)) <-
     if Map.null rs
       then Nothing
       else Just $ Map.findMax rs
-  Just (maxKey, rep, buildLog, covg)
+  Just (maxKey, rep, buildLog, testLog, covg)
 
 lookupRunTests :: PackageId -> BuildReports -> Bool
 lookupRunTests pkgid buildReports = maybe True runTests $ Map.lookup pkgid (reportsIndex buildReports)
@@ -260,6 +273,8 @@ instance Migrate BuildLog where
     migrate (BuildLog_v0 bl) = BuildLog (migrate bl)
 
 deriveSafeCopy 2 'extension ''BuildLog
+
+deriveSafeCopy 0 'base ''TestLog
 
 -- note: if the set of report ids is [1, 2, 3], then nextReportId = 4
 -- after calling deleteReport for 3, the set is [1, 2] and nextReportId is still 4.
@@ -361,8 +376,13 @@ instance Migrate PkgBuildReports_v3 where
 
 instance Migrate PkgBuildReports where
      type MigrateFrom PkgBuildReports = PkgBuildReports_v3
-     migrate (PkgBuildReports_v3 m n c) =
-         PkgBuildReports m n c True
+     migrate (PkgBuildReports_v3 m n o) =
+         PkgBuildReports (migrateMap m) n o True
+       where
+         migrateMap :: Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg)
+                    -> Map BuildReportId (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg)
+         migrateMap = Map.mapKeys id
+                    . Map.map (\(br, l, c) -> (br, l, Nothing, c))
 
 data BuildReports_v0 = BuildReports_v0
                          !(Map.Map PackageIdentifier_v0 PkgBuildReports_v0)

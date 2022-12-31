@@ -611,6 +611,7 @@ instance Migrate InstallOutcome where
 data BuildFiles = BuildFiles {
   reportContent :: Maybe String,
   logContent :: Maybe String,
+  testContent :: Maybe String,
   coverageContent :: Maybe String,
   buildFail :: Bool
 } deriving Show
@@ -620,6 +621,7 @@ instance Data.Aeson.FromJSON BuildFiles where
     BuildFiles
       <$> o .:? "report"
       <*> o .:? "log"
+      <*> o .:? "test"
       <*> o .:? "coverage"
       <*> o .: "buildFail"
 
@@ -627,6 +629,7 @@ instance Data.Aeson.ToJSON BuildFiles where
   toJSON p = object [
     "report"    .= reportContent p,
     "log"       .= logContent  p,
+    "test"      .= testContent p,
     "coverage"  .= coverageContent  p,
     "buildFail" .= buildFail  p ]
 
