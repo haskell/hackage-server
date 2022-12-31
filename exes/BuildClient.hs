@@ -362,6 +362,7 @@ data DocInfo = DocInfo {
     docInfoPackage     :: PackageIdentifier
   , docInfoHasDocs     :: HasDocs
   , docInfoIsCandidate :: Bool
+  , docInfoRunTests    :: Bool
   }
 
 docInfoPackageName :: DocInfo -> PackageName
@@ -410,8 +411,8 @@ getDocumentationStats verbosity opts config pkgs = do
         (Just (perrs, packages), Just (cerrs, candidates)) -> do
           liftIO . when (not . null $ perrs) . putStrLn $ "failed package json parses: " ++ show perrs
           liftIO . when (not . null $ cerrs) . putStrLn $ "failed candidate json parses: " ++ show cerrs
-          packages'   <- liftIO $ mapM checkFailed packages
-          candidates' <- liftIO $ mapM checkFailed candidates
+          let packages'   = map checkFailed packages
+              candidates' = map checkFailed candidates
           return $ map (setIsCandidate False) packages'
                 ++ map (setIsCandidate True)  candidates'
   where
@@ -447,21 +448,23 @@ getDocumentationStats verbosity opts config pkgs = do
         addEnd (Just pkgs') Nothing  uri = uri <//> "docs.json" ++ "?pkgs=" ++ (getQry pkgs')
         addEnd Nothing      Nothing  uri = uri <//> "docs.json"
 
-    checkFailed :: BR.PkgDetails -> IO (PackageIdentifier, HasDocs)
-    checkFailed pkgDetails = do
+    checkFailed :: BR.PkgDetails -> (PackageIdentifier, HasDocs, Bool)
+    checkFailed pkgDetails =
       let pkgId = BR.pkid pkgDetails
-      case (BR.docs pkgDetails, BR.failCnt pkgDetails) of
-        (True , _)                        -> return (pkgId, HasDocs)
-        (False, Just BR.BuildOK) -> return (pkgId, DocsFailed)
-        (False, Just (BR.BuildFailCnt a))
-            | a >= bo_buildAttempts opts  -> return (pkgId, DocsFailed)
-        (False, _)                        -> return (pkgId, DocsNotBuilt)
+          hasDocs = case (BR.docs pkgDetails, BR.failCnt pkgDetails) of
+            (True , _)                        -> HasDocs
+            (False, Just BR.BuildOK)          -> DocsFailed
+            (False, Just (BR.BuildFailCnt a))
+                | a >= bo_buildAttempts opts  -> DocsFailed
+            (False, _)                        -> DocsNotBuilt
+      in  (pkgId, hasDocs, fromMaybe True $ BR.runTests pkgDetails)
 
-    setIsCandidate :: Bool -> (PackageIdentifier, HasDocs) -> DocInfo
-    setIsCandidate isCandidate (pId, hasDocs) = DocInfo {
+    setIsCandidate :: Bool -> (PackageIdentifier, HasDocs, Bool) -> DocInfo
+    setIsCandidate isCandidate (pId, hasDocs, runTests) = DocInfo {
         docInfoPackage     = pId
       , docInfoHasDocs     = hasDocs
       , docInfoIsCandidate = isCandidate
+      , docInfoRunTests    = runTests
       }
 
 
@@ -473,6 +476,9 @@ buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
     notice verbosity "Initialising"
+
+    handleDoesNotExist () $
+        removeDirectoryRecursive $ installDirectory opts
 
     updatePackageIndex
     -- Due to caching sometimes the package repository state may lag behind the
@@ -570,7 +576,7 @@ processPkg verbosity opts config docInfo = do
     let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport == Just True
 
     -- Run Tests if installOk, Run coverage is Tests runs
-    (testOutcome, hpcLoc)   <- case installOk of
+    (testOutcome, hpcLoc)   <- case installOk && docInfoRunTests docInfo of
       True  -> testPackage verbosity opts docInfo
       False -> return (Nothing, Nothing)
     coverageFile <- mapM (coveragePackage verbosity opts docInfo) hpcLoc
@@ -591,7 +597,8 @@ processPkg verbosity opts config docInfo = do
       createDirectoryIfMissing True $ resultsDirectory opts
       notice verbosity $ "Writing cabal.project for " ++ display (docInfoPackage docInfo)
       let projectFile = installDirectory opts </> "cabal.project"
-      writeFile projectFile $ "packages: " ++ show (docInfoTarGzURI config docInfo)
+      cabal opts "unpack" [show (docInfoTarGzURI config docInfo)] Nothing
+      writeFile projectFile $ "packages: */*.cabal" -- ++ show (docInfoTarGzURI config docInfo)
 
     setTestOutcome :: String -> [String] -> [String]
     setTestOutcome _ []                  = []

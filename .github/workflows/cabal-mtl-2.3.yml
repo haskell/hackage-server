@@ -1,0 +1,63 @@
+name: Cabal build with mtl-2.3
+on:
+  push:
+    branches:
+      - master
+      - ci*
+  pull_request:
+    branches:
+      - master
+      - ci*
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build with mtl-2.3
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+
+    - name: Environment settings based on the Haskell setup
+      run: |
+        GHC_VER=$(ghc --numeric-version)
+        CABAL_VER=$(cabal --numeric-version)
+        echo "GHC_VER   = ${GHC_VER}"
+        echo "CABAL_VER = ${CABAL_VER}"
+        echo "GHC_VER=${GHC_VER}"       >> "${GITHUB_ENV}"
+        echo "CABAL_VER=${CABAL_VER}"   >> "${GITHUB_ENV}"
+
+    # Brotli is already installed on ubuntu-22.04
+    # - name: Install the brotli library
+    #   run: |
+    #     sudo apt-get update
+    #     sudo apt-get install -y libbrotli-dev
+
+    - uses: actions/checkout@v3
+
+    - name: Cache build
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cabal
+          dist-newstyle
+        key: cabal-${{ env.CABAL_VER }}-ghc-${{ env.GHC_VER }}-commit-${{ github.sha }}
+        restore-keys: |
+          cabal-${{ env.CABAL_VER }}-ghc-${{ env.GHC_VER }}-commit-
+
+    - name: Prepare cabal
+      run: |
+        cabal update
+
+    - name: Build dependencies w/o tests with mtl-2.3
+      # 2022-12-30: 'transformers >= 0.6' is needed because of happstack-server
+      run: |
+        cabal build --dependencies-only -O0 --disable-tests --constraint 'mtl >= 2.3.1' --constraint 'transformers >= 0.6' --allow-newer='Cabal:mtl' --allow-newer='Cabal:transformers'
+
+    - name: Build w/o tests with mtl-2.3
+      # 2022-12-30: 'transformers >= 0.6' is needed because of happstack-server
+      run: |
+        cabal build -O0 --disable-tests --constraint 'mtl >= 2.3.1' --constraint 'transformers >= 0.6' --allow-newer='Cabal:mtl' --allow-newer='Cabal:transformers'
