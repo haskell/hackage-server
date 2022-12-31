@@ -207,10 +207,6 @@ writeLegacy users =
 --
 -- This used to live in Distribution.Server.Util.Index.
 --
--- NOTE: In order to mitigate the effects of
---       https://github.com/haskell/cabal/issues/4624
---       as a hack, this operation filters out .cabal files
---       with cabal-version >= 2.
 writeLegacyAux :: Package pkg
                => (pkg -> ByteString)
                -> (pkg -> Tar.Entry -> Tar.Entry)
@@ -218,21 +214,16 @@ writeLegacyAux :: Package pkg
                -> PackageIndex pkg
                -> ByteString
 writeLegacyAux externalPackageRep updateEntry extras =
-  Tar.write . (extras++) . mapMaybe entry . PackageIndex.allPackages
+  Tar.write . (extras++) . map entry . PackageIndex.allPackages
   where
     -- entry :: pkg -> Maybe Tar.Entry
-    entry pkg
-      | specVerGEq2              = Nothing
-      | otherwise                = Just
-                                 . updateEntry pkg
-                                 . Tar.fileEntry tarPath
-                                 $ cabalText
+    entry pkg =
+                  updateEntry pkg
+                . Tar.fileEntry tarPath
+                $ cabalText
       where
         Right tarPath = Tar.toTarPath False fileName
         name = unPackageName $ packageName pkg
         fileName = name </> display (packageVersion pkg)
                         </> name <.> "cabal"
-
-        -- TODO: Hack-alert! We want to do this in a more elegant way.
-        specVerGEq2 = maybe False (>= CabalSpecV2_0) $ parseSpecVerLazy cabalText
         cabalText = externalPackageRep pkg
