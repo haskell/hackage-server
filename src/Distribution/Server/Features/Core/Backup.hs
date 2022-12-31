@@ -40,7 +40,7 @@ import qualified Data.Foldable as Foldable
 import Data.List
 import Data.List.NonEmpty (toList)
 import Data.Ord (comparing)
-import Control.Monad.State
+import Control.Monad
 import qualified Distribution.Server.Util.GZip as GZip
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BSC

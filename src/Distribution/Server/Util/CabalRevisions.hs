@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
@@ -39,6 +40,9 @@ import Distribution.Version
 import Distribution.Compiler (CompilerFlavor)
 import Distribution.FieldGrammar (prettyFieldGrammar)
 import Distribution.Fields.Pretty (PrettyField (..), showFields)
+#if MIN_VERSION_Cabal(3,7,0)
+import Distribution.Fields.Pretty (pattern NoComment)
+#endif
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
 import Distribution.PackageDescription.FieldGrammar (sourceRepoFieldGrammar)
@@ -340,7 +344,7 @@ checkPackageDescriptions checkXRevision
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
   changesOk "bug-reports" fromShortText bugReportsA bugReportsB
-  changesOkList changesOk "source-repository" (showFields (const []) . (:[]) . ppSourceRepo)
+  changesOkList changesOk "source-repository" (showFields noComment . (:[]) . ppSourceRepo)
             sourceReposA sourceReposB
   changesOk "synopsis"    fromShortText synopsisA synopsisB
   changesOk "description" fromShortText descriptionA descriptionB
@@ -365,6 +369,12 @@ checkPackageDescriptions checkXRevision
 
   when checkXRevision $ checkRevision customFieldsPDA customFieldsPDB
   checkCuration customFieldsPDA customFieldsPDB
+  where
+#if MIN_VERSION_Cabal(3,7,0)
+    noComment _ = NoComment
+#else
+    noComment _ = []
+#endif
 
 checkSpecVersionRaw :: Check PackageDescription
 checkSpecVersionRaw pdA pdB
@@ -625,10 +635,20 @@ checkExecutable componentName
 
 checkTestSuite :: ComponentName -> Check TestSuite
 checkTestSuite componentName
+#if MIN_VERSION_Cabal(3,7,0)
+               (TestSuite _nameA interfaceA buildInfoA testGeneratorsA)
+               (TestSuite _nameB interfaceB buildInfoB testGeneratorsB)
+#else
                (TestSuite _nameA interfaceA buildInfoA)
-               (TestSuite _nameB interfaceB buildInfoB) = do
+               (TestSuite _nameB interfaceB buildInfoB)
+#endif
+  = do
   checkSame "Cannot change test-suite type" interfaceA interfaceB
   checkBuildInfo componentName buildInfoA buildInfoB
+#if MIN_VERSION_Cabal(3,7,0)
+  -- @test-generators@
+  checkSame "Cannot change test-generators" testGeneratorsA testGeneratorsB
+#endif
 
 checkBenchmark :: ComponentName -> Check Benchmark
 checkBenchmark componentName
@@ -690,6 +710,7 @@ changesOkSet what render old new = do
         logChange (Change Normal ("removed " ++ what) (renderSet removed) "")
     unless (Set.null added) $
         logChange (Change Normal ("added " ++ what) "" (renderSet added))
+    return ()
   where
     added   = new Set.\\ old
     removed = old Set.\\ new

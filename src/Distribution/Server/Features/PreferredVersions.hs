@@ -7,6 +7,7 @@ module Distribution.Server.Features.PreferredVersions (
 
     PreferredInfo(..),
     VersionStatus(..),
+    getVersionStatus,
     classifyVersions,
 
     PreferredRender(..),
