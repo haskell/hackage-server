@@ -29,6 +29,7 @@ import Distribution.Server.Users.Types
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
+import Distribution.Pretty (prettyShow)
 import Distribution.Utils.ShortText (fromShortText)
 
 import Control.Concurrent
@@ -268,7 +269,7 @@ listFeature CoreFeature{..}
             -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
           , itemVotes      = votes
           , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
-          , itemLastVersion = maybe "" show $ gpdScannedVersion desc
+          , itemLastVersion = prettyShow $ pkgVersion $ pkgInfoId pkg
           }
 
     ------------------------------
