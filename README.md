@@ -8,12 +8,7 @@ This is the `hackage-server` code. This is what powers <http://hackage.haskell.o
 
 ## Installing dependencies
 
-`hackage-server` depends on `icu` and `zlib`. You'll also need `libbrotli-dev` for enabling tests.
-
-ICU stands for "International Components for Unicode". The `icu4c` is a set
-of libraries that provide Unicode and Globalization support.
-The [text-icu](https://hackage.haskell.org/package/text-icu) Haskell package
-uses the [icu4c](http://icu-project.org/apiref/icu4c/) library to build.
+`hackage-server` depends on `libgd` and `zlib`. You'll also need `libbrotli-dev` for enabling tests.
 
 ### [`nix-shell`](https://nixos.org/manual/nix/stable/command-ref/nix-shell.html)
 
@@ -31,35 +26,26 @@ If you have the [Nix package manager](https://nixos.org/) installed, the easiest
 You can also install dependencies manually via your operating system's package
 manager.
 
-#### ICU
+#### Libgd
 
-You'll need to do the following to get `hackage-server`'s dependency `text-icu` to build:
+You'll need to do the following to get `hackage-server`'s dependency `hs-captcha` (and transitively `gd`) to build:
 
   - Mac OS X
 
-        brew install icu4c
-        brew link icu4c --force
-
-    Besides that, you might also need to include these in the `cabal.project.local` you created:
-
-    ```
-    package text-icu
-      extra-include-dirs: /usr/local/opt/icu4c/include
-      extra-lib-dirs:     /usr/local/opt/icu4c/lib
-    ```
+        brew install libgd
 
   - Ubuntu/Debian
 
         sudo apt-get update
-        sudo apt-get install unzip libicu-dev
+        sudo apt-get install unzip libgd-dev
 
   - Fedora/CentOS
 
-        sudo dnf install unzip libicu-devel
+        sudo dnf install unzip libgd-devel
 
   - Nix/NixOS
 
-        nix-shell --packages icu
+        nix-shell --packages gd
 
 #### libbrotli
 
