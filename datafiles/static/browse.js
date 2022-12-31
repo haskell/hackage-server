@@ -133,6 +133,7 @@ const replaceRows = (response) => {
     tr.appendChild(createSimpleText(row.description));
     tr.appendChild(createTags(row.tags));
     tr.appendChild(createLastUpload(row.lastUpload));
+    tr.appendChild(createSimpleText(row.lastVersion));
     tr.appendChild(createMaintainers(row.maintainers));
     l.appendChild(tr);
   }

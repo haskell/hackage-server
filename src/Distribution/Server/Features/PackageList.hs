@@ -29,6 +29,7 @@ import Distribution.Server.Users.Types
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
+import Distribution.Pretty (prettyShow)
 import Distribution.Utils.ShortText (fromShortText)
 
 import Control.Concurrent
@@ -85,18 +86,20 @@ data PackageItem = PackageItem {
     -- How many benchmarks (>=0) this package has.
     itemNumBenchmarks :: !Int,
     -- Last upload date
-    itemLastUpload :: !UTCTime
+    itemLastUpload :: !UTCTime,
+    -- Last version
+    itemLastVersion :: !String
     -- Hotness: a more heuristic way to sort packages. presently non-existent.
   --itemHotness :: Int
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k l) = memSize12 a b c d e f g h i j k l
+    memSize (PackageItem a b c d e f g h i j k l o) = memSize13 a b c d e f g h i j k l o
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" []
-                                   0 0 False 0 0 0 (UTCTime (toEnum 0) 0)
+                                   0 0 False 0 0 0 (UTCTime (toEnum 0) 0) ""
 
 
 initListFeature :: ServerEnv
@@ -249,6 +252,7 @@ listFeature CoreFeature{..}
     constructItem :: PkgInfo -> IO (PackageName, PackageItem)
     constructItem pkg = do
         let pkgname = packageName pkg
+            desc = pkgDesc pkg
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
@@ -257,7 +261,7 @@ listFeature CoreFeature{..}
         deprs <- queryGetDeprecatedFor pkgname
         maintainers <- queryUserGroup (maintainersGroup pkgname)
 
-        return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
+        return $ (,) pkgname $ (updateDescriptionItem desc $ emptyPackageItem pkgname) {
             itemTags       = tags
           , itemMaintainer = map (userIdToName users) (UserIdSet.toList maintainers)
           , itemDeprecated = deprs
@@ -265,6 +269,7 @@ listFeature CoreFeature{..}
             -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
           , itemVotes      = votes
           , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
+          , itemLastVersion = prettyShow $ pkgVersion $ pkgInfoId pkg
           }
 
     ------------------------------
