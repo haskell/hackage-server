@@ -32,6 +32,7 @@ import Data.ByteString.Lazy (toStrict)
 import Data.String (fromString)
 import Data.Maybe
 import Distribution.Compiler ( CompilerId(..) )
+import Data.Aeson (toJSON)
 
 
 -- TODO:
@@ -48,6 +49,7 @@ data ReportsFeature = ReportsFeature {
     queryTestLog        :: forall m. MonadIO m => TestLog   -> m Resource.TestLog,
     pkgReportDetails    :: forall m. MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails,
     queryLastReportStats:: forall m. MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg)),
+    queryRunTests       :: forall m. MonadIO m =>  PackageId -> m Bool,
     reportsResource :: ReportsResource
 }
 
@@ -61,6 +63,7 @@ data ReportsResource = ReportsResource {
     reportsLog  :: Resource,
     reportsTest :: Resource,
     reportsReset:: Resource,
+    reportsTestsEnabled :: Resource,
     reportsListUri :: String -> PackageId -> String,
     reportsPageUri :: String -> PackageId -> BuildReportId -> String,
     reportsLogUri  :: PackageId -> BuildReportId -> String
@@ -122,6 +125,7 @@ buildReportsFeature name
             , reportsLog
             , reportsTest
             , reportsReset
+            , reportsTestsEnabled
             ]
       , featureState = [abstractAcidStateComponent reportsState]
       }
@@ -142,6 +146,13 @@ buildReportsFeature name
                 resourceDesc  = [ (GET, "Reset fail count and trigger rebuild")
                                  ]
               , resourceGet   = [ ("", resetBuildFails) ]
+              }
+          , reportsTestsEnabled = (extendResourcePath "/reports/testsEnabled/" corePackagePage) {
+                resourceDesc  = [ (GET, "Get reports test settings")
+                                , (POST, "Set reports test settings")
+                                ]
+              , resourceGet   = [ ("json", getReportsTestsEnabled) ]
+              , resourcePost  = [ ("", postReportsTestsEnabled) ]
               }
           , reportsPage = (extendResourcePath "/reports/:id.:format" corePackagePage) {
                 resourceDesc   = [ (GET, "Get a specific build report")
@@ -217,12 +228,13 @@ buildReportsFeature name
     pkgReportDetails (pkgid, docs) = do
       failCnt   <- queryState reportsState $ LookupFailCount pkgid
       latestRpt <- queryState reportsState $ LookupLatestReport pkgid
+      runTests  <- fmap Just . queryState reportsState $ LookupRunTests pkgid
       (time, ghcId) <- case latestRpt of
         Nothing -> return (Nothing,Nothing)
         Just (_, brp, _, _, _) -> do
           let (CompilerId _ vrsn) = compiler brp
           return (time brp, Just vrsn)
-      return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId)
+      return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId runTests)
 
     queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg))
     queryLastReportStats pkgid = do
@@ -231,6 +243,8 @@ buildReportsFeature name
         Nothing -> return Nothing
         Just (rptId, rpt, _, _, covg) -> return (Just (rptId, rpt, covg))
 
+    queryRunTests :: MonadIO m =>  PackageId -> m Bool
+    queryRunTests pkgid = queryState reportsState $ LookupRunTests pkgid
 
     ---------------------------------------------------------------------------
 
@@ -249,7 +263,7 @@ buildReportsFeature name
         Just logId -> do
           cacheControlWithoutETag [Public, maxAgeDays 30]
           toResponse <$> queryBuildLog logId
-    
+
     -- result: not-found error or text file
     serveTestLog :: DynamicPath -> ServerPartE Response
     serveTestLog dpath = do
@@ -365,6 +379,25 @@ buildReportsFeature name
       if success
           then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
           else errNotFound "Report not found" [MText "Build report does not exist"]
+
+    getReportsTestsEnabled :: DynamicPath -> ServerPartE Response
+    getReportsTestsEnabled dpath = do
+      pkgid <- packageInPath dpath
+      guardValidPackageId pkgid
+      guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
+      runTest <- queryRunTests pkgid
+      pure $ toResponse $ toJSON runTest
+
+    postReportsTestsEnabled :: DynamicPath -> ServerPartE Response
+    postReportsTestsEnabled dpath = do
+      pkgid <- packageInPath dpath
+      runTests <- body $ looks "runTests"
+      guardValidPackageId pkgid
+      guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
+      success <- updateState reportsState $ SetRunTests pkgid ("on" `elem` runTests)
+      if success
+          then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
+          else errNotFound "Package not found" [MText "Package does not exist"]
 
 
     putAllReports :: DynamicPath -> ServerPartE Response

@@ -94,6 +94,16 @@ setTestLog pkgid reportId testLog = do
         Nothing -> return False
         Just reports -> State.put reports >> return True
 
+lookupRunTests :: PackageId -> Query BuildReports (Bool)
+lookupRunTests pkgid = asks (BuildReports.lookupRunTests pkgid)
+
+setRunTests :: PackageId -> Bool -> Update BuildReports Bool
+setRunTests pkgid b = do
+    buildReports <- State.get
+    case BuildReports.setRunTests pkgid b buildReports of
+        Nothing      -> pure False
+        Just reports -> State.put reports >> pure True
+
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
                           ,'deleteReport
@@ -107,8 +117,8 @@ makeAcidic ''BuildReports ['addReport
                           ,'resetFailCount
                           ,'lookupFailCount
                           ,'lookupLatestReport
-
                           ,'addRptLogTestCovg
                           ,'setTestLog
+                          ,'lookupRunTests
+                          ,'setRunTests
                           ]
-

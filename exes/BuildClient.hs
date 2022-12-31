@@ -158,11 +158,22 @@ initialise opts uri auxUris
 -- | Parse the @00-index.cache@ file of the available package repositories.
 parseRepositoryIndices :: BuildOpts -> Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime)
 parseRepositoryIndices opts verbosity = do
-    let cabalDir = bo_stateDir opts </> "cached-tarballs"
     cacheDirs <- listDirectory cabalDir
-    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "01-index.tar") cacheDirs
+    indexFiles <- catMaybes <$> mapM findIdx cacheDirs
     M.unions <$> mapM readIndex indexFiles
   where
+    cabalDir = bo_stateDir opts </> "cached-tarballs"
+    findIdx dir = do
+       let index01 = cabalDir </> dir </> "01-index.tar"
+           index00 = cabalDir </> dir </> "00-index.tar"
+       b <- doesFileExist index01
+       if b
+         then return (Just index01)
+         else do
+           b2 <- doesFileExist index00
+           if b2
+             then return (Just index00)
+             else return Nothing
     readIndex fname = do
         bs <- BS.readFile fname
         let mkPkg pkg entry = (pkg, Tar.entryTime entry)
@@ -362,6 +373,7 @@ data DocInfo = DocInfo {
     docInfoPackage     :: PackageIdentifier
   , docInfoHasDocs     :: HasDocs
   , docInfoIsCandidate :: Bool
+  , docInfoRunTests    :: Bool
   }
   deriving Show
 
@@ -411,8 +423,8 @@ getDocumentationStats verbosity opts config pkgs = do
         (Just (perrs, packages), Just (cerrs, candidates)) -> do
           liftIO . when (not . null $ perrs) . putStrLn $ "failed package json parses: " ++ show perrs
           liftIO . when (not . null $ cerrs) . putStrLn $ "failed candidate json parses: " ++ show cerrs
-          packages'   <- liftIO $ mapM checkFailed packages
-          candidates' <- liftIO $ mapM checkFailed candidates
+          let packages'   = map checkFailed packages
+              candidates' = map checkFailed candidates
           return $ map (setIsCandidate False) packages'
                 ++ map (setIsCandidate True)  candidates'
   where
@@ -448,21 +460,23 @@ getDocumentationStats verbosity opts config pkgs = do
         addEnd (Just pkgs') Nothing  uri = uri <//> "docs.json" ++ "?pkgs=" ++ (getQry pkgs')
         addEnd Nothing      Nothing  uri = uri <//> "docs.json"
 
-    checkFailed :: BR.PkgDetails -> IO (PackageIdentifier, HasDocs)
-    checkFailed pkgDetails = do
+    checkFailed :: BR.PkgDetails -> (PackageIdentifier, HasDocs, Bool)
+    checkFailed pkgDetails =
       let pkgId = BR.pkid pkgDetails
-      case (BR.docs pkgDetails, BR.failCnt pkgDetails) of
-        (True , _)                        -> return (pkgId, HasDocs)
-        (False, Just BR.BuildOK) -> return (pkgId, DocsFailed)
-        (False, Just (BR.BuildFailCnt a))
-            | a >= bo_buildAttempts opts  -> return (pkgId, DocsFailed)
-        (False, _)                        -> return (pkgId, DocsNotBuilt)
+          hasDocs = case (BR.docs pkgDetails, BR.failCnt pkgDetails) of
+            (True , _)                        -> HasDocs
+            (False, Just BR.BuildOK)          -> DocsFailed
+            (False, Just (BR.BuildFailCnt a))
+                | a >= bo_buildAttempts opts  -> DocsFailed
+            (False, _)                        -> DocsNotBuilt
+      in  (pkgId, hasDocs, fromMaybe True $ BR.runTests pkgDetails)
 
-    setIsCandidate :: Bool -> (PackageIdentifier, HasDocs) -> DocInfo
-    setIsCandidate isCandidate (pId, hasDocs) = DocInfo {
+    setIsCandidate :: Bool -> (PackageIdentifier, HasDocs, Bool) -> DocInfo
+    setIsCandidate isCandidate (pId, hasDocs, runTests) = DocInfo {
         docInfoPackage     = pId
       , docInfoHasDocs     = hasDocs
       , docInfoIsCandidate = isCandidate
+      , docInfoRunTests    = runTests
       }
 
 
@@ -574,7 +588,7 @@ processPkg verbosity opts config docInfo = do
     let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport == Just True
 
     -- Run Tests if installOk, Run coverage is Tests runs
-    (testOutcome, hpcLoc, testfile)   <- case installOk of
+    (testOutcome, hpcLoc, testfile)   <- case installOk && docInfoRunTests docInfo of
       True  -> testPackage verbosity opts docInfo
       False -> return (Nothing, Nothing, Nothing)
     coverageFile <- mapM (coveragePackage verbosity opts docInfo) hpcLoc
