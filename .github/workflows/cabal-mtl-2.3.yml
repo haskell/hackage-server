@@ -30,11 +30,10 @@ jobs:
         echo "GHC_VER=${GHC_VER}"       >> "${GITHUB_ENV}"
         echo "CABAL_VER=${CABAL_VER}"   >> "${GITHUB_ENV}"
 
-    # Brotli is already installed on ubuntu-22.04
-    # - name: Install the brotli library
-    #   run: |
-    #     sudo apt-get update
-    #     sudo apt-get install -y libbrotli-dev
+    - name: Install necessary deps
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgd-dev libpng-dev libjpeg-dev libfontconfig-dev libfreetype-dev libexpat1-dev
 
     - uses: actions/checkout@v3
 

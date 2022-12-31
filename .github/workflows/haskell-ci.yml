@@ -71,7 +71,7 @@ jobs:
           "$HOME/.ghcup/bin/ghcup" install ghc "$HCVER" || (cat "$HOME"/.ghcup/logs/*.* && false)
           "$HOME/.ghcup/bin/ghcup" install cabal 3.6.2.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
           apt-get update
-          apt-get install -y libbrotli-dev
+          apt-get install -y libbrotli-dev libgd-dev libpng-dev libjpeg-dev libfontconfig-dev libfreetype-dev libexpat1-dev
         env:
           HCKIND: ${{ matrix.compilerKind }}
           HCNAME: ${{ matrix.compiler }}
