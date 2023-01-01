@@ -97,7 +97,7 @@ packagePageTemplate render
     , "doc"               $= docFieldsTemplate
     ] ++
     -- Miscellaneous things that could still stand to be refactored a bit.
-    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL mPkgId False
+    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL mPkgId hasQuickNav
     , "downloadSection"   $= Old.downloadSection render
     ]
     else
@@ -173,11 +173,8 @@ packagePageTemplate render
       ]
 
     docFieldsTemplate =
-      if isCandidate
-        then templateDict [ templateVal "baseUrl" docURL ]
-        else templateDict [ templateVal "hasQuickNavV1" hasQuickNavV1
-        , templateVal "baseUrl" docURL
-        ]
+      templateDict [ templateVal "hasQuickNavV1" hasQuickNavV1
+                   , templateVal "baseUrl" docURL ]
 
     -- Fields that may be empty, along with booleans to see if they're present.
     -- Access via "$package.optional.varname$"
