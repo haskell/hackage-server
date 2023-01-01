@@ -227,7 +227,7 @@
 
             $if(hasrdeps)$
             <tr>
-              <th>ReverseDependencies</th>
+              <th>Reverse Dependencies</th>
               <td>$rdeps$</td>
             </tr>
             <script>
