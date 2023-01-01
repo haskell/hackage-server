@@ -33,9 +33,10 @@ import Distribution.Server.Features.BuildReports        (initBuildReportsFeature
 import Distribution.Server.Features.PackageInfoJSON     (initPackageInfoJSONFeature)
 import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
 import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
--- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
+import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
 import Distribution.Server.Features.Tags                (initTagsFeature)
+import Distribution.Server.Features.AnalyticsPixels     (initAnalyticsPixelsFeature)
 import Distribution.Server.Features.Search              (initSearchFeature)
 import Distribution.Server.Features.PackageList         (initListFeature)
 import Distribution.Server.Features.HaskellPlatform     (initPlatformFeature)
@@ -127,10 +128,12 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initDownloadFeature env
     mkTagsFeature           <- logStartup "tags" $
                                initTagsFeature env
+    mkAnalyticsPixelsFeature <- logStartup "analytics pixels" $ 
+                               initAnalyticsPixelsFeature env
     mkVersionsFeature       <- logStartup "versions" $
                                initVersionsFeature env
-    -- mkReverseFeature     <- logStartup "reverse deps" $
-    --                         initReverseFeature env
+    mkReverseFeature     <- logStartup "reverse deps" $
+                            initReverseFeature env
     mkListFeature           <- logStartup "list" $
                                initListFeature env
     mkSearchFeature         <- logStartup "search" $
@@ -197,6 +200,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     userDetailsFeature <- mkUserDetailsFeature
                             usersFeature
                             coreFeature
+                            uploadFeature
 
     userSignupFeature <- mkUserSignupFeature
                            usersFeature
@@ -226,30 +230,6 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          uploadFeature
                          (candidatesCoreResource candidatesFeature)
 
-    documentationCoreFeature <- mkDocumentationCoreFeature
-                         (coreResource coreFeature)
-                         (map packageId . allPackages <$> queryGetPackageIndex coreFeature)
-                         uploadFeature
-                         tarIndexCacheFeature
-                         reportsCoreFeature
-                         usersFeature
-
-    documentationCandidatesFeature <- mkDocumentationCandidatesFeature
-                         (candidatesCoreResource candidatesFeature)
-                         (map packageId . allPackages <$> queryGetCandidateIndex candidatesFeature)
-                         uploadFeature
-                         tarIndexCacheFeature
-                         reportsCandidatesFeature
-                         usersFeature
-
-    downloadFeature <- mkDownloadFeature
-                         coreFeature
-                         usersFeature
-
-    votesFeature    <- mkVotesFeature
-                           coreFeature
-                           usersFeature
-
     tagsFeature     <- mkTagsFeature
                          coreFeature
                          uploadFeature
@@ -261,15 +241,44 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          tagsFeature
                          usersFeature
 
-    {- [reverse index disabled]
+    documentationCoreFeature <- mkDocumentationCoreFeature
+                         (coreResource coreFeature)
+                         (map packageId . allPackages <$> queryGetPackageIndex coreFeature)
+                         uploadFeature
+                         tarIndexCacheFeature
+                         reportsCoreFeature
+                         usersFeature
+                         versionsFeature
+
+    documentationCandidatesFeature <- mkDocumentationCandidatesFeature
+                         (candidatesCoreResource candidatesFeature)
+                         (map packageId . allPackages <$> queryGetCandidateIndex candidatesFeature)
+                         uploadFeature
+                         tarIndexCacheFeature
+                         reportsCandidatesFeature
+                         usersFeature
+                         versionsFeature
+
+    downloadFeature <- mkDownloadFeature
+                         coreFeature
+                         usersFeature
+
+    votesFeature    <- mkVotesFeature
+                           coreFeature
+                           usersFeature
+
+    analyticsPixelsFeature <- mkAnalyticsPixelsFeature
+                               coreFeature
+                               usersFeature
+                               uploadFeature
+
     reverseFeature  <- mkReverseFeature
                          coreFeature
                          versionsFeature
-                         -}
 
     listFeature     <- mkListFeature
                          coreFeature
-                         -- [reverse index disabled] reverseFeature
+                         reverseFeature
                          downloadFeature
                          votesFeature
                          tagsFeature
@@ -290,8 +299,9 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          uploadFeature
                          candidatesFeature
                          versionsFeature
-                         -- [reverse index disabled] reverseFeature
+                         reverseFeature
                          tagsFeature
+                         analyticsPixelsFeature
                          downloadFeature
                          votesFeature
                          listFeature
@@ -329,6 +339,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                         coreFeature
                         documentationCoreFeature
                         tagsFeature
+                        tarIndexCacheFeature
 
     packageFeedFeature <- mkPackageFeedFeature
                             coreFeature
@@ -342,7 +353,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                        listFeature
                        searchFeature
                        distroFeature
-                       
+                       candidatesFeature
+
     packageInfoJSONFeature <- mkPackageJSONFeature
                                 coreFeature
                                 versionsFeature
@@ -373,8 +385,9 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface documentationCandidatesFeature
          , getFeatureInterface downloadFeature
          , getFeatureInterface tagsFeature
+         , getFeatureInterface analyticsPixelsFeature
          , getFeatureInterface versionsFeature
-         -- [reverse index disabled] , getFeatureInterface reverseFeature
+         , getFeatureInterface reverseFeature
          , getFeatureInterface searchFeature
          , getFeatureInterface listFeature
          , getFeatureInterface platformFeature

@@ -44,7 +44,8 @@ module Distribution.Server.Packages.PackageIndex (
     -- ** Bulk queries
     allPackageNames,
     allPackages,
-    allPackagesByName
+    allPackagesByName,
+    allPackagesByNameNE
   ) where
 
 import Distribution.Server.Prelude hiding (lookup)
@@ -58,6 +59,7 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Foldable as Foldable
 import Data.List (groupBy, find, isInfixOf)
+import qualified Data.List.NonEmpty as NE
 import Data.SafeCopy
 
 import Distribution.Types.PackageName
@@ -255,6 +257,9 @@ allPackages (PackageIndex m) = concat (Map.elems m)
 --
 -- They are grouped by package name, case-sensitively.
 --
+allPackagesByNameNE :: Package pkg => PackageIndex pkg -> [NE.NonEmpty pkg]
+allPackagesByNameNE (PackageIndex m) = map NE.fromList $ Map.elems m
+
 allPackagesByName :: Package pkg => PackageIndex pkg -> [[pkg]]
 allPackagesByName (PackageIndex m) = Map.elems m
 

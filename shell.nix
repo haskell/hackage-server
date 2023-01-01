@@ -1,22 +1,35 @@
 let
   nixpkgs = builtins.fetchTarball {
-    # master on 2021-08-02
-    url = "https://github.com/NixOS/nixpkgs/archive/70e001f35cc363eb789ea0a04eff11b86c440ba3.tar.gz";
-    sha256 = "1mrhbcfa8kkx1qnax8xh41grinqiycl56wlws5vvrli8w0pzgl1r";
+    # master on 2022-05-14
+    url = "https://github.com/NixOS/nixpkgs/archive/1d370bd07399fb52cea6badfbffbc90ac9b0f8f0.tar.gz";
+    sha256 = "1ln4vwy185gwhbf4f8vanrlj4w4bhwrcsb2m8fnm99f4zqzvp7fs";
   };
 
   pkgs = import nixpkgs { config = { }; };
 
-in
-pkgs.mkShell {
+in 
+with pkgs; pkgs.mkShell rec {
   buildInputs = [
     # Haskell development
-    pkgs.cabal-install
-    pkgs.ghc
+    cabal-install
+    ghc
 
     # Dependencies
-    pkgs.icu
-    pkgs.zlib
-    pkgs.brotli
+    glibc
+    icu67
+    zlib
+    openssl
+    cryptodev
+    pkg-config
+    brotli
+
+    gd
+    libpng
+    libjpeg
+    fontconfig
+    freetype
+    expat
   ];
+
+  # LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 }

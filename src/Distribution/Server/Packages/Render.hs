@@ -149,6 +149,7 @@ doPackageRender users info = PackageRender
       = let mod_ix = mkForest $ exposedModules lib
                            -- Assumes that there is an HTML per reexport
                            ++ map moduleReexportName (reexportedModules lib)
+                           ++ virtualModules (libBuildInfo lib)
             sig_ix = mkForest $ signatures lib
             mkForest = moduleForest . map (\m -> (m, moduleHasDocs docindex m))
         in Just (ModSigIndex { modIndex = mod_ix, sigIndex = sig_ix })

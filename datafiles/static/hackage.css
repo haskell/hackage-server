@@ -991,6 +991,10 @@ table.fancy th, table.properties th {
   padding: 0.15em 0.45em;
 }
 
+table.fancy tr.even td {
+  background-color: #eee;
+}
+
 table.dataTable.compact.fancy tbody th,
 table.dataTable.compact.fancy tbody td {
     padding: 6px 10px;

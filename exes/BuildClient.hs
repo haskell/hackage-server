@@ -38,7 +38,7 @@ import System.Exit(exitFailure, ExitCode(..))
 import System.FilePath
 import System.Directory (canonicalizePath, createDirectoryIfMissing,
                          doesFileExist, doesDirectoryExist, getDirectoryContents,
-                         renameFile, removeFile, getAppUserDataDirectory,
+                         renameFile, removeFile,
                          createDirectory, removeDirectoryRecursive,
                          createDirectoryIfMissing, makeAbsolute)
 import System.Console.GetOpt
@@ -156,13 +156,24 @@ initialise opts uri auxUris
     readMissingOpt prompt = maybe (putStrLn prompt >> getLine) return
 
 -- | Parse the @00-index.cache@ file of the available package repositories.
-parseRepositoryIndices :: Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime)
-parseRepositoryIndices verbosity = do
-    cabalDir <- getAppUserDataDirectory "cabal/packages"
+parseRepositoryIndices :: BuildOpts -> Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime)
+parseRepositoryIndices opts verbosity = do
     cacheDirs <- listDirectory cabalDir
-    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "01-index.tar") cacheDirs
+    indexFiles <- catMaybes <$> mapM findIdx cacheDirs
     M.unions <$> mapM readIndex indexFiles
   where
+    cabalDir = bo_stateDir opts </> "cached-tarballs"
+    findIdx dir = do
+       let index01 = cabalDir </> dir </> "01-index.tar"
+           index00 = cabalDir </> dir </> "00-index.tar"
+       b <- doesFileExist index01
+       if b
+         then return (Just index01)
+         else do
+           b2 <- doesFileExist index00
+           if b2
+             then return (Just index00)
+             else return Nothing
     readIndex fname = do
         bs <- BS.readFile fname
         let mkPkg pkg entry = (pkg, Tar.entryTime entry)
@@ -362,7 +373,9 @@ data DocInfo = DocInfo {
     docInfoPackage     :: PackageIdentifier
   , docInfoHasDocs     :: HasDocs
   , docInfoIsCandidate :: Bool
+  , docInfoRunTests    :: Bool
   }
+  deriving Show
 
 docInfoPackageName :: DocInfo -> PackageName
 docInfoPackageName = pkgName . docInfoPackage
@@ -410,8 +423,8 @@ getDocumentationStats verbosity opts config pkgs = do
         (Just (perrs, packages), Just (cerrs, candidates)) -> do
           liftIO . when (not . null $ perrs) . putStrLn $ "failed package json parses: " ++ show perrs
           liftIO . when (not . null $ cerrs) . putStrLn $ "failed candidate json parses: " ++ show cerrs
-          packages'   <- liftIO $ mapM checkFailed packages
-          candidates' <- liftIO $ mapM checkFailed candidates
+          let packages'   = map checkFailed packages
+              candidates' = map checkFailed candidates
           return $ map (setIsCandidate False) packages'
                 ++ map (setIsCandidate True)  candidates'
   where
@@ -447,21 +460,23 @@ getDocumentationStats verbosity opts config pkgs = do
         addEnd (Just pkgs') Nothing  uri = uri <//> "docs.json" ++ "?pkgs=" ++ (getQry pkgs')
         addEnd Nothing      Nothing  uri = uri <//> "docs.json"
 
-    checkFailed :: BR.PkgDetails -> IO (PackageIdentifier, HasDocs)
-    checkFailed pkgDetails = do
+    checkFailed :: BR.PkgDetails -> (PackageIdentifier, HasDocs, Bool)
+    checkFailed pkgDetails =
       let pkgId = BR.pkid pkgDetails
-      case (BR.docs pkgDetails, BR.failCnt pkgDetails) of
-        (True , _)                        -> return (pkgId, HasDocs)
-        (False, Just BR.BuildOK) -> return (pkgId, DocsFailed)
-        (False, Just (BR.BuildFailCnt a))
-            | a >= bo_buildAttempts opts  -> return (pkgId, DocsFailed)
-        (False, _)                        -> return (pkgId, DocsNotBuilt)
+          hasDocs = case (BR.docs pkgDetails, BR.failCnt pkgDetails) of
+            (True , _)                        -> HasDocs
+            (False, Just BR.BuildOK)          -> DocsFailed
+            (False, Just (BR.BuildFailCnt a))
+                | a >= bo_buildAttempts opts  -> DocsFailed
+            (False, _)                        -> DocsNotBuilt
+      in  (pkgId, hasDocs, fromMaybe True $ BR.runTests pkgDetails)
 
-    setIsCandidate :: Bool -> (PackageIdentifier, HasDocs) -> DocInfo
-    setIsCandidate isCandidate (pId, hasDocs) = DocInfo {
+    setIsCandidate :: Bool -> (PackageIdentifier, HasDocs, Bool) -> DocInfo
+    setIsCandidate isCandidate (pId, hasDocs, runTests) = DocInfo {
         docInfoPackage     = pId
       , docInfoHasDocs     = hasDocs
       , docInfoIsCandidate = isCandidate
+      , docInfoRunTests    = runTests
       }
 
 
@@ -474,12 +489,15 @@ buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
     notice verbosity "Initialising"
 
+    handleDoesNotExist () $
+        removeDirectoryRecursive $ installDirectory opts
+
     updatePackageIndex
     -- Due to caching sometimes the package repository state may lag behind the
     -- documentation index. Consequently, we make sure that the packages we are
     -- going to build actually appear in the repository before building. See
     -- #543.
-    repoIndex <- parseRepositoryIndices verbosity
+    repoIndex <- parseRepositoryIndices opts verbosity
 
     pkgIdsHaveDocs <- getDocumentationStats verbosity opts config (Just pkgs)
     infoStats verbosity Nothing pkgIdsHaveDocs
@@ -570,9 +588,9 @@ processPkg verbosity opts config docInfo = do
     let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport == Just True
 
     -- Run Tests if installOk, Run coverage is Tests runs
-    (testOutcome, hpcLoc)   <- case installOk of
+    (testOutcome, hpcLoc, testfile)   <- case installOk && docInfoRunTests docInfo of
       True  -> testPackage verbosity opts docInfo
-      False -> return (Nothing, Nothing)
+      False -> return (Nothing, Nothing, Nothing)
     coverageFile <- mapM (coveragePackage verbosity opts docInfo) hpcLoc
 
     -- Modify test-outcome and rewrite report file.
@@ -581,7 +599,7 @@ processPkg verbosity opts config docInfo = do
     case bo_dryRun opts of
       True -> return ()
       False -> uploadResults verbosity config docInfo
-                                    mTgz mRpt logfile coverageFile installOk
+                                    mTgz mRpt logfile testfile coverageFile installOk
   where
     prepareTempBuildDir :: IO ()
     prepareTempBuildDir = do
@@ -591,7 +609,8 @@ processPkg verbosity opts config docInfo = do
       createDirectoryIfMissing True $ resultsDirectory opts
       notice verbosity $ "Writing cabal.project for " ++ display (docInfoPackage docInfo)
       let projectFile = installDirectory opts </> "cabal.project"
-      writeFile projectFile $ "packages: " ++ show (docInfoTarGzURI config docInfo)
+      cabal opts "unpack" [show (docInfoTarGzURI config docInfo)] Nothing
+      writeFile projectFile $ "packages: */*.cabal" -- ++ show (docInfoTarGzURI config docInfo)
 
     setTestOutcome :: String -> [String] -> [String]
     setTestOutcome _ []                  = []
@@ -630,7 +649,7 @@ coveragePackage verbosity opts docInfo loc = do
   return coverageFile
 
 
-testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (Maybe String, Maybe FilePath)
+testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (Maybe String, Maybe FilePath, Maybe FilePath)
 testPackage verbosity opts docInfo = do
   let pkgid = docInfoPackage docInfo
       testLogFile = (installDirectory opts) </> display pkgid <.> "test"
@@ -663,7 +682,7 @@ testPackage verbosity opts docInfo = do
       [ "Test results for " ++ display pkgid ++ ":"
       , testResultFile
       ]
-  return (testOutcome, hpcLoc)
+  return (testOutcome, hpcLoc, Just testResultFile)
 
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
@@ -855,9 +874,9 @@ tarGzDirectory dir = do
   where (containing_dir, nested_dir) = splitFileName dir
 
 uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath
-                    -> Maybe FilePath -> FilePath -> Maybe FilePath -> Bool -> IO ()
+                    -> Maybe FilePath -> FilePath -> Maybe FilePath -> Maybe FilePath -> Bool -> IO ()
 uploadResults verbosity config docInfo
-              mdocsTarballFile buildReportFile buildLogFile coverageFile installOk =
+              mdocsTarballFile buildReportFile buildLogFile testLogFile coverageFile installOk =
     httpSession verbosity "hackage-build" version $ do
       -- Make sure we authenticate to Hackage
       setAuthorityGen (provideAuthInfo (bc_srcURI config)
@@ -867,7 +886,7 @@ uploadResults verbosity config docInfo
         Just docsTarballFile ->
           putDocsTarball config docInfo docsTarballFile
 
-      putBuildFiles config docInfo buildReportFile buildLogFile coverageFile installOk
+      putBuildFiles config docInfo buildReportFile buildLogFile testLogFile coverageFile installOk
 
 putDocsTarball :: BuildConfig -> DocInfo -> FilePath -> HttpSession ()
 putDocsTarball config docInfo docsTarballFile =
@@ -875,13 +894,14 @@ putDocsTarball config docInfo docsTarballFile =
       "application/x-tar" (Just "gzip") docsTarballFile
 
 putBuildFiles :: BuildConfig -> DocInfo -> Maybe FilePath
-                    -> FilePath -> Maybe FilePath -> Bool -> HttpSession ()
-putBuildFiles config docInfo reportFile buildLogFile coverageFile installOk = do
+                    -> FilePath -> Maybe FilePath -> Maybe FilePath -> Bool -> HttpSession ()
+putBuildFiles config docInfo reportFile buildLogFile testLogFile coverageFile installOk = do
     reportContent   <- liftIO $ traverse readFile reportFile
     logContent      <- liftIO $ readFile buildLogFile
+    testContent     <- liftIO $ traverse readFile testLogFile
     coverageContent <- liftIO $ traverse readFile coverageFile
     let uri   = docInfoReports config docInfo
-        body  = encode $ BR.BuildFiles reportContent (Just logContent) coverageContent (not installOk)
+        body  = encode $ BR.BuildFiles reportContent (Just logContent) testContent coverageContent (not installOk)
     setAllowRedirects False
     (_, response) <- request Request {
       rqURI     = uri,

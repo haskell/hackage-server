@@ -81,6 +81,8 @@ mime x =
       , ("chs", "text/plain; charset=utf-8")
       , ("c",  " text/plain; charset=utf-8")
       , ("h",  " text/plain; charset=utf-8")
+      , ("text", "text/plain; charset=utf-8")
+      , ("txt", "text/plain; charset=utf-8")
       ]
 
 

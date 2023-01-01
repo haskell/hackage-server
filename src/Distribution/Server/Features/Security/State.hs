@@ -7,7 +7,8 @@
 module Distribution.Server.Features.Security.State where
 
 -- stdlib
-import Control.Monad.Reader
+import Control.Monad
+import Control.Monad.Reader (ask, asks)
 import Data.Acid
 import Data.Maybe
 import Data.SafeCopy

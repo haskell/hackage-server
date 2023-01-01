@@ -1,62 +1,51 @@
 # hackage-server
 
 [![Build Status](https://travis-ci.org/haskell/hackage-server.png?branch=master)](https://travis-ci.org/haskell/hackage-server)
-[![Build status](https://github.com/haskell/hackage-server/actions/workflows/ci.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/ci.yml)
+[![Build status](https://github.com/haskell/hackage-server/actions/workflows/haskell-ci.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/haskell-ci.yml)
+[![Build status](https://github.com/haskell/hackage-server/actions/workflows/nix-shell.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/nix-shell.yml)
 
 This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances. The `master` branch is suitable for general usage. Specific policy and documentation for the central hackage instance exists in the `central-server` branch.
 
 ## Installing dependencies
 
-`hackage-server` depends on `icu` and `zlib`. You'll also need `libbrotli-dev` for enabling tests.
+`hackage-server` depends on `libgd` and `zlib`. You'll also need `libbrotli-dev` for enabling tests.
 
-ICU stands for "International Components for Unicode". The `icu4c` is a set
-of libraries that provide Unicode and Globalization support.
-The [text-icu](https://hackage.haskell.org/package/text-icu) Haskell package
-uses the [icu4c](http://icu-project.org/apiref/icu4c/) library to build.
+### [`nix-shell`](https://nixos.org/manual/nix/stable/command-ref/nix-shell.html)
 
-### Nix shell
+If you have the [Nix package manager](https://nixos.org/) installed, the easiest way to run `hackage-server` is by using the `nix-shell`. It should be unnecessary to install any dependencies manually. In this repository:
 
-If you have the Nix package manager installed, the easiest way to obtain
-`hackage-server`'s dependencies is using the Nix shell:
+    nix-shell --pure
 
-    nix-shell
+    [nix-shell]$ cabal v2-run -- hackage-server init
 
-Note: `libbrotli-dev` has to be installed manually.
+    [nix-shell]$ cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
+    hackage-server: Ready! Point your browser at http://127.0.0.1:8080
 
 ### Manually
 
 You can also install dependencies manually via your operating system's package
 manager.
 
-#### ICU
+#### Libgd
 
-You'll need to do the following to get `hackage-server`'s dependency `text-icu` to build:
+You'll need to do the following to get `hackage-server`'s dependency `hs-captcha` (and transitively `gd`) to build:
 
   - Mac OS X
 
-        brew install icu4c
-        brew link icu4c --force
-
-    Besides that, you might also need to include these in the `cabal.project.local` you created:
-
-    ```
-    package text-icu
-      extra-include-dirs: /usr/local/opt/icu4c/include
-      extra-lib-dirs:     /usr/local/opt/icu4c/lib
-    ```
+        brew install libgd
 
   - Ubuntu/Debian
 
         sudo apt-get update
-        sudo apt-get install unzip libicu-dev
+        sudo apt-get install unzip libgd-dev
 
   - Fedora/CentOS
 
-        sudo dnf install unzip libicu-devel
+        sudo dnf install unzip libgd-devel
 
   - Nix/NixOS
 
-        nix-shell --packages icu
+        nix-shell --packages gd
 
 #### libbrotli
 
