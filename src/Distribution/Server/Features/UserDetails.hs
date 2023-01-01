@@ -330,6 +330,7 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
     handlerGetUserNameContactHtml :: DynamicPath -> ServerPartE Response
     handlerGetUserNameContactHtml dpath = do
       (uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
+      guardAuthorised_ [IsUserId uid, InGroup adminGroup]
       template <- getTemplate templates "user-details-form.html"
       udetails <- queryUserDetails uid
       showConfirmationOfSave <- not . null <$> queryString (lookBSs "showConfirmationOfSave")

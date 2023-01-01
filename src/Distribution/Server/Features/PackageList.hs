@@ -28,6 +28,7 @@ import Distribution.Server.Users.Types
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
+import Distribution.Pretty (prettyShow)
 import Distribution.Utils.ShortText (fromShortText)
 
 import Control.Concurrent
@@ -86,17 +87,20 @@ data PackageItem = PackageItem {
     itemNumBenchmarks :: !Int,
     -- Last upload date
     itemLastUpload :: !UTCTime,
-    -- Hotness: a more heuristic way to sort packages. presently non-existent.
-    itemHotness :: !Float
+    -- Hotness = recent downloads + stars + 2 * no rev deps
+    itemHotness :: !Float,    
+    -- Last version
+    itemLastVersion :: !String
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k l m n) = memSize11 a b c d e f g h i j (k, l, m, n)
+    memSize (PackageItem a b c d e f g h i j k l m n o) = memSize11 a b c d e f g h i j (k, l, m, n, o)
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" []
                                    0 0 0 False 0 0 0 (UTCTime (toEnum 0) 0) 0
+                                   0 0 0 False 0 0 0 (UTCTime (toEnum 0) 0) 0 ""
 
 
 initListFeature :: ServerEnv
@@ -251,6 +255,7 @@ listFeature CoreFeature{..}
     constructItem :: PkgInfo -> IO (PackageName, PackageItem)
     constructItem pkg = do
         let pkgname = packageName pkg
+            desc = pkgDesc pkg        
         intRevDirectCount <- revDirectCount pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
@@ -259,7 +264,7 @@ listFeature CoreFeature{..}
         deprs <- queryGetDeprecatedFor pkgname
         maintainers <- queryUserGroup (maintainersGroup pkgname)
 
-        return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
+        return $ (,) pkgname $ (updateDescriptionItem desc $ emptyPackageItem pkgname) {
             itemTags       = tags
           , itemMaintainer = map (userIdToName users) (UserIdSet.toList maintainers)
           , itemDeprecated = deprs
@@ -268,6 +273,7 @@ listFeature CoreFeature{..}
           , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
           , itemRevDepsCount = intRevDirectCount
           , itemHotness = votes + fromIntegral (cmFind pkgname downs) + fromIntegral intRevDirectCount * 2
+          , itemLastVersion = prettyShow $ pkgVersion $ pkgInfoId pkg
           }
 
     ------------------------------

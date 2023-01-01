@@ -6,7 +6,7 @@ module Distribution.Server.Features.Security.Backup (
   ) where
 
 -- stdlib
-import Control.Monad.State
+import Control.Monad.State (StateT, execStateT, modify)
 import Data.Time
 import Data.Version (Version(..), showVersion)
 import Text.CSV hiding (csv)
@@ -224,7 +224,7 @@ import_v1 = mapM_ fromRecord
     fromInfoRecord [strFileLength, strSHA256, strMD5] = do
       fileInfoLength <- parseRead "file length" strFileLength
       fileInfoSHA256 <- parseSHA "file SHA256" strSHA256
-      fileInfoMD5    <- Just `liftM` parseMD5  "file MD5" strMD5
+      fileInfoMD5    <- Just <$> parseMD5  "file MD5" strMD5
       return FileInfo{..}
     fromInfoRecord otherRecord =
       fail $ "Unexpected info record: " ++ show otherRecord

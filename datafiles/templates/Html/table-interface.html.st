@@ -28,7 +28,8 @@
                         <th><div style="min-width:160px">Description</div></th>
                         <th><div style="width:140px">Tags</div></th>
                         <th><div style="width:80px">Last U/L</div></th>
-                        <th><div style="width:100px">Maintainer</div></th>
+                        <th><div style="width:80px">Last Version</div></th>
+                        <th><div style="width:100px">Maintainers</div></th>
                     </tr>
                 </thead>
                 <tbody>

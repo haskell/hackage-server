@@ -1,9 +1,11 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -57,6 +59,10 @@ import Distribution.CabalSpecVersion
          ( CabalSpecVersion(CabalSpecV2_4) )
 import Distribution.Pretty
          ( Pretty(..), pretty, prettyShow )
+#if MIN_VERSION_Cabal(3,7,0)
+import Distribution.Fields.Pretty
+         ( pattern NoComment )
+#endif
 import qualified Text.PrettyPrint as Disp
 
 import Distribution.Parsec
@@ -311,7 +317,13 @@ intPair = do
 -- Pretty-printing
 
 show :: BuildReport -> String
-show = showFields (const []) . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
+show = showFields noComment . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
+  where
+#if MIN_VERSION_Cabal(3,7,0)
+    noComment _ = NoComment
+#else
+    noComment _ = []
+#endif
 
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
@@ -599,6 +611,7 @@ instance Migrate InstallOutcome where
 data BuildFiles = BuildFiles {
   reportContent :: Maybe String,
   logContent :: Maybe String,
+  testContent :: Maybe String,
   coverageContent :: Maybe String,
   buildFail :: Bool
 } deriving Show
@@ -608,6 +621,7 @@ instance Data.Aeson.FromJSON BuildFiles where
     BuildFiles
       <$> o .:? "report"
       <*> o .:? "log"
+      <*> o .:? "test"
       <*> o .:? "coverage"
       <*> o .: "buildFail"
 
@@ -615,6 +629,7 @@ instance Data.Aeson.ToJSON BuildFiles where
   toJSON p = object [
     "report"    .= reportContent p,
     "log"       .= logContent  p,
+    "test"      .= testContent p,
     "coverage"  .= coverageContent  p,
     "buildFail" .= buildFail  p ]
 
@@ -623,7 +638,8 @@ data PkgDetails = PkgDetails {
     docs        :: Bool,
     failCnt     :: Maybe BuildStatus,
     buildTime   :: Maybe UTCTime,
-    ghcId      :: Maybe Version
+    ghcId       :: Maybe Version,
+    runTests    :: Maybe Bool
 } deriving(Show)
 
 instance Data.Aeson.ToJSON PkgDetails where
@@ -632,7 +648,8 @@ instance Data.Aeson.ToJSON PkgDetails where
     "docs"       .= docs p,
     "failCnt"    .= failCnt p,
     "buildTime"  .= buildTime p,
-    "ghcId"      .= k (ghcId p) ]
+    "ghcId"      .= k (ghcId p),
+    "runTests"   .= runTests p ]
     where
       k (Just a) = Just $ DT.display a
       k Nothing = Nothing
@@ -645,6 +662,7 @@ instance Data.Aeson.FromJSON PkgDetails where
       <*> o .:? "failCnt"
       <*> o .:? "buildTime"
       <*> fmap parseVersion (o .:? "ghcId")
+      <*> o .: "runTests"
     where
       parseVersion :: Maybe String -> Maybe Version
       parseVersion Nothing = Nothing

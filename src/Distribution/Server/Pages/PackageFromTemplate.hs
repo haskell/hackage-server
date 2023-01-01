@@ -80,14 +80,14 @@ import Distribution.Server.Features.Html.HtmlUtilities
 --    votes it has.
 packagePageTemplate :: PackageRender
             -> Maybe TarIndex -> Maybe DocMeta -> Maybe BS.ByteString
-            -> URL -> [(DistroName, DistroPackageInfo)]
+            -> URL -> Maybe PackageId -> [(DistroName, DistroPackageInfo)]
             -> Maybe [PackageName]
             -> HtmlUtilities
             -> Bool
             -> [TemplateAttr]
 packagePageTemplate render
             mdocIndex mdocMeta mreadme
-            docURL distributions
+            docURL mPkgId distributions
             deprs utilities isCandidate =
   if isCandidate
     then
@@ -97,7 +97,7 @@ packagePageTemplate render
     , "doc"               $= docFieldsTemplate
     ] ++
     -- Miscellaneous things that could still stand to be refactored a bit.
-    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL False
+    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL mPkgId False
     , "downloadSection"   $= Old.downloadSection render
     ]
     else
@@ -107,7 +107,7 @@ packagePageTemplate render
     , "doc"               $= docFieldsTemplate
     ] ++
     -- Miscellaneous things that could still stand to be refactored a bit.
-    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNav
+    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL mPkgId hasQuickNav
     , "executables"       $= (commaList . map toHtml $ rendExecNames render)
     , "downloadSection"   $= Old.downloadSection render
     , "stability"         $= renderStability desc
@@ -166,8 +166,7 @@ packagePageTemplate render
       , templateVal "license"       (Old.rendLicense render)
       , templateVal "author"        (toHtml $ author desc)
       , templateVal "maintainer"    (Old.maintainField $ rendMaintainer render)
-      , templateVal "maintainerURL" (toHtml $
-        anchor ! [href $ "/package" </> pkgName </> "maintainers" ] << "package maintainers")
+      , templateVal "maintainerURL" (toHtml $ "/package" </> pkgName </> "maintainers")
       , templateVal "buildDepends"  (snd (Old.renderDependencies render))
       , templateVal "optional"      optionalPackageInfoTemplate
       , templateVal "candidateBanner" candidateBanner
@@ -339,7 +338,6 @@ candidatesPageTemplate cands candidates candidatesCore=
                          anchor ! [href $ corePackageIdUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
                     , toHtml $ ". " ++ fromShortText (synopsis desc)
                     ]
-
 
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.

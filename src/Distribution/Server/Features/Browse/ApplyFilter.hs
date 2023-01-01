@@ -63,6 +63,7 @@ sort isSearch sortColumn sortDirection =
             Description -> comparing itemDesc
             Tags -> comparing (S.toAscList . itemTags)
             LastUpload -> comparing itemLastUpload
+            LastVersion -> comparing itemLastVersion
             Maintainers -> comparing itemMaintainer
        in sortBy (maybeReverse comparer)
   where

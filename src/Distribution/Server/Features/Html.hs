@@ -76,6 +76,7 @@ import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
 import Distribution.PackageDescription (hasLibs)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
+import Distribution.Server.Pages.Group (listGroupCompact)
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -123,7 +124,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]
                    [ "maintain.html", "maintain-candidate.html"
-                   , "reports.html", "report.html"
+                   , "reports.html", "report.html", "reports-test.html"
                    , "maintain-docs.html"
                    , "distro-monitor.html"
                    , "revisions.html"
@@ -291,7 +292,7 @@ htmlFeature env@ServerEnv{..}
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
     htmlDownloads  = mkHtmlDownloads  utilities download
-    htmlReports    = mkHtmlReports    utilities core reportsCore templates
+    htmlReports    = mkHtmlReports    utilities core upload user reportsCore templates
     htmlCandidates = mkHtmlCandidates utilities core versions upload
                                       docsCandidates tarIndexCache
                                       candidates user templates
@@ -559,6 +560,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             docURL  = packageDocsContentUri docs realpkg
             execs   = rendExecNames render
             pkgdesc = flattenPackageDescription $ pkgDesc pkg
+            maintainers = maintainersGroup pkgname
 
         prefInfo      <- queryGetPreferredInfo pkgname
         distributions <- queryPackageStatus pkgname
@@ -574,6 +576,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
         hasDocs       <- queryHasDocumentation documentationFeature realpkg
+        mDocPkgId     <- if hasDocs then pure Nothing
+                              else latestPackageWithDocumentation documentationFeature prefInfo pkgs
         rptStats      <- queryLastReportStats reportsFeature realpkg
         candidates    <- lookupCandidateName pkgname
         buildStatus   <- renderBuildStatus
@@ -581,6 +585,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
         analyticsPixels <- getPackageAnalyticsPixels pkgname
+        userDb          <- queryGetUserDb
+        maintainerlist  <- liftIO $ queryUserGroup maintainers
         let
           idAndReport = fmap (\(rptId, rpt, _) -> (rptId, rpt)) rptStats
           install = getInstall $ fmap (fst &&& BR.installOutcome . snd) idAndReport
@@ -614,6 +620,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "analyticsPixels"   $= map analyticsPixelUrl (Set.toList analyticsPixels)
           , "versions"          $= (PagesNew.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
+          , "isDeprecatedVersion" $= getVersionStatus prefInfo (packageVersion realpkg) == DeprecatedVersion
           , "totalDownloads"    $= totalDown
           , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
@@ -633,11 +640,12 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "candidates"        $= case candidates of
                                     [] -> [ toHtml "No Candidates"]
                                     _  -> [ PagesNew.commaList $ flip map candidates $ \cand -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId cand] << display (packageVersion cand) ]
+          , "maintainers"       $= listGroupCompact (map (Users.userIdToName userDb) (Group.toList maintainerlist))
           ] ++
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
             mdocIndex mdocMeta mreadme
-            docURL distributions
+            docURL mDocPkgId distributions
             deprs
             utilities
             False
@@ -987,10 +995,10 @@ data HtmlReports = HtmlReports {
     htmlReportsResources :: [Resource]
   }
 
-mkHtmlReports :: HtmlUtilities -> CoreFeature -> ReportsFeature -> Templates -> HtmlReports
-mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = HtmlReports{..}
+mkHtmlReports :: HtmlUtilities -> CoreFeature -> UploadFeature -> UserFeature -> ReportsFeature -> Templates -> HtmlReports
+mkHtmlReports HtmlUtilities{..} CoreFeature{..} UploadFeature{..} UserFeature{..} ReportsFeature{..} templates = HtmlReports{..}
   where
-    CoreResource{packageInPath} = coreResource
+    CoreResource{packageInPath, guardValidPackageId} = coreResource
     ReportsResource{..} = reportsResource
 
     htmlReportsResources = [
@@ -999,6 +1007,9 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
           }
       , (extendResource reportsPage) {
             resourceGet = [ ("html", servePackageReport) ]
+          }
+      , (extendResource reportsTestsEnabled) {
+            resourceGet = [ ("html", servePackageReportTests) ]
           }
       ]
 
@@ -1021,8 +1032,9 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
 
     servePackageReport :: DynamicPath -> ServerPartE Response
     servePackageReport dpath = do
-        (repid, report, mlog, covg) <- packageReport dpath
+        (repid, report, mlog, mtest, covg) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
+        mtest' <- traverse queryTestLog mtest
         let covg' = fmap getCvgDet covg
         pkgid <- packageInPath dpath
         cacheControlWithoutETag [Public, maxAgeDays 30]
@@ -1031,6 +1043,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
           [ "pkgid" $= (pkgid :: PackageIdentifier)
           , "report" $= (repid, report)
           , "log" $= toMessage <$> mlog'
+          , "test" $= toMessage <$> mtest'
           , "covg" $= covg'
           ]
       where
@@ -1047,6 +1060,18 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
         det::(Int,Int)->(Int,Int,Int)
         det (_,0) = (100,0,0)
         det (a,b) = ((a * 100) `div` b ,a,b)
+
+    servePackageReportTests :: DynamicPath -> ServerPartE Response
+    servePackageReportTests dpath = do
+        pkgid <- packageInPath dpath
+        guardValidPackageId pkgid
+        guardAuthorised_ [InGroup (maintainersGroup (packageName pkgid)), InGroup trusteesGroup]
+        template <- getTemplate templates "reports-test.html"
+        runTests <- queryRunTests pkgid
+        return $ toResponse $ template
+          [ "pkgid"    $= pkgid
+          , "runTests" $= runTests
+          ]
 
 {-------------------------------------------------------------------------------
   Candidates
@@ -1075,7 +1100,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                  DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
-                 UserFeature{ guardAuthorised, guardAuthorised_ }
+                 UserFeature{ guardAuthorised, guardAuthorised_, queryGetUserDb }
                  templates = HtmlCandidates{..}
   where
     candidates     = candidatesResource
@@ -1234,14 +1259,19 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
               [] -> []
               warn -> [thediv ! [theclass "candidate-warn"] << [paragraph << strong (toHtml "Warnings:"), unordList warn]]
 
+      let maintainers = maintainersGroup pkgname
+      userDb          <- queryGetUserDb
+      maintainerlist  <- liftIO $ queryUserGroup maintainers
+
       return $ toResponse . template $
         [ "versions"          $= (PagesNew.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing)
         , "maintainHtml"      $= [maintainHtml]
         , "warningBox"        $= warningBox
+        , "maintainers"       $= listGroupCompact (map (Users.userIdToName userDb) (Group.toList maintainerlist))
         ] ++
         PagesNew.packagePageTemplate render
             mdocIndex Nothing mreadme
-            docURL [] Nothing
+            docURL Nothing [] Nothing
             utilities
             True
 
