@@ -88,18 +88,17 @@ data PackageItem = PackageItem {
     -- Last upload date
     itemLastUpload :: !UTCTime,
     -- Hotness = recent downloads + stars + 2 * no rev deps
-    itemHotness :: !Float,    
+    itemHotness :: !Float,
     -- Last version
     itemLastVersion :: !String
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k l m n o) = memSize11 a b c d e f g h i j (k, l, m, n, o)
+    memSize (PackageItem a b c d e f g h i j k l _m n o) = memSize11 a b c d e f g h i j (k, l, n, o)
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" []
-                                   0 0 0 False 0 0 0 (UTCTime (toEnum 0) 0) 0
                                    0 0 0 False 0 0 0 (UTCTime (toEnum 0) 0) 0 ""
 
 
@@ -255,7 +254,7 @@ listFeature CoreFeature{..}
     constructItem :: PkgInfo -> IO (PackageName, PackageItem)
     constructItem pkg = do
         let pkgname = packageName pkg
-            desc = pkgDesc pkg        
+            desc = pkgDesc pkg
         intRevDirectCount <- revDirectCount pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
