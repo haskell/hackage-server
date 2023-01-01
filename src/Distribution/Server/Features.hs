@@ -33,7 +33,7 @@ import Distribution.Server.Features.BuildReports        (initBuildReportsFeature
 import Distribution.Server.Features.PackageInfoJSON     (initPackageInfoJSONFeature)
 import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
 import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
--- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
+import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
 import Distribution.Server.Features.Tags                (initTagsFeature)
 import Distribution.Server.Features.AnalyticsPixels     (initAnalyticsPixelsFeature)
@@ -132,8 +132,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initAnalyticsPixelsFeature env
     mkVersionsFeature       <- logStartup "versions" $
                                initVersionsFeature env
-    -- mkReverseFeature     <- logStartup "reverse deps" $
-    --                         initReverseFeature env
+    mkReverseFeature     <- logStartup "reverse deps" $
+                            initReverseFeature env
     mkListFeature           <- logStartup "list" $
                                initListFeature env
     mkSearchFeature         <- logStartup "search" $
@@ -272,15 +272,13 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                usersFeature
                                uploadFeature
 
-    {- [reverse index disabled]
     reverseFeature  <- mkReverseFeature
                          coreFeature
                          versionsFeature
-                         -}
 
     listFeature     <- mkListFeature
                          coreFeature
-                         -- [reverse index disabled] reverseFeature
+                         reverseFeature
                          downloadFeature
                          votesFeature
                          tagsFeature
@@ -301,7 +299,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          uploadFeature
                          candidatesFeature
                          versionsFeature
-                         -- [reverse index disabled] reverseFeature
+                         reverseFeature
                          tagsFeature
                          analyticsPixelsFeature
                          downloadFeature
@@ -387,7 +385,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface tagsFeature
          , getFeatureInterface analyticsPixelsFeature
          , getFeatureInterface versionsFeature
-         -- [reverse index disabled] , getFeatureInterface reverseFeature
+         , getFeatureInterface reverseFeature
          , getFeatureInterface searchFeature
          , getFeatureInterface listFeature
          , getFeatureInterface platformFeature

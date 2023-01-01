@@ -23,7 +23,7 @@ import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Votes
 import Distribution.Server.Features.Search
 import Distribution.Server.Features.PreferredVersions
--- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
+import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.PackageContents (PackageContentsFeature(..))
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
@@ -51,7 +51,7 @@ import qualified Distribution.Server.Pages.PackageFromTemplate as PagesNew
 import Distribution.Server.Pages.Template
 import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
--- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
+import Distribution.Server.Pages.Reverse (LatestOrOld(..), ReverseHtmlUtil(..), reverseHtmlUtil)
 import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
 import Distribution.Server.Util.DocMeta (loadTarDocMeta)
@@ -103,7 +103,7 @@ initHtmlFeature :: ServerEnv
                     -> PackageContentsFeature
                     -> UploadFeature -> PackageCandidatesFeature
                     -> VersionsFeature
-                    -- [reverse index disabled] -> ReverseFeature
+                    -> ReverseFeature
                     -> TagsFeature
                     -> AnalyticsPixelsFeature
                     -> DownloadFeature
@@ -137,13 +137,14 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "noscript-search-form.html"
                    , "analytics-pixels-page.html"
                    , "user-analytics-pixels-page.html"
+                   , "graph.html"
                    ]
 
 
     return $ \user core@CoreFeature{packageChangeHook}
               packages upload
               candidates versions
-              -- [reverse index disabled] reverse
+              reversef
               tags analyticsPixels download
               rank
               list@ListFeature{itemUpdate}
@@ -158,6 +159,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                 htmlFeature env user core
                             packages upload
                             candidates versions
+                            reversef
                             tags analyticsPixels download
                             rank
                             list names
@@ -167,6 +169,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             reportsCore
                             usersdetails
                             (htmlUtilities core candidates tags user)
+                            (reverseHtmlUtil reversef)
                             mainCache namesCache
                             templates
 
@@ -202,6 +205,7 @@ htmlFeature :: ServerEnv
             -> UploadFeature
             -> PackageCandidatesFeature
             -> VersionsFeature
+            -> ReverseFeature
             -> TagsFeature
             -> AnalyticsPixelsFeature
             -> DownloadFeature
@@ -216,6 +220,7 @@ htmlFeature :: ServerEnv
             -> ReportsFeature
             -> UserDetailsFeature
             -> HtmlUtilities
+            -> ReverseHtmlUtil
             -> AsyncCache Response
             -> AsyncCache Response
             -> Templates
@@ -226,7 +231,7 @@ htmlFeature env@ServerEnv{..}
             core@CoreFeature{queryGetPackageIndex}
             packages upload
             candidates versions
-            -- [reverse index disabled] ReverseFeature{..}
+            revf@ReverseFeature{..}
             tags analyticsPixels download
             rank
             list@ListFeature{getAllLists}
@@ -237,6 +242,7 @@ htmlFeature env@ServerEnv{..}
             reportsCore
             usersdetails
             utilities@HtmlUtilities{..}
+            reverseH@ReverseHtmlUtil{..}
             cachePackagesPage cacheNamesPage
             templates
   = (HtmlFeature{..}, packageIndex, packagesPage)
@@ -274,6 +280,8 @@ htmlFeature env@ServerEnv{..}
                                       distros
                                       packages
                                       htmlTags
+                                      htmlReverse
+                                      revf
                                       htmlPreferred
                                       cachePackagesPage
                                       cacheNamesPage
@@ -290,6 +298,7 @@ htmlFeature env@ServerEnv{..}
                                       candidates user templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core upload user list tags templates
+    htmlReverse    = mkHtmlReverse    utilities core versions list revf reverseH
 
     htmlAnalyticsPixels = mkHtmlAnalyticsPixels utilities core user upload analyticsPixels templates
 
@@ -304,6 +313,7 @@ htmlFeature env@ServerEnv{..}
       , htmlDownloadsResources  htmlDownloads
       , htmlTagsResources       htmlTags
       , htmlAnalyticsPixelsResources htmlAnalyticsPixels
+      , htmlReverseResource     htmlReverse
       -- and user groups. package maintainers, trustees, admins
       , htmlGroupResource user (maintainersGroupResource . uploadResource $ upload)
       , htmlGroupResource user (trusteesGroupResource    . uploadResource $ upload)
@@ -338,74 +348,6 @@ htmlFeature env@ServerEnv{..}
             resourceGet = [("html", serveDistroPackage)]
           }
       -}
-
-
-      -- reverse index (disabled)
-      {-
-      , (extendResource $ reversePackage reverses) {
-            resourceGet = [("html", serveReverse True)]
-          }
-      , (extendResource $ reversePackageOld reverses) {
-            resourceGet = [("html", serveReverse False)]
-          }
-      , (extendResource $ reversePackageAll reverses) {
-            resourceGet = [("html", serveReverseFlat)]
-          }
-      , (extendResource $ reversePackageStats reverses) {
-            resourceGet = [("html", serveReverseStats)]
-          }
-      , (extendResource $ reversePackages reverses) {
-            resourceGet = [("html", serveReverseList)]
-          }
-      -}
-
-
-
-    -- [reverse index disabled] reverses = reverseResource
-
-
-
-
-
-
-    {- [reverse index disabled]
-    --------------------------------------------------------------------------------
-    -- Reverse
-    serveReverse :: Bool -> DynamicPath -> ServerPart Response
-    serveReverse isRecent dpath =
-      htmlResponse $
-      withPackageId dpath $ \pkgid -> do
-        let pkgname = packageName pkgid
-        rdisp <- case packageVersion pkgid of
-                  Version [] [] -> withPackageAll pkgname   $ \_ -> revPackageName pkgname
-                  _             -> withPackageVersion pkgid $ \_ -> revPackageId pkgid
-        render <- (if isRecent then renderReverseRecent else renderReverseOld) pkgname rdisp
-        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Reverse dependencies ") $
-            Pages.reversePackageRender pkgid (corePackageIdUri "") revr isRecent render
-
-    serveReverseFlat :: DynamicPath -> ServerPart Response
-    serveReverseFlat dpath = htmlResponse $
-                                      withPackageAllPath dpath $ \pkgname _ -> do
-        revCount <- query $ GetReverseCount pkgname
-        pairs <- revPackageFlat pkgname
-        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Flattened reverse dependencies") $
-            Pages.reverseFlatRender pkgname (corePackageNameUri "") revr revCount pairs
-
-    serveReverseStats :: DynamicPath -> ServerPart Response
-    serveReverseStats dpath = htmlResponse $
-                                       withPackageAllPath dpath $ \pkgname pkgs -> do
-        revCount <- query $ GetReverseCount pkgname
-        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Reverse dependency statistics") $
-            Pages.reverseStatsRender pkgname (map packageVersion pkgs) (corePackageIdUri "") revr revCount
-
-    serveReverseList :: DynamicPath -> ServerPart Response
-    serveReverseList _ = do
-        let revr = reverseResource revs
-        triple <- sortedRevSummary revs
-        hackCount <- PackageIndex.indexSize <$> queryGetPackageIndex
-        return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
-            Pages.reversePackagesRender (corePackageNameUri "") revr hackCount triple
-    -}
 
     --------------------------------------------------------------------------------
     -- Additional package indices
@@ -469,6 +411,8 @@ mkHtmlCore :: ServerEnv
            -> DistroFeature
            -> PackageContentsFeature
            -> HtmlTags
+           -> HtmlReverse
+           -> ReverseFeature
            -> HtmlPreferred
            -> AsyncCache Response
            -> AsyncCache Response
@@ -496,6 +440,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            DistroFeature{queryPackageStatus}
            PackageContentsFeature{packageRender}
            HtmlTags{..}
+           HtmlReverse{..}
+           ReverseFeature{queryReverseDeps, revJSON}
            HtmlPreferred{..}
            cachePackagesPage
            cacheNamesPage
@@ -537,6 +483,16 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       , (extendResource searchPackagesResource) {
                     resourceGet = [("html", serveBrowsePage)]
                   }
+      , (resourceAt "/packages/graph.json" ) {
+            resourceDesc = [(GET, "Show JSON of package dependency information")]
+        , resourceGet = [("json",
+                serveGraphJSON)]
+          }
+      , (resourceAt "/packages/graph" ) {
+            resourceDesc = [(GET, "Show graph of package dependency information")]
+        , resourceGet = [("html",
+                serveGraph)]
+          }
       , (extendResource $ corePackagesPage cores) {
             resourceDesc = [(GET, "Show package index")]
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
@@ -575,6 +531,19 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
               <> noscriptFormRendered
           ]
 
+    serveGraphJSON :: DynamicPath -> ServerPartE Response
+    serveGraphJSON _ = do
+        graph <- revJSON
+        --TODO: use proper type for graph with ETag
+        cacheControl [Public, maxAgeMinutes 30] (etagFromHash graph)
+        ok . toResponse $ graph
+
+    serveGraph :: DynamicPath -> ServerPartE Response
+    serveGraph _ = do
+      cacheControlWithoutETag [Public, maxAgeDays 1] -- essentially static
+      template <- getTemplate templates "graph.html"
+      return $ toResponse $ template []
+
     -- Currently the main package page is thrown together by querying a bunch
     -- of features about their attributes for the given package. It'll need
     -- reorganizing to look aesthetic, as opposed to the sleek and simple current
@@ -603,6 +572,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         userRating    <- case auth of Just (uid,_) -> pkgUserVote pkgname uid; _ -> return Nothing
         mdoctarblob   <- queryDocumentation realpkg
         tags          <- queryTagsForPackage pkgname
+        rdeps         <- queryReverseDeps pkgname
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
         hasDocs       <- queryHasDocumentation documentationFeature realpkg
@@ -659,6 +629,9 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "hasExecOnly"       $= (not . hasLibs) pkgdesc && (not . null) execs
           , "userRating"        $= userRating
           , "score"             $= pkgScore
+          , "hasrdeps"          $= not (rdeps == ([],[]))
+          , "rdeps"             $= renderPkgPageDeps rdeps
+          , "rdepsummary"       $= renderDeps pkgname rdeps
           , "buildStatus"       $= buildStatus
           , "hasDocs"           $= hasDocs
           , "install"           $= install
@@ -2028,3 +2001,97 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         groupDeleteUser group dpath
         goToList dpath
     goToList dpath = seeOther (renderResource' (groupResource r) dpath) (toResponse ())
+
+{-------------------------------------------------------------------------------
+  Reverse
+-------------------------------------------------------------------------------}
+data HtmlReverse = HtmlReverse {
+    htmlReverseResource :: [Resource]
+  }
+
+mkHtmlReverse :: HtmlUtilities
+              -> CoreFeature
+              -> VersionsFeature
+              -> ListFeature
+              -> ReverseFeature
+              -> ReverseHtmlUtil
+              -> HtmlReverse
+mkHtmlReverse HtmlUtilities{..}
+           CoreFeature{ coreResource = CoreResource{
+                          packageInPath
+                        , lookupPackageName
+                        , corePackageIdUri
+                        , corePackageNameUri
+                        },
+                        queryGetPackageIndex
+                      }
+           VersionsFeature{withPackageVersion}
+           ListFeature{}
+           ReverseFeature{..}
+           ReverseHtmlUtil{..}
+           = HtmlReverse{..}
+  where
+    htmlReverseResource = [
+        (extendResource $ reversePackage reverseResource) {
+            resourceGet = [("html", serveReverse OnlyLatest)]
+          }
+      , (extendResource $ reversePackageOld reverseResource) {
+            resourceGet = [("html", serveReverse OnlyOlder)]
+          }
+      ,(extendResource $ reversePackageFlat reverseResource) {
+            resourceGet = [("html", serveReverseFlat)]
+          }
+      , (extendResource $ reversePackageVerbose reverseResource) {
+            resourceGet = [("html", serveReverseVerbose)]
+          }
+      , (extendResource $ reversePackages reverseResource) {
+            resourceGet = [("html", serveReverseList)]
+          }
+      ]
+
+
+    serveReverse :: LatestOrOld -> DynamicPath -> ServerPartE Response
+    serveReverse isRecent dpath = do
+        pkgid <- packageInPath dpath
+        let pkgname = pkgName pkgid
+        rdisp <- if nullVersion == packageVersion pkgid
+                   then lookupPackageName pkgname *> revPackageName pkgname
+                   else withPackageVersion pkgid $ \_ -> revPackageId pkgid
+        render <- (if isRecent == OnlyLatest then renderReverseRecent else renderReverseOld) pkgname rdisp
+        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Reverse dependencies ") $
+            reversePackageRender pkgid (corePackageIdUri "") isRecent render
+
+    redirectIfVersion uriGen pkgid =
+      if packageVersion pkgid /= nullVersion
+         then do
+           let newUri = uriGen reverseResource "" (packageName pkgid)
+           seeOther newUri ()
+         else pure ()
+
+    serveReverseFlat :: DynamicPath -> ServerPartE Response
+    serveReverseFlat dpath = do
+        pkg <- packageInPath dpath
+        redirectIfVersion reverseFlatUri pkg
+        let pkgname = pkgName pkg
+        revCount <- revPackageStats pkgname
+        pairs <- revPackageFlat pkgname
+        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Flattened reverse dependencies") $
+            reverseFlatRender pkgname (corePackageNameUri "") revCount pairs
+
+    serveReverseVerbose :: DynamicPath -> ServerPartE Response
+    serveReverseVerbose dpath = do
+        pkg <- packageInPath dpath
+        redirectIfVersion reverseVerboseUri pkg
+        let pkgname = pkgName pkg
+        pkgids <- lookupPackageName pkgname
+        revCount <- revPackageStats pkgname
+        versions <- revForEachVersion pkgname
+        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Reverse dependency statistics") $
+            reverseVerboseRender pkgname (map packageVersion pkgids) (corePackageIdUri "") revCount versions
+
+    serveReverseList :: DynamicPath -> ServerPartE Response
+    serveReverseList _ = do
+        namesWithCounts <- revCountForAllPackages
+        hackCount <- PackageIndex.indexSize <$> queryGetPackageIndex
+        return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
+            reversePackagesRender (corePackageNameUri "") hackCount namesWithCounts

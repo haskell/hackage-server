@@ -18,6 +18,8 @@ module Distribution.Server.Features.Core (
     -- * Misc other utils
     packageExists,
     packageIdExists,
+
+    packagesStateComponent,
   ) where
 
 -- stdlib
