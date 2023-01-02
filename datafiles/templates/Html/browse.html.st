@@ -173,7 +173,7 @@
           <dd>Only show packages with more than 1000 downloads within the last 30 days. The download count is inexact because Hackage uses a <a href="https://en.wikipedia.org/wiki/Content_delivery_network" target=_blank>content delivery network</a>.</dd>
           <dt>(lastUpload &lt; 2021-10-29)</dt>
           <dd>Only show packages for which the last upload was before (i.e. excluding) the given UTC date in <a target=_blank href="https://www.w3.org/TR/NOTE-datetime">the 'complete date' format as specified using ISO 8601</a>.</dd>
-          <dt>(lastUpload = 2021-10-29)</dt>
+          <dt>(lastUpload = 2021-10-29)</dt>x
           <dd>Only show packages for which the last upload was within the 24 hours of the given UTC date.</dd>
           <dt>(maintainer:SimonMarlow)</dt>
           <dd>Only show packages for which the maintainers list includes the user name <a target=_blank href="/user/SimonMarlow">SimonMarlow</a>.</dd>
