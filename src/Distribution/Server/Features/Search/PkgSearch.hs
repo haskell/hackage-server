@@ -14,7 +14,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text, unpack)
 import qualified Data.Text as T
-import NLP.Snowball
+import Distribution.Server.Util.NLP.Snowball
 
 import Distribution.Package
 import Distribution.PackageDescription
@@ -62,7 +62,7 @@ pkgSearchConfig =
     normaliseQueryToken tok =
       let tokFold = T.toCaseFold tok
           -- we don't need to use extraStems here because the index is inflated by it already.
-          tokStem = stem English tokFold
+          tokStem = stem tokFold
        in \field -> case field of
                       NameField        -> tokFold
                       SynopsisField    -> tokStem

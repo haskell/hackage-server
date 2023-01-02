@@ -208,7 +208,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
         Right (fp, etag, index) ->
           serveTarball (display (packageId pkg) ++ " source tarball")
                        [] (display (packageId pkg)) fp index
-                       [Public, maxAgeDays 30] etag
+                       [Public, maxAgeDays 30] etag Nothing
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack

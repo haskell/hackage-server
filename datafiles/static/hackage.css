@@ -1056,6 +1056,11 @@ table.fancy td, table.properties td,
 table.fancy th, table.properties th {
   padding: 0.15em 0.45em;
 }
+
+table.fancy tr.even td {
+  background-color: #eee;
+}
+
 table.dataTable.compact.fancy tbody th,
 table.dataTable.compact.fancy tbody td {
   padding: 6px 10px;
@@ -1104,4 +1109,104 @@ a.deprecated[href]:visited {
 }
 .versions a.normal[href]:visited {
     color: #61B01E;
+}
+
+/* Paginator */
+#paginatorContainer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+#paginatorContainer > div {
+  padding: 1em 0;
+}
+
+.paginator {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* Styles Next/Prev when they have no href */
+
+@media (prefers-color-scheme: dark) {
+      .paginator a {
+        color: #474747;
+      }
+}
+
+@media (prefers-color-scheme: light) {
+      .paginator a {
+        color: #666 !important;
+      }
+}
+
+.paginator a {
+  cursor: default;
+  background: none;
+  border: none;
+  padding: 0.5em 1em;
+  text-decoration: none;
+}
+
+.paginator span {
+  color: #333;
+  padding: 0.5em 1em;
+}
+
+
+@media (prefers-color-scheme: dark) {
+      .paginator a:link:hover, .paginator a:visited:hover {
+        color: #474747;
+      }
+}
+
+@media (prefers-color-scheme: light) {
+      .paginator a:link:hover, .paginator a:visited:hover {
+        color: #333 !important;
+      }
+}
+
+.paginator a:link, .paginator a:visited {
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+      .paginator a:link:hover, .paginator a:visited:hover {
+        color: #585858;
+        background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
+      }
+}
+
+@media (prefers-color-scheme: light) {
+      .paginator a:link:hover, .paginator a:visited:hover {
+        color: white !important;
+        background: linear-gradient(to bottom, #585858 0%, #111 100%);
+      }
+}
+
+.paginator a:link:hover, .paginator a:visited:hover {
+  border: 1px solid #111;
+  text-decoration: none;
+}
+
+@media (prefers-color-scheme: dark) {
+      .paginator .current, .paginator .current:hover {
+        color: #474747;
+        background: linear-gradient(to bottom, #585858 0%, #111 100%);
+      }
+}
+
+@media (prefers-color-scheme: light) {
+      .paginator .current, .paginator .current:hover {
+        color: #666 !important;
+        background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
+      }
+}
+
+.paginator .current,
+.paginator .current:hover {
+  border: 1px solid #979797;
 }

@@ -34,7 +34,7 @@ import Distribution.Utils.ShortText (fromShortText, ShortText)
 import Text.XHtml.Strict hiding (p, name, title, content)
 import qualified Text.XHtml.Strict
 
-import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
+import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe, catMaybes)
 import Data.List                (intersperse, intercalate, partition)
 import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>))
@@ -151,8 +151,8 @@ renderPackageFlags render docURL =
         code = (thespan ! [theclass "code"] <<)
         whenNotNull xs a = if null xs then [] else a
 
-moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Bool -> [Html]
-moduleSection render mdocIndex docURL quickNav =
+moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Maybe PackageId -> Bool -> [Html]
+moduleSection render mdocIndex docURL mPkgId quickNav =
     maybeToList $ fmap msect (rendModules render mdocIndex)
   where msect ModSigIndex{ modIndex = m, sigIndex = s } = toHtml $
             (if not (null s)
@@ -164,16 +164,25 @@ moduleSection render mdocIndex docURL quickNav =
                      [renderDocIndexLink] ++
                      [renderModuleForest docURL m ]
                 else [])
-        renderDocIndexLink = case mdocIndex of
-          Just tindex ->
-            let docIndexURL | isJust (Tar.lookup tindex "doc-index-All.html") = docURL </> "doc-index-All.html"
-                            | otherwise = docURL </> "doc-index.html"
-            in  paragraph ! [thestyle "font-size: small"]
-                  << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]" +++
-                      (if quickNav
-                       then " [" +++ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump" +++ "]"
-                       else mempty))
-          Nothing -> mempty
+        renderDocIndexLink = case concatLinks indexLinks of
+            Nothing -> mempty
+            Just links -> paragraph ! [thestyle "font-size: small"] << ("[" +++ links +++ "]")
+          where
+            indexLinks = catMaybes $ case mdocIndex of
+                Just tindex ->
+                  let docIndexURL | isJust (Tar.lookup tindex "doc-index-All.html") = docURL </> "doc-index-All.html"
+                                  | otherwise = docURL </> "doc-index.html"
+                  in  [ Just $ anchor ! [href docIndexURL] << "Index"
+                      , if quickNav
+                            then Just $ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump"
+                            else Nothing
+                      ]
+                Nothing -> []
+              ++ [fmap (\pkgId -> anchor ! [href (packageURL pkgId)] << "Last Documentation") mPkgId]
+
+            concatLinks []     = Nothing
+            concatLinks [h]    = Just h
+            concatLinks (h:hs) = (h +++) . ("] [" +++) <$> concatLinks hs
 
 tabulate :: [(String, Html)] -> Html
 tabulate items = table ! [theclass "properties"] <<
