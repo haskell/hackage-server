@@ -33,7 +33,9 @@ import Distribution.Package
 import qualified Distribution.Parsec as P
 
 import qualified Data.ByteString.Char8 as C
-import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import qualified Data.ByteString.Lazy.Search as BSL
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map as Map
 import Data.Function (fix)
 
@@ -292,7 +294,13 @@ documentationFeature name
         let maxAge = documentationCacheTime age
         ServerTarball.serveTarball (display pkgid ++ " documentation")
                                    [{-no index-}] (display pkgid ++ "-docs")
-                                   tarball index [Public, maxAge] etag
+                                   tarball index [Public, maxAge] etag (Just rewriteDocs)
+
+    rewriteDocs :: BSL.ByteString -> BSL.ByteString
+    rewriteDocs dochtml = case BSL.breakFindAfter (BS.pack "<head>") dochtml of
+                ((h,t),True) -> h `BSL.append` extraCss `BSL.append` t
+                _ -> dochtml
+        where extraCss = BSL.pack "<style type=\"text/css\">#synopsis details:not([open]) > ul { visibility: hidden; }</style>"
 
     -- The cache time for documentation starts at ten minutes and
     -- increases exponentially for four days, when it cuts off at
