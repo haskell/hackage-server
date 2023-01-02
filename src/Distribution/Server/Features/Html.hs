@@ -76,6 +76,11 @@ import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
 import Distribution.PackageDescription (hasLibs)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
+import qualified Distribution.Server.Pages.Recent as Pages
+import qualified Distribution.Server.Util.Paging as Paging
+import Distribution.Server.Features.RecentPackages (RecentPackagesFeature (RecentPackagesFeature, getRecentRevisions, getRecentPackages))
+import Data.Time (getCurrentTime)
+import Text.Read (readMaybe)
 import Distribution.Server.Pages.Group (listGroupCompact)
 
 
@@ -115,6 +120,7 @@ initHtmlFeature :: ServerEnv
                     -> TarIndexCacheFeature
                     -> ReportsFeature
                     -> UserDetailsFeature
+                    -> RecentPackagesFeature
                     -> IO HtmlFeature)
 
 initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
@@ -153,7 +159,8 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
               docsCore docsCandidates
               tarIndexCache
               reportsCore
-              usersdetails -> do
+              usersdetails
+              recentPackagesFeature -> do
       -- do rec, tie the knot
       rec let (feature, packageIndex, packagesPage) =
                 htmlFeature env user core
@@ -172,6 +179,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             (reverseHtmlUtil reversef)
                             mainCache namesCache
                             templates
+                            recentPackagesFeature
 
           -- Index page caches
           mainCache  <- newAsyncCacheNF packageIndex
@@ -224,6 +232,7 @@ htmlFeature :: ServerEnv
             -> AsyncCache Response
             -> AsyncCache Response
             -> Templates
+            -> RecentPackagesFeature 
             -> (HtmlFeature, IO Response, IO Response)
 
 htmlFeature env@ServerEnv{..}
@@ -245,6 +254,7 @@ htmlFeature env@ServerEnv{..}
             reverseH@ReverseHtmlUtil{..}
             cachePackagesPage cacheNamesPage
             templates
+            recentPackagesFeature
   = (HtmlFeature{..}, packageIndex, packagesPage)
   where
     htmlFeatureInterface = (emptyHackageFeature "html") {
@@ -288,6 +298,7 @@ htmlFeature env@ServerEnv{..}
                                       templates
                                       names
                                       candidates
+                                      recentPackagesFeature
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
@@ -419,6 +430,7 @@ mkHtmlCore :: ServerEnv
            -> Templates
            -> SearchFeature
            -> PackageCandidatesFeature
+           -> RecentPackagesFeature
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
@@ -448,10 +460,11 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            templates
            SearchFeature{..}
            PackageCandidatesFeature{..}
+           RecentPackagesFeature{getRecentPackages, getRecentRevisions}
   = HtmlCore{..}
   where
     candidatesCore = candidatesCoreResource
-    cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
+    cores@CoreResource {packageInPath, lookupPackageName, lookupPackageId} = coreResource
     versions = versionsResource
     docs     = documentationResource
 
@@ -505,7 +518,75 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       , (resourceAt "/package/:package/revisions/.:format") {
             resourceGet  = [("html", serveCabalRevisionsPage)]
           }
+      , (resourceAt "/packages/recent.:format") {
+            resourceGet = [("html", serveRecentPage),("rss", serveRecentRSS)]
+          }
+      , (resourceAt "/packages/recent/revisions.:format") {
+            resourceGet = [("html", serveRevisionPage), ("rss", serveRevisionRSS)]
+          }
       ]
+
+    readParamWithDefaultAndValid :: (Read a, HasRqData m, Monad m, Functor m, Alternative m) => 
+      a -> (a -> Bool) -> String -> m a
+    readParamWithDefaultAndValid n f queryParam = do
+        m <- optional (look queryParam)
+        let parsed = m >>= readMaybe >>= (\x -> if f x then Just x else Nothing)
+
+        return $ fromMaybe n parsed
+
+    lookupPageSize :: (HasRqData m, Monad m, Functor m, Alternative m) => Int -> m Int
+    lookupPageSize def = readParamWithDefaultAndValid def validPageSize "pageSize"
+      where validPageSize x = x > 1 && x <= 200
+
+    lookupPage :: (HasRqData m, Monad m, Functor m, Alternative m) => Int -> m Int
+    lookupPage def = readParamWithDefaultAndValid def validPage "page"
+      where validPage = (>= 1)
+
+    serveRecentPage :: DynamicPath -> ServerPartE Response
+    serveRecentPage _ = do
+      recentPackages <- getRecentPackages
+      users <- queryGetUserDb
+      page <-  lookupPage 1
+      pageSize <- lookupPageSize 20
+
+      let conf = Paging.createConf page pageSize recentPackages
+      
+      return . toResponse $ Pages.recentPage conf users recentPackages
+
+    serveRecentRSS :: DynamicPath -> ServerPartE Response
+    serveRecentRSS _ = do
+      recentPackages <- getRecentPackages
+      users <- queryGetUserDb
+      page <-  lookupPage 1
+      pageSize <- lookupPageSize 20
+      now   <- liftIO getCurrentTime
+      
+      let conf = Paging.createConf page pageSize recentPackages
+      
+      return . toResponse $ Pages.recentFeed conf users serverBaseURI now recentPackages
+
+    serveRevisionPage :: DynamicPath -> ServerPartE Response
+    serveRevisionPage _ = do
+      revisions <- getRecentRevisions
+      users <- queryGetUserDb
+      page <-  lookupPage 1
+      pageSize <- lookupPageSize 40
+      
+      let conf = Paging.createConf page pageSize revisions
+
+      return . toResponse $ Pages.revisionsPage conf users revisions
+
+    serveRevisionRSS :: DynamicPath -> ServerPartE Response
+    serveRevisionRSS _ = do
+      revisions <- getRecentRevisions
+      users <- queryGetUserDb
+      page <-  lookupPage 1
+      pageSize <- lookupPageSize 40
+      now   <- liftIO getCurrentTime
+      
+      let conf = Paging.createConf page pageSize revisions
+
+      return . toResponse $ Pages.recentRevisionsFeed conf users serverBaseURI now revisions
 
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _dpath = do

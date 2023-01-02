@@ -266,6 +266,7 @@ library lib-server
     Distribution.Server.Util.Merge
     Distribution.Server.Util.ParseSpecVer
     Distribution.Server.Util.Markdown
+    Distribution.Server.Util.Paging
 
     Distribution.Server.Features
     Distribution.Server.Features.Browse
