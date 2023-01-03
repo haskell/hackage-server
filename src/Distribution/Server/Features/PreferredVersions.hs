@@ -7,9 +7,11 @@ module Distribution.Server.Features.PreferredVersions (
 
     PreferredInfo(..),
     VersionStatus(..),
+    getVersionStatus,
     classifyVersions,
 
     PreferredRender(..),
+    preferredStateComponent,
   ) where
 
 import Distribution.Server.Framework
@@ -48,6 +50,7 @@ data VersionsFeature = VersionsFeature {
 
     queryGetPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo,
     queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
+    queryGetPreferredVersions :: forall m. MonadIO m => m PreferredVersions,
 
     versionsResource :: VersionsResource,
     deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
@@ -60,6 +63,7 @@ data VersionsFeature = VersionsFeature {
     doPreferredsRender    :: forall m. MonadIO m => m [(PackageName, PreferredRender)],
     doDeprecatedsRender   :: forall m. MonadIO m => m [(PackageName, [PackageName])],
 
+    withPackageVersion       :: forall a. PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a,
     withPackagePreferred     :: forall a. PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
     withPackagePreferredPath :: forall a. DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 }
@@ -155,6 +159,9 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName])
     queryGetDeprecatedFor name = queryState preferredState (GetDeprecatedFor name)
+
+    queryGetPreferredVersions :: MonadIO m => m PreferredVersions
+    queryGetPreferredVersions = queryState preferredState GetPreferredVersions
 
     updateDeprecatedTags = do
       pkgs <- deprecatedMap <$> queryState preferredState GetPreferredVersions
@@ -263,6 +270,17 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
       updateState preferredState $ SetDeprecatedFor pkgname deprs
       runHook_ deprecatedHook (pkgname, deprs)
       updateDeprecatedTags
+
+    withPackageVersion :: PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a
+    withPackageVersion pkgid func = do
+        pkgIndex <- queryGetPackageIndex
+        guard (packageVersion pkgid /= nullVersion)
+        case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
+            []   ->  packageError [MText $ "No such package in package index. ", MLink "Search for related terms instead?"$ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
+            pkg -> case find ((== packageVersion pkgid) . packageVersion) pkg of
+                Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
+                Just pkg' -> func pkg'
+      where packageError = errNotFound "Package not found"
 
     ---------------------------
     -- This is a function used by the HTML feature to select the version to display.

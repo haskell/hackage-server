@@ -1,6 +1,9 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
+  $if(doc.hasQuickNavV1)$
+  <link href="$doc.baseUrl$/quick-jump.css" rel="stylesheet" type="text/css" title="QuickJump" />
+  $endif$
   $hackageCssTheme()$
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
@@ -130,6 +133,12 @@
     $downloadSection$
 
     <h4>Maintainer's Corner</h4>
+    <p>Package maintainers</p>
+    <ul>
+      <li>
+        $maintainers$
+      </li>
+    </ul>
     <p>For package maintainers and hackage trustees</p>
     <ul>
       <li>
@@ -144,6 +153,11 @@
     <h2 id="readme">Readme for $package.name$-$package.version$</h2>
     [<a href="#description">back to package description</a>]
     $package.optional.readme$
+    $endif$
+
+    $if(doc.hasQuickNavV1)$
+    <script src="$doc.baseUrl$/quick-jump.min.js" type="text/javascript"></script>
+    <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function(toggle) {var t = document.getElementById('quickjump-trigger');if (t) {t.onclick = function(e) { e.preventDefault(); toggle(); };}}); </script>
     $endif$
 
 </body>

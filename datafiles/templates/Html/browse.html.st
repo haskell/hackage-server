@@ -51,38 +51,6 @@
     #browseTable th.descending {
       background-image: url(/static/images/sort_desc.png);
     }
-    .paginator {
-      margin-left: auto;
-    }
-    .paginator a {
-      box-sizing: border-box;
-      display: inline-block;
-      min-width: 1.5em;
-      padding: 0.5em 1em;
-      margin-left: 2px;
-      text-align: center;
-      text-decoration: none !important;
-      color: #333 !important;
-      border: 1px solid transparent;
-      border-radius: 2px;
-    }
-    .paginator .current, .paginator .current:hover {
-      color: #333 !important;
-      border: 1px solid #979797;
-      background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
-    }
-    .paginator a:hover {
-      color: white !important;
-      border: 1px solid #111;
-      background: linear-gradient(to bottom, #585858 0%, #111 100%);
-    }
-    .paginator span {
-      padding: 0 1em;
-      cursor: default;
-    }
-    .paginator .disabled {
-      color: #666;
-    }
     .filterSuggestion {
       display: flex;
       align-items: center;
@@ -101,11 +69,6 @@
     }
     .filterSuggestion > div > input {
       margin: 0;
-    }
-    #paginatorContainer {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
     }
     #fatalError {
       display: none;
@@ -249,6 +212,7 @@
               <th id=arrow-description><a href="javascript: sort('description')">Description</a></th>
               <th id=arrow-tags><a href="javascript: sort('tags')">Tags</a></th>
               <th id=arrow-lastUpload><a href="javascript: sort('lastUpload')">Last U/L</a></th>
+              <th id=arrow-lastVersion><a href="javascript: sort('lastVersion')">Last Version</a></th>
               <th id=arrow-maintainers><a href="javascript: sort('maintainers')">Maintainers</a></th>
             </tr>
           </thead>
