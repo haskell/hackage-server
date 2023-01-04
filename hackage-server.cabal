@@ -405,6 +405,9 @@ library lib-server
     , ed25519               ^>= 0.0.5
     , exceptions            ^>= 0.10
     , hackage-security       >= 0.6 && < 0.7
+        -- N.B: hackage-security-0.6.2 uses Cabal-syntax-3.8.1.0
+        -- see https://github.com/haskell/hackage-server/issues/1130
+        -- Thus, we need to include Cabal-syntax as dependency explicitly
     , hackage-security-HTTP ^>= 0.1.1
     , haddock-library       ^>= 1.11.0
         -- haddock-library-1.11.0 changed type of markupOrderedList

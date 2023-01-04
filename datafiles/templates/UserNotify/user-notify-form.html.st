@@ -2,18 +2,18 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Set user notify preference | Hackage</title>
+<title>Set user notification preferences | Hackage</title>
 </head>
 
 <body>
 $hackagePageHeader()$
 
 <div id="content">
-<h2>Change notify preference</h2>
+<h2>Change notification preferences</h2>
 
 $if(showConfirmationOfSave)$
   <p class=box>
-    Notify preference saved! The updated preference are shown below.
+    Notification preferences saved! The updated preferences are shown below.
   </p>
 $endif$
 
@@ -23,27 +23,27 @@ $endif$
   <input type="hidden" name="_transform" value="form2json"/>
   <table>
     <tr>
-      <td><label>Enabled:
+      <td><label>Email notification enabled:
       <td>$notifyEnabled$
-    
+
     <tr>
-      <td><label>Notify package revision range:
+      <td><label>Notify on maintained package metadata revision:
       <td>$notifyRevisionRange$
 
     <tr>
-      <td><label>Notify package upload:
+      <td><label>Notify on maintained package upload:
       <td>$notifyUpload$
 
     <tr>
-      <td><label>Notify maintainer group change:
+      <td><label>Notify on maintained package maintainer group change:
       <td>$notifyMaintainerGroup$
 
     <tr>
-      <td><label>Notify docbuilder report:
+      <td><label>Notify on maintained package docbuilder report:
       <td>$notifyDocBuilderReport$
 
     <tr>
-      <td><label>Notify pending proposed tags:
+      <td><label>Notify on maintained package pending proposed tags:
       <td>$notifyPendingTags$
   </table>
   <input type="submit" value="Save notify preference" />

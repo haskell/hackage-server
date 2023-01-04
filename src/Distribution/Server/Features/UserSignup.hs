@@ -336,8 +336,8 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
       , resourceGet  = [ ("", handlerGetSignupRequestNew) ]
       , resourcePost = [ ("", handlerPostSignupRequestNew) ]
       }
-    
-    captchaResource = 
+
+    captchaResource =
       (resourceAt "/users/register/captcha") {
         resourceDesc = [ (GET,  "Get a new captcha") ]
       , resourceGet  = [ ("json", handlerGetCaptcha) ]
@@ -443,16 +443,16 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
     handlerGetSignupRequestNew _ = do
         (timestamp, hash, base64image) <- liftIO makeCaptchaHash
         template <- getTemplate templates "SignupRequest.html"
-        ok $ toResponse $ template 
+        ok $ toResponse $ template
           [ "timestamp"   $= timestamp
           , "hash"        $= hash
           , "base64image" $= base64image
           ]
-    
+
     handlerGetCaptcha :: DynamicPath -> ServerPartE Response
     handlerGetCaptcha _ = do
         (timestamp, hash, base64image) <- liftIO makeCaptchaHash
-        ok $ toResponse $ Object $ KeyMap.fromList $ 
+        ok $ toResponse $ Object $ KeyMap.fromList $
           [ (Key.fromString "timestamp"  , String (T.pack (show timestamp)))
           , (Key.fromString "hash"       , String (T.decodeUtf8 hash))
           , (Key.fromString "base64image", String (T.decodeUtf8 base64image))
@@ -517,7 +517,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
           guardValidLookingName     realname
           guardValidLookingEmail    useremail
 
-          timestamp <- maybe (errBadRequest "Invalid request" [MText "Seems something went wrong with your request."]) 
+          timestamp <- maybe (errBadRequest "Invalid request" [MText "Seems something went wrong with your request."])
             pure (readMaybe timestampStr)
 
           when (diffUTCTime now timestamp > secondsToNominalDiffTime (10 * 60)) $

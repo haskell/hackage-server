@@ -107,12 +107,12 @@ defaultNotifyPrefs = NotifyPref {
                        notifyPendingTags = True
                      }
 
-data NotifyRevisionRange = NoNotifyRevisions | NotifyAllVersions | NotifyNewestVersion deriving (Eq, Enum, Read, Show, Typeable)
+data NotifyRevisionRange = NotifyAllVersions | NotifyNewestVersion | NoNotifyRevisions deriving (Eq, Enum, Read, Show, Typeable)
 
 instance Pretty NotifyRevisionRange where
-  pretty NoNotifyRevisions = text "No notify revisions"
-  pretty NotifyAllVersions = text "Notify all versions"
-  pretty NotifyNewestVersion = text "Notify newest version"
+  pretty NoNotifyRevisions = text "No"
+  pretty NotifyAllVersions = text "All Versions"
+  pretty NotifyNewestVersion = text "Newest Version"
 
 instance Hashable NotifyRevisionRange where
   hash = fromEnum
