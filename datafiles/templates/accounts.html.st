@@ -26,7 +26,8 @@ maintainer group.</p>
 
 <h2>Account Management</h2>
 You can modify various settings for your account, including changing
-  the email address and password, as well as creating authentication
+  the email address and password, setting email notification
+  preferences, as well as creating authentication
   tokens, at the <a href="/users/account-management">account
   management page</a>.
 
