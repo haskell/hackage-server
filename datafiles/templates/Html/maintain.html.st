@@ -48,7 +48,7 @@ package after its been released.
 
 <dt>Test settings</dt>
   <dd>If your package contains tests that can't run on hackage, you can disable them here.
-  <p>$versions:{pkgid|<a href="/package/$pkgid$/reports/test">$pkgid$</a>}; separator=", "$</p>
+  <p>$versions:{pkgid|<a href="/package/$pkgid$/reports/testsEnabled">$pkgid$</a>}; separator=", "$</p>
   </dd>
 
 <dt>Trigger rebuild</dt>
