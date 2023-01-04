@@ -1,13 +1,10 @@
 {-# LANGUAGE OverloadedStrings, NamedFieldPuns, TypeApplications, ScopedTypeVariables #-}
 module Main where
 
-import           Control.Monad (foldM)
-import           Control.Monad.Catch (MonadCatch, SomeException, catch)
-import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Array as Arr
 import qualified Data.Bimap as Bimap
 import           Data.Foldable (for_)
-import           Data.List (partition)
+import           Data.List (partition, foldl')
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -26,7 +23,7 @@ import Test.Tasty.HUnit
 
 import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Gen as Gen
-import           Hedgehog ((===), Group(Group), MonadGen, MonadTest, Property, PropertyT, checkSequential, failure, footnoteShow, forAll, property)
+import           Hedgehog ((===), Group(Group), MonadGen, Property, PropertyT, checkSequential, forAll, property)
 
 import RevDepCommon (Package(..), TestPackage(..), mkPackage, packToPkgInfo)
 
@@ -51,7 +48,7 @@ mkRevFeat pkgs = do
         , migratedEphemeralPrefs = False
         }
   updateReverse <- newHook
-  constructed <- constructReverseIndex idx
+  let constructed = constructReverseIndex idx
   memState <- newMemStateWHNF constructed
   pure $
     reverseFeature
@@ -151,8 +148,8 @@ prop_constructRevDeps :: Property
 prop_constructRevDeps = property $ do
   packs <- genPacks
   let idx = PackageIndex.fromList $ map packToPkgInfo packs
-  ReverseIndex foldedRevDeps foldedMap foldedDeps <- foldM (packageFolder @_ @TestPackage idx) emptyReverseIndex packs
-  Right (ReverseIndex constructedRevDeps constructedMap constructedDeps) <- pure $ constructReverseIndex idx
+  let ReverseIndex foldedRevDeps foldedMap foldedDeps = foldl' (packageFolder idx) emptyReverseIndex packs
+  let (ReverseIndex constructedRevDeps constructedMap constructedDeps) = constructReverseIndex idx
   for_ (PackageIndex.allPackageNames idx) $ \name -> do
     foundFolded :: Int <- Bimap.lookup name foldedMap
     foundConstructed :: Int <- Bimap.lookup name constructedMap
@@ -171,24 +168,18 @@ prop_statsEqualsDeps :: Property
 prop_statsEqualsDeps = property $ do
   packs <- genPacks
   let packages = map packToPkgInfo packs
-  Right revs <- pure $ constructReverseIndex $ PackageIndex.fromList packages
+  let revs = constructReverseIndex $ PackageIndex.fromList packages
   pkginfo <- forAll $ Gen.element packages
   let name = packageName pkginfo
-  directSet <- getDependenciesRaw name revs
-  totalSet <- getDependenciesFlatRaw name revs
-  directNames <- getDependencies name revs
-  totalNames <- getDependenciesFlat name revs
+  let directSet = getDependenciesRaw name revs
+      totalSet = getDependenciesFlatRaw name revs
+      directNames = getDependencies name revs
+      totalNames = getDependenciesFlat name revs
   length directSet === length directNames
   length totalSet === length totalNames
 
-packageFolder :: (MonadCatch m, MonadIO m, MonadTest m, Show b) => PackageIndex PkgInfo -> ReverseIndex -> Package b -> m ReverseIndex
-packageFolder index revindex pkg@(Package name _version deps) =
-  catch (liftIO $ addPackage index (mkPackageName $ show name) (map (mkPackageName . show) deps) revindex)
-  $ \(e :: SomeException) -> do
-    footnoteShow pkg
-    footnoteShow index
-    footnoteShow e
-    failure
+packageFolder :: Show b => PackageIndex PkgInfo -> ReverseIndex -> Package b -> ReverseIndex
+packageFolder index revindex (Package name _version deps) = addPackage index (mkPackageName $ show name) (map (mkPackageName . show) deps) revindex
 
 
 genPackage :: forall m b. (MonadGen m, Enum b, Bounded b, Ord b) => b -> [Package b] -> m (Package b)

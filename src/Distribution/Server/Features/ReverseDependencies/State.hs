@@ -29,9 +29,6 @@ module Distribution.Server.Features.ReverseDependencies.State
 import           Prelude hiding (lookup)
 
 import           Control.Arrow ((&&&))
-import           Control.Monad (forM)
-import           Control.Monad.Catch
-import           Control.Monad.Reader (MonadIO)
 import qualified Data.Array as Arr ((!), assocs, accumArray)
 import           Data.Bimap (Bimap, lookup, lookupR)
 import qualified Data.Bimap as Bimap
@@ -39,7 +36,7 @@ import           Data.Containers.ListUtils (nubOrd)
 import           Data.List (union)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe (catMaybes, mapMaybe, maybeToList)
+import           Data.Maybe (mapMaybe, maybeToList)
 import qualified Data.Set as Set
 import           Data.Set (Set, fromList, toList, delete)
 import           Data.Typeable (Typeable)
@@ -76,52 +73,43 @@ instance MemSize Dependency where
 instance MemSize ReverseIndex where
     memSize (ReverseIndex a b c) = memSize3 a b c
 
-constructReverseIndex :: MonadCatch m => PackageIndex PkgInfo -> m ReverseIndex
-constructReverseIndex index = do
+constructReverseIndex :: PackageIndex PkgInfo -> ReverseIndex
+constructReverseIndex index =
     let nodePkgMap = foldr (uncurry Bimap.insert) Bimap.empty $ zip (PackageIndex.allPackageNames index) [0..]
-    (revs, dependencies) <- constructRevDeps index nodePkgMap
-    pure $
-      ReverseIndex
+        (revs, dependencies) = constructRevDeps index nodePkgMap
+    in ReverseIndex
         { reverseDependencies = revs
         , packageNodeIdMap = nodePkgMap
         , deps = dependencies
         }
 
-addPackage :: (MonadCatch m, MonadIO m) => PackageIndex PkgInfo -> PackageName -> [PackageName]
-           -> ReverseIndex -> m ReverseIndex
-addPackage index pkgname dependencies ri@(ReverseIndex revs nodemap pkgIdToDeps) = do
-  let
-    npm = Bimap.tryInsert pkgname (Bimap.size nodemap) nodemap
-  new :: [(Int, [Int])] <-
-    forM dependencies $ \d ->
-      (,) <$> lookup d npm <*> fmap (:[]) (lookup pkgname npm)
-  let rd = insEdges (Bimap.size npm) new revs
+addPackage :: PackageIndex PkgInfo -> PackageName -> [PackageName]
+           -> ReverseIndex -> ReverseIndex
+addPackage index pkgname dependencies (ReverseIndex revs nodemap pkgIdToDeps) =
+  let npm = Bimap.tryInsert pkgname (Bimap.size nodemap) nodemap
+      pn = (:[]) <$> lookup pkgname npm
+      new :: [(Int, [Int])]
+      new = mapMaybe (\d -> (,) <$> lookup d npm <*> pn) dependencies
+      rd = insEdges (Bimap.size npm) new revs
       pkginfos = PackageIndex.lookupPackageName index pkgname
       newPackageDepMap = Map.fromList $ map (packageId &&& getDeps) pkginfos
-  pure
-    ri
+  in ReverseIndex
       { reverseDependencies = rd
       , packageNodeIdMap = npm
       , deps = Map.union newPackageDepMap pkgIdToDeps
       }
 
-constructRevDeps :: forall m. MonadCatch m => PackageIndex PkgInfo -> Bimap PackageName NodeId -> m (RevDeps, Map PackageIdentifier [Dependency])
-constructRevDeps index nodemap = do
+constructRevDeps :: PackageIndex PkgInfo -> Bimap PackageName NodeId -> (RevDeps, Map PackageIdentifier [Dependency])
+constructRevDeps index nodemap =
     let allPackages :: [PkgInfo]
         allPackages = concat $ PackageIndex.allPackagesByName index
-        nodeIdsOfDependencies :: PkgInfo -> m [(NodeId, NodeId)]
-        nodeIdsOfDependencies pkg = catMaybes <$> mapM findNodesIfPresent (getDepNames pkg)
-          where
-          findNodesIfPresent :: PackageName -> m (Maybe (NodeId, NodeId))
-          findNodesIfPresent dep = do
-            eitherErrOrFound :: Either SomeException (NodeId, NodeId) <-
-              try $ (,) <$> lookup dep nodemap <*> lookup (packageName pkg) nodemap
-            pure $ either (const Nothing) Just eitherErrOrFound
-    -- This will mix dependencies of different versions of the same package, but that is intended.
-    edges <- traverse nodeIdsOfDependencies allPackages
-    let dependencies = Map.fromList $ map (packageId &&& getDeps) allPackages
+        nodeIdsOfDependencies :: PkgInfo -> [(NodeId, NodeId)]
+        nodeIdsOfDependencies pkg = mapMaybe (\dep -> (,) <$> lookup dep nodemap <*> lookup (packageName pkg) nodemap) (getDepNames pkg)
+        -- This will mix dependencies of different versions of the same package, but that is intended.
+        edges = map nodeIdsOfDependencies allPackages
+        dependencies = Map.fromList $ map (packageId &&& getDeps) allPackages
 
-    pure (Gr.buildG (0, Bimap.size nodemap) (nubOrd $ concat edges)
+    in (Gr.buildG (0, Bimap.size nodemap) (nubOrd $ concat edges)
          , dependencies
          )
 
@@ -170,21 +158,22 @@ type ReverseDisplay = Map PackageName (Version, Maybe VersionStatus)
 
 type VersionIndex = (PackageName -> (PreferredInfo, [Version]))
 
-perPackageReverse :: MonadCatch m => (PackageName -> (PreferredInfo, [Version])) -> PackageIndex PkgInfo -> ReverseIndex -> PackageName -> m (Map PackageName (Version, Maybe VersionStatus))
-perPackageReverse indexFunc index revdeps pkg = do
+perPackageReverse :: (PackageName -> (PreferredInfo, [Version])) -> PackageIndex PkgInfo -> ReverseIndex -> PackageName -> Map PackageName (Version, Maybe VersionStatus)
+perPackageReverse indexFunc index revdeps pkg =
   let pkgids = (packageVersion. packageId) <$> PackageIndex.lookupPackageName index pkg
-  let best :: PackageId
+      best :: PackageId
       best = PackageIdentifier pkg (maximum pkgids)
-  perVersionReverse indexFunc index revdeps best
+  in perVersionReverse indexFunc index revdeps best
 
-perVersionReverse :: MonadCatch m => (PackageName -> (PreferredInfo, [Version])) -> PackageIndex PkgInfo -> ReverseIndex -> PackageId -> m (Map PackageName (Version, Maybe VersionStatus))
-perVersionReverse indexFunc index (ReverseIndex revs nodemap dependencies) pkg = do
-    found <- lookup (packageName pkg) nodemap
-    -- this will be too much, since we are throwing away the specific version
-    revDepNames :: Set PackageName <- fromList <$> mapM (`lookupR` nodemap) (toList $ suc revs found)
-    let packagemap :: Map PackageName (Set Version)
-        packagemap = Map.fromList $ map (\x -> (x, Set.map packageVersion $ dependsOnPkg index pkg x dependencies)) (toList revDepNames)
-    pure $ constructReverseDisplay indexFunc packagemap
+perVersionReverse :: (PackageName -> (PreferredInfo, [Version])) -> PackageIndex PkgInfo -> ReverseIndex -> PackageId -> Map PackageName (Version, Maybe VersionStatus)
+perVersionReverse indexFunc index (ReverseIndex revs nodemap dependencies) pkg =  case lookup (packageName pkg) nodemap of
+    Nothing -> Map.empty
+    Just found ->
+     -- this will be too much, since we are throwing away the specific version
+      let revDepNames = mapMaybe (`lookupR` nodemap) (toList $ suc revs found)
+          packagemap :: Map PackageName (Set Version)
+          packagemap = Map.fromList $ map (\x -> (x, Set.map packageVersion $ dependsOnPkg index pkg x dependencies)) revDepNames
+      in constructReverseDisplay indexFunc packagemap
 
 constructReverseDisplay :: (PackageName -> (PreferredInfo, [Version])) -> Map PackageName (Set Version) -> Map PackageName (Version, Maybe VersionStatus)
 constructReverseDisplay indexFunc =
@@ -207,52 +196,38 @@ insEdges nodesize edges revdeps = Arr.accumArray union [] (0, nodesize) (edges +
 
 --------------------------------------
 
-getDependencies :: MonadCatch m => PackageName -> ReverseIndex -> m (Set PackageName)
-getDependencies pkg revs =
-  names revs =<< getDependenciesRaw pkg revs
+getDependencies :: PackageName -> ReverseIndex -> Set PackageName
+getDependencies pkg revs = names revs $ getDependenciesRaw pkg revs
 
-getDependenciesRaw :: MonadCatch m => PackageName -> ReverseIndex -> m (Set NodeId)
-getDependenciesRaw pkg (ReverseIndex revdeps nodemap _) = do
-  enodeid <- try (lookup pkg nodemap)
-  onRight enodeid $ \nodeid ->
-    nodeid `delete` suc revdeps nodeid
+getDependenciesRaw :: PackageName -> ReverseIndex -> Set NodeId
+getDependenciesRaw pkg (ReverseIndex revdeps nodemap _) =
+  case lookup pkg nodemap of
+    Nothing -> mempty
+    Just nodeid -> delete nodeid (suc revdeps nodeid)
 
 -- | The flat/total/transitive/indirect reverse dependencies are all the packages that depend on something that depends on the given 'pkg'
-getDependenciesFlat :: forall m. MonadCatch m => PackageName -> ReverseIndex -> m (Set PackageName)
-getDependenciesFlat pkg revs =
-  names revs =<< getDependenciesFlatRaw pkg revs
+getDependenciesFlat :: PackageName -> ReverseIndex -> Set PackageName
+getDependenciesFlat pkg revs = names revs $ getDependenciesFlatRaw pkg revs
 
-getDependenciesFlatRaw :: forall m. MonadCatch m  => PackageName -> ReverseIndex -> m (Set NodeId)
+getDependenciesFlatRaw :: PackageName -> ReverseIndex -> Set NodeId
 getDependenciesFlatRaw pkg (ReverseIndex revdeps nodemap _) = do
-  enodeid <- try (lookup pkg nodemap)
-  onRight enodeid $ \nodeid ->
-    nodeid `delete` fromList (Gr.reachable revdeps nodeid)
+  case lookup pkg nodemap of
+    Nothing -> mempty
+    Just nodeid -> delete nodeid $ fromList (Gr.reachable revdeps nodeid)
 
 -- | The direct dependencies depend on the given 'pkg' directly, i.e. not transitively
-getDirectCount :: MonadCatch m => PackageName -> ReverseIndex -> m Int
-getDirectCount pkg revs = do
-  length <$> getDependenciesRaw pkg revs
+getDirectCount :: PackageName -> ReverseIndex -> Int
+getDirectCount pkg revs = length $ getDependenciesRaw pkg revs
 
 -- | Given a set of NodeIds, look up the package names for all of them
-names :: MonadThrow m => ReverseIndex -> Set NodeId -> m (Set PackageName)
+names :: ReverseIndex -> Set NodeId -> Set PackageName
 names (ReverseIndex _ nodemap _) ids = do
-  fromList <$> mapM (`lookupR` nodemap) (toList ids)
+  fromList $ mapMaybe (`lookupR` nodemap) (toList ids)
 
-onRight :: Monad m => Either SomeException t -> (t -> Set NodeId) -> m (Set NodeId)
-onRight e fun = do
-  case e of
-    Left (_ :: SomeException) -> do
-      pure mempty
-    Right nodeid ->
-      pure $ fun nodeid
 
 -- | The flat/total/transitive/indirect dependency count is the amount of package names that depend transitively on the given 'pkg'
-getTotalCount :: MonadCatch m => PackageName -> ReverseIndex -> m Int
-getTotalCount pkg revs = do
-  length <$> getDependenciesFlatRaw pkg revs
+getTotalCount :: PackageName -> ReverseIndex -> Int
+getTotalCount pkg revs = length $ getDependenciesFlatRaw pkg revs
 
-getReverseCount :: MonadCatch m => PackageName -> ReverseIndex -> m (Int, Int)
-getReverseCount pkg revs = do
-  direct <- getDirectCount pkg revs
-  total <- getTotalCount pkg revs
-  pure (direct, total)
+getReverseCount :: PackageName -> ReverseIndex -> (Int, Int)
+getReverseCount pkg revs = (getDirectCount pkg revs, getTotalCount pkg revs)
