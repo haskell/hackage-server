@@ -62,7 +62,7 @@ main :: IO ()
 main = do
   packs :: Vector.Vector (Package TestPackage) <- randomPacks globalStdGen 20000 mempty
   let idx = PackageIndex.fromList $ map packToPkgInfo (Vector.toList packs)
-  Right revs <- pure $ constructReverseIndex idx
+  let revs = constructReverseIndex idx
   let numPacks = length packs
   defaultMain $
     (:[]) $
@@ -70,7 +70,7 @@ main = do
     flip nfAppIO revs $ \revs' -> do
       select <- uniformRM (0, numPacks - 1) globalStdGen
       -- TODO why are there so many transitive deps?
-      length <$>
+      pure $ length $
         getDependenciesFlat
         (packageName $ packToPkgInfo (packs Vector.! select))
         revs'
