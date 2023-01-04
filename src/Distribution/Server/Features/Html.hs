@@ -232,7 +232,7 @@ htmlFeature :: ServerEnv
             -> AsyncCache Response
             -> AsyncCache Response
             -> Templates
-            -> RecentPackagesFeature 
+            -> RecentPackagesFeature
             -> (HtmlFeature, IO Response, IO Response)
 
 htmlFeature env@ServerEnv{..}
@@ -526,7 +526,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           }
       ]
 
-    readParamWithDefaultAndValid :: (Read a, HasRqData m, Monad m, Functor m, Alternative m) => 
+    readParamWithDefaultAndValid :: (Read a, HasRqData m, Monad m, Functor m, Alternative m) =>
       a -> (a -> Bool) -> String -> m a
     readParamWithDefaultAndValid n f queryParam = do
         m <- optional (look queryParam)
@@ -550,7 +550,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       pageSize <- lookupPageSize 20
 
       let conf = Paging.createConf page pageSize recentPackages
-      
+
       return . toResponse $ Pages.recentPage conf users recentPackages
 
     serveRecentRSS :: DynamicPath -> ServerPartE Response
@@ -560,9 +560,9 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       page <-  lookupPage 1
       pageSize <- lookupPageSize 20
       now   <- liftIO getCurrentTime
-      
+
       let conf = Paging.createConf page pageSize recentPackages
-      
+
       return . toResponse $ Pages.recentFeed conf users serverBaseURI now recentPackages
 
     serveRevisionPage :: DynamicPath -> ServerPartE Response
@@ -571,7 +571,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       users <- queryGetUserDb
       page <-  lookupPage 1
       pageSize <- lookupPageSize 40
-      
+
       let conf = Paging.createConf page pageSize revisions
 
       return . toResponse $ Pages.revisionsPage conf users revisions
@@ -583,7 +583,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       page <-  lookupPage 1
       pageSize <- lookupPageSize 40
       now   <- liftIO getCurrentTime
-      
+
       let conf = Paging.createConf page pageSize revisions
 
       return . toResponse $ Pages.recentRevisionsFeed conf users serverBaseURI now revisions
@@ -614,7 +614,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
     serveGraphJSON :: DynamicPath -> ServerPartE Response
     serveGraphJSON _ = do
-        graph <- revJSON
+        graph <- liftIO revJSON
         --TODO: use proper type for graph with ETag
         cacheControl [Public, maxAgeMinutes 30] (etagFromHash graph)
         ok . toResponse $ graph
@@ -2178,7 +2178,7 @@ mkHtmlReverse HtmlUtilities{..}
         let pkgname = pkgName pkg
         pkgids <- lookupPackageName pkgname
         revCount <- revPackageStats pkgname
-        versions <- revForEachVersion pkgname
+        versions <- liftIO $ revForEachVersion pkgname
         return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Reverse dependency statistics") $
             reverseVerboseRender pkgname (map packageVersion pkgids) (corePackageIdUri "") revCount versions
 
