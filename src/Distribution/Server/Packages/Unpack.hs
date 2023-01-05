@@ -77,7 +77,7 @@ import Text.Printf
 
 -- Whether to allow upload of "all rights reserved" packages
 allowAllRightsReserved :: Bool
-allowAllRightsReserved = True
+allowAllRightsReserved = False
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
@@ -204,10 +204,9 @@ specVersionChecks specVerOk specVer = do
   when (not specVerOk) $
     throwError "The 'cabal-version' field could not be properly parsed."
 
-  -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
-  -- TODO: slowly phase out ancient cabal spec versions below 1.10
-  when (specVer < CabalSpecV1_2) $
-    throwError "'cabal-version' must be at least 1.2"
+  -- Don't allowing uploading new pre-1.10 cabal files.
+  when (specVer < CabalSpecV1_10) $
+    throwError "'cabal-version' must be at least 1.10"
 
   -- Safeguard; should already be caught by parser
   unless (specVer <= CabalSpecV3_0) $

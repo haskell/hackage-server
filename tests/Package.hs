@@ -32,12 +32,13 @@ mkPackage name = (name ++ "-1.0.0.0.tar.gz",               BS.unpack targz,
                           "name:          " ++ name,
                           "version:       1.0.0.0",
                           "synopsis:      test package " ++ name,
-                          "cabal-version: >= 1.2",
+                          "cabal-version: >= 1.10",
                           "build-type:    Simple",
                           "license:       BSD3",
                           "category:      MyCategory",
                           "",
                           "Library {",
+                          "    default-language:  Haskell98",
                           "    exposed-modules: " ++ modName,
                           "}"]
           modFile = unlines [
@@ -53,4 +54,3 @@ mkTarPath fp = case toTarPath False fp of
 headToUpper :: String -> String
 headToUpper [] = []
 headToUpper (x : xs) = toUpper x : xs
-
