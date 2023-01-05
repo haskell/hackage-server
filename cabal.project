@@ -11,6 +11,17 @@ packages: .
 
 allow-newer: rss:time, rss:base
 
+-- Andreas, 2022-10-28:  `Cabal-3.8.1.0` wants `process >= 1.6.14`
+-- which is too new for the `ghc < 9.4` package that is pulled in
+-- by `doctest-parallel`.
+-- Since, Cabal-3.8.1.0 has no reason to want such a new version
+-- of process, we can solve the conflict here by allowing
+-- `Cabal` to use the shipped version of `process`.
+-- This workaround can be removed once `Cabal-3.8` drops
+-- its (unreasonable) constraint on `process`.
+-- See: https://github.com/haskell/cabal/issues/8554
+allow-older: Cabal:process
+
 -----------------------------------------------------------------------------
 -- Anti-constraints
 

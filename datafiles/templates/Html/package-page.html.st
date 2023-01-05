@@ -36,9 +36,15 @@
 
     $if(isDeprecated)$
     <div id="deprecated">
-      Deprecated.
+      <span style="color:#D00B3C">Deprecated.</span>
       $deprecatedMsg$
     </div>
+    $else$
+      $if(isDeprecatedVersion)$
+      <div id="deprecated-version">
+        <span style="color:#D00B3C">This version is deprecated.</span>
+      </div>
+      $endif$
     $endif$
 
     <div id="flex-container">
@@ -87,7 +93,13 @@
 
         <div id="maintainer-corner">
           <h4>Maintainer's Corner</h4>
-          <p>For $package.maintainerURL$ and hackage trustees</p>
+          <p><a href="$package.maintainerURL$">Package maintainers</a></p>
+          <ul>
+            <li>
+              $maintainers$
+            </li>
+          </ul>
+          <p>For package maintainers and hackage trustees</p>
           <ul>
             <li>
               <a href="$baseurl$/package/$package.name$/maintain">
@@ -210,6 +222,20 @@
               <th>Distributions</th>
               <td>$hackage.distributions$</td>
             </tr>
+            $endif$
+
+            $if(hasrdeps)$
+            <tr>
+              <th>Reverse Dependencies</th>
+              <td>$rdeps$</td>
+            </tr>
+            <script>
+              \$('.revdepdetails').click(function(e) {
+                e.preventDefault();
+                var html = '$rdepsummary$'
+                modal.open({ content: html});
+              });
+            </script>
             $endif$
 
             $if(hasexecs)$

@@ -9,9 +9,19 @@ html {
   height: 100%;
 }
 
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #333;
+    color: #fefefe;
+  }
+}
+@media (prefers-color-scheme: light) {
+  body {
+    background: #fefefe;
+    color: #333;
+  }
+}
 body {
-  background: #fefefe;
-  color: #333;
   text-align: left;
   min-height: 100vh;
   position: relative;
@@ -59,8 +69,16 @@ dd {
 }
 
 a { text-decoration: none; }
-a[href]:link { color: #9E358F; }
-a[href]:visited {color: #6F5F9C; }
+
+@media (prefers-color-scheme: dark) {
+  a[href]:link { color: #EB82DC; }    /* 30% brighter */
+  a[href]:visited { color: #D5C5FF; } /* 40% brighter */
+}
+@media (prefers-color-scheme: light) {
+  a[href]:link { color: #9E358F; }
+  a[href]:visited {color: #6F5F9C; }
+}
+
 a[href]:hover { text-decoration:underline; }
 
 /* @end */
@@ -142,9 +160,19 @@ pre, code, kbd, samp, .src {
 
 /* @group Common */
 
+@media (prefers-color-scheme: dark) {
+  .caption, h1, h2, h3, h4, h5, h6 {
+    color: #5E5184;
+    filter: brightness(2.0);
+  }
+}
+@media (prefers-color-scheme: light) {
+  .caption, h1, h2, h3, h4, h5, h6 {
+    color: #5E5184;
+  }
+}
 .caption, h1, h2, h3, h4, h5, h6 {
   font-weight: bold;
-  color: #5E5184;
   margin: 1.33em 0 0.7em 0;
   line-height: 1.05em;
 }
@@ -194,10 +222,19 @@ ul.links li a, ul.links li form {
   cursor: pointer;
 }
 
+@media (prefers-color-scheme: dark) {
+  pre {
+      background-color: #474747; /* 20% brighter than background */
+  }
+}
+@media (prefers-color-scheme: light) {
+  pre {
+      background-color: #f7f7f7;
+  }
+}
 pre {
   padding: 0.5rem 1rem;
   margin: 1em 0;
-  background-color: #f7f7f7;
   overflow: auto;
 }
 
@@ -402,7 +439,6 @@ table.properties td, table.properties th {
   }
 
   div #properties {
-      background: #fefefe;
       width: 40%;
       margin-bottom: 2em;
   }
@@ -583,11 +619,21 @@ div#style-menu-holder {
   display: block;
 }
 
+@media (prefers-color-scheme: dark) {
+  #footer {
+    background: #222;
+    color: #ededed;
+  }
+}
+@media (prefers-color-scheme: light) {
+  #footer {
+    background: #ededed;
+    color: #222;
+  }
+}
 #footer {
-  background: #ededed;
   border-top: 1px solid #aaa;
   padding: 0.5em 0;
-  color: #222;
   text-align: center;
   width: 100%;
   height: 3em;
@@ -625,8 +671,17 @@ ul.links li form button {
 
 /* @group Front Matter */
 
+@media (prefers-color-scheme: dark) {
+  #table-of-contents {
+    background: #222;
+  }
+}
+@media (prefers-color-scheme: light) {
+  #table-of-contents {
+    background:  #f7f7f7;
+  }
+}
 #table-of-contents {
-  background:  #f7f7f7;
   padding: 1em;
   margin: 0;
   margin-top: 1em;
@@ -986,15 +1041,30 @@ table.fancy th {
   background: #f0f0f0;
 }
 
+@media (prefers-color-scheme: dark) {
+  table.fancy td, table.properties td,
+  table.fancy th, table.properties th {
+    background: #333;
+  }
+  table.dataTable.compact.fancy tbody th,
+  table.dataTable.compact.fancy tbody td {
+    background: #333;
+  }
+}
+
 table.fancy td, table.properties td,
 table.fancy th, table.properties th {
   padding: 0.15em 0.45em;
 }
 
+table.fancy tr.even td {
+  background-color: #eee;
+}
+
 table.dataTable.compact.fancy tbody th,
 table.dataTable.compact.fancy tbody td {
-    padding: 6px 10px;
-    line-height: normal;
+  padding: 6px 10px;
+  line-height: normal;
 }
 
 ul.searchresults li {
@@ -1040,6 +1110,106 @@ a.deprecated[href]:visited {
 
 .versions a.normal[href]:visited {
     color: #61B01E;
+}
+
+/* Paginator */
+#paginatorContainer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+#paginatorContainer > div {
+  padding: 1em 0;
+}
+
+.paginator {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* Styles Next/Prev when they have no href */
+
+@media (prefers-color-scheme: dark) {
+      .paginator a {
+        color: #474747;
+      }
+}
+
+@media (prefers-color-scheme: light) {
+      .paginator a {
+        color: #666 !important;
+      }
+}
+
+.paginator a {
+  cursor: default;
+  background: none;
+  border: none;
+  padding: 0.5em 1em;
+  text-decoration: none;
+}
+
+.paginator span {
+  color: #333;
+  padding: 0.5em 1em;
+}
+
+
+@media (prefers-color-scheme: dark) {
+      .paginator a:link:hover, .paginator a:visited:hover {
+        color: #474747;
+      }
+}
+
+@media (prefers-color-scheme: light) {
+      .paginator a:link:hover, .paginator a:visited:hover {
+        color: #333 !important;
+      }
+}
+
+.paginator a:link, .paginator a:visited {
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+      .paginator a:link:hover, .paginator a:visited:hover {
+        color: #585858;
+        background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
+      }
+}
+
+@media (prefers-color-scheme: light) {
+      .paginator a:link:hover, .paginator a:visited:hover {
+        color: white !important;
+        background: linear-gradient(to bottom, #585858 0%, #111 100%);
+      }
+}
+
+.paginator a:link:hover, .paginator a:visited:hover {
+  border: 1px solid #111;
+  text-decoration: none;
+}
+
+@media (prefers-color-scheme: dark) {
+      .paginator .current, .paginator .current:hover {
+        color: #474747;
+        background: linear-gradient(to bottom, #585858 0%, #111 100%);
+      }
+}
+
+@media (prefers-color-scheme: light) {
+      .paginator .current, .paginator .current:hover {
+        color: #666 !important;
+        background: linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
+      }
+}
+
+.paginator .current,
+.paginator .current:hover {
+  border: 1px solid #979797;
 }
 
 p.registration-email {

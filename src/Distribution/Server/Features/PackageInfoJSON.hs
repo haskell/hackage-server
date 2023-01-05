@@ -53,6 +53,7 @@ import Distribution.Utils.ShortText (fromShortText)
 import Data.Foldable (toList)
 import Data.Traversable (for)
 import qualified Data.List as List
+import Data.Time (UTCTime)
 
 
 data PackageInfoJSONFeature = PackageInfoJSONFeature {
@@ -130,12 +131,14 @@ initPackageInfoJSONFeature env = do
 
 -- | Pure function for extracting basic package info from a Cabal file
 getBasicDescription
-  :: CabalFileText
+  :: UTCTime
+    -- ^ Time of upload
+  -> CabalFileText
   -> Int
      -- ^ Metadata revision. This will be added to the resulting
      --   @PackageBasicDescription@
   -> Either String PackageBasicDescription
-getBasicDescription (CabalFileText cf) metadataRev =
+getBasicDescription uploadedAt (CabalFileText cf) metadataRev =
   let parseResult = PkgDescr.parseGenericPackageDescription (BS.toStrict cf)
   in case PkgDescr.runParseResult parseResult of
     (_, Right pkg) -> let
@@ -148,6 +151,7 @@ getBasicDescription (CabalFileText cf) metadataRev =
                                 PkgDescr.licenseRaw pkgd
       pbd_homepage          = T.pack . fromShortText $ PkgDescr.homepage pkgd
       pbd_metadata_revision = metadataRev
+      pbd_uploaded_at       = uploadedAt
       in
       return $ PackageBasicDescription {..}
     (_, Left (_, perrs)) ->
@@ -201,6 +205,7 @@ servePackageBasicDescription resource preferred packageInfoState dpath = do
       pkg <- lookupPackageId resource pkgid
 
       let metadataRevs = fst <$> pkgMetadataRevisions pkg
+          uploadInfos  = snd <$> pkgMetadataRevisions pkg
           nMetadata    = Vector.length metadataRevs
           metadataInd  = fromMaybe (nMetadata - 1) metadataRev
 
@@ -212,7 +217,8 @@ servePackageBasicDescription resource preferred packageInfoState dpath = do
         )
 
       let cabalFile = metadataRevs Vector.! metadataInd
-          pkgDescr  = getBasicDescription cabalFile metadataInd
+          uploadedAt = fst $ uploadInfos Vector.! metadataInd
+          pkgDescr  = getBasicDescription uploadedAt cabalFile metadataInd
       case pkgDescr of
         Left e  -> Framework.errInternalError [Framework.MText e]
         Right d -> return d

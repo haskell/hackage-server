@@ -22,7 +22,7 @@ import qualified Data.Text.Encoding.Error as T (lenientDecode)
 import qualified Data.Text.Lazy as TL
 import Data.Typeable (Typeable)
 import Network.URI (isRelativeReference)
-import Control.Monad.Identity
+import Control.Monad.Identity (runIdentity)
 import Text.HTML.SanitizeXSS as XSS
 import System.FilePath.Posix  (takeExtension)
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
@@ -120,6 +120,30 @@ adjustRelativeLink url
 -- <p>Published to <a href="http://hackage.haskell.org/foo3/bar">http://hackage.haskell.org/foo3/bar</a>.</p>
 -- <BLANKLINE>
 --
+-- >>> renderMarkdown "test" "Issue #1105:\n- pipes\n- like `a|b`\n- should be allowed in lists"
+-- <p>Issue #1105:</p>
+-- <ul>
+-- <li>pipes
+-- </li>
+-- <li>like <code>a|b</code>
+-- </li>
+-- <li>should be allowed in lists
+-- </li>
+-- </ul>
+-- <BLANKLINE>
+--
+-- >>> renderMarkdown "test" "Tables should be supported:\n\nfoo|bar\n---|---\n"
+-- <p>Tables should be supported:</p>
+-- <table>
+-- <thead>
+-- <tr>
+-- <th>foo</th>
+-- <th>bar</th>
+-- </tr>
+-- </thead>
+-- </table>
+-- <BLANKLINE>
+--
 renderMarkdown
   :: String         -- ^ Name or path of input.
   -> BS.ByteString  -- ^ Commonmark text input.
@@ -160,11 +184,33 @@ renderMarkdown'
   -> BS.ByteString   -- ^ Commonmark text input.
   -> XHtml.Html      -- ^ Rendered HTML.
 renderMarkdown' render name md =
-     either (const $ XHtml.pre XHtml.<< T.unpack txt) (XHtml.primHtml . T.unpack . sanitizeBalance . TL.toStrict . render) $
-         runIdentity (commonmarkWith (mathSpec <> gfmExtensions <> defaultSyntaxSpec)
-                     name
-                     txt)
-  where txt = T.decodeUtf8With T.lenientDecode . BS.toStrict $ md
+  either (const $ fallback) mdToHTML $
+    runIdentity $ commonmarkWith spec name txt
+  where
+  -- Input
+  txt = T.decodeUtf8With T.lenientDecode . BS.toStrict $ md
+  -- Fall back to HTML if there is a parse error for markdown
+  fallback = XHtml.pre XHtml.<< T.unpack txt
+  -- Conversion of parsed md to HTML
+  mdToHTML = XHtml.primHtml . T.unpack . sanitizeBalance . TL.toStrict . render
+  -- Specification of the markdown parser.
+  -- Andreas Abel, 2022-07-21, issue #1105.
+  -- Workaround for https://github.com/jgm/commonmark-hs/issues/95:
+  -- Put the table parser last.
+  spec = mconcat $
+    mathSpec :
+    -- all the gfm extensions except for tables
+    emojiSpec :
+    strikethroughSpec :
+    autolinkSpec :
+    autoIdentifiersSpec :
+    taskListSpec :
+    footnoteSpec :
+    -- the default syntax
+    defaultSyntaxSpec :
+    -- the problematic table parser
+    pipeTableSpec :
+    []
 
 -- | Does the file extension suggest that the file is in markdown syntax?
 supposedToBeMarkdown :: FilePath -> Bool

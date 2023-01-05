@@ -4,6 +4,21 @@
 $hackageCssTheme()$
 <title>Introduction | Hackage</title>
 <link rel="canonical" href="$sbaseurl$" />
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "url": "$sbaseurl$",
+    "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "$sbaseurl$/packages/search?terms={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+    }
+}
+</script>
 </head>
 
 <body>
