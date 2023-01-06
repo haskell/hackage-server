@@ -8,6 +8,7 @@ import           Data.ByteString.Char8 (packCStringLen, useAsCString)
 import           Data.Text             (Text)
 import qualified Data.Text             as Text
 import qualified Data.Text.Encoding    as Text
+import qualified Data.Text.Encoding.Error as Text
 -------------------------------------------------------------------------------
 import           Foreign               (ForeignPtr, FunPtr, Ptr, newForeignPtr,
                                         nullPtr, withForeignPtr)
