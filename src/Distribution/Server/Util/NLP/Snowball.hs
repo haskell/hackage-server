@@ -61,7 +61,7 @@ stemsWith (Stemmer mvar) ws =
                         fromIntegral $ Text.length word
                len <- stemmer_length struct
                bytes <- packCStringLen (ptr,fromIntegral len)
-               return $ Text.decodeUtf8 bytes
+               return $ Text.decodeUtf8With Text.lenientDecode bytes
 
 
 -------------------------------------------------------------------------------
