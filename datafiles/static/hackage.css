@@ -1245,3 +1245,9 @@ a.deprecated[href]:visited {
     background: #fff;
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  #search-results {
+    background: #222;
+  }
+}
