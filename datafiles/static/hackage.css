@@ -545,7 +545,6 @@ table.properties td, table.properties th {
   padding-bottom: 3em;
 }
 
-
 #page-header {
   background: #5E5184;
   border-bottom: 5px solid rgba(69, 59, 97, 0.5);
@@ -1234,4 +1233,15 @@ a.deprecated[href]:visited {
 .paginator .current,
 .paginator .current:hover {
   border: 1px solid #979797;
+}
+
+@media (prefers-color-scheme: dark) {
+  div#modal #content {
+    background: #222;
+  }
+}
+@media (prefers-color-scheme: light) {
+  div#modal #content {
+    background: #fff;
+  }
 }
