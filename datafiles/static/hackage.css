@@ -140,21 +140,37 @@ pre, code, kbd, samp, .src {
   font-size: 85%; /* 11pt */
 }
 
-.candidate-warn {
-    background-color: #ffdddd;
-    border-left: 6px solid #f44336;
-    padding: 0.01em 16px;
-    margin-bottom: 8px !important;
-    margin-top: 8px !important;
+@media (prefers-color-scheme: dark) {
+    .candidate-warn {
+        border-left: 6px solid #f44336;
+        padding: 0.01em 16px;
+        margin-bottom: 8px !important;
+        margin-top: 8px !important;
+    }
+
+    .candidate-info {
+        border-left: 6px solid #2196F3;
+        padding: 0.01em 16px;
+        margin-bottom: 8px;
+    }
 }
 
-.candidate-info {
-    background-color: #e7f3fe;
-    border-left: 6px solid #2196F3;
-    padding: 0.01em 16px;
-    margin-bottom: 8px;
-}
+@media (prefers-color-scheme: light) {
+    .candidate-warn {
+        background-color: #ffdddd;
+        border-left: 6px solid #f44336;
+        padding: 0.01em 16px;
+        margin-bottom: 8px !important;
+        margin-top: 8px !important;
+    }
 
+    .candidate-info {
+        background-color: #e7f3fe;
+        border-left: 6px solid #2196F3;
+        padding: 0.01em 16px;
+        margin-bottom: 8px;
+    }
+}
 
 /* @end */
 
@@ -1014,12 +1030,21 @@ p.tip {
 
 /* Misc admin forms */
 
-.box {
-  background: #faf9dc;
-  border: 1px solid #d8d7ad;
-  padding: 0.5em 1em;
-  max-width: 35em;
-  margin: 0.5em 0 1em 1em;
+@media (prefers-color-scheme: dark) {
+    .box {
+        padding: 0.5em 1em;
+        max-width: 35em;
+        margin: 0.5em 0 1em 1em;
+    }
+}
+@media (prefers-color-scheme: light) {
+    .box {
+        background: #faf9dc;
+        border: 1px solid #d8d7ad;
+        padding: 0.5em 1em;
+        max-width: 35em;
+        margin: 0.5em 0 1em 1em;
+    }
 }
 
 table.simpletable th, table.simpletable td {
