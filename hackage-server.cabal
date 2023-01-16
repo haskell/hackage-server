@@ -441,9 +441,6 @@ library lib-server
   if flag(cabal-parsers)
     build-depends: cabal-parsers ^>= 0
 
-  if !os(darwin)
-    extra-libraries: crypt
-
 ----------------------------------------------------------------------------
 
 common exe-defaults
