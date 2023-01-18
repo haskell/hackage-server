@@ -3,6 +3,14 @@
 <head>
 $hackageCssTheme()$
 <title>Set user notification preferences | Hackage</title>
+<style>
+td {
+  vertical-align: top;
+}
+label {
+  align-items: center;
+}
+</style>
 </head>
 
 <body>
@@ -45,6 +53,14 @@ $endif$
     <tr>
       <td><label>Notify on maintained package pending proposed tags:
       <td>$notifyPendingTags$
+
+    <tr>
+      <td><label>Notify when a dependency is updated for any of my maintained packages:
+      <td>$notifyDependencyForMaintained$
+          <p>trigger:
+          $notifyDependencyTriggerBounds$
+          <p>There must be at least <input value=$notifyDependencyMinimumUploads$ style=width:3em name=notifyDependencyMinimumUploads=%s type=number min=0> releases in the major series, including the new release.
+          <p>The oldest release must be at least <input value=$notifyDependencyMinimumAgeDays$ style=width:3em name=notifyDependencyMinimumAgeDays=%s type=number min=0> days old.
   </table>
   <input type="submit" value="Save notify preference" />
 </form>

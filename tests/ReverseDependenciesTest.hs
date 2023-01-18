@@ -4,18 +4,24 @@ module Main where
 import qualified Data.Array as Arr
 import qualified Data.Bimap as Bimap
 import           Data.Foldable (for_)
+import           Data.Functor.Identity (Identity(..))
 import           Data.List (partition, foldl')
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import           Data.Time (UTCTime(..), fromGregorian)
+import           Network.URI (parseURI)
 
-import Distribution.Package (mkPackageName, packageId, packageName)
+import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, packageName)
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), VersionStatus(NormalVersion), PreferredInfo(..))
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
+import Distribution.Server.Features.UserNotify (NotifyPref(..), defaultNotifyPrefs, dependencyReleaseEmails)
 import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
 import Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..))
+import Distribution.Server.Users.Types (UserId(..), UserName(..))
+import Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Version (mkVersion, version0)
 
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -35,6 +41,13 @@ mtlBeelineLens =
   -- since these two do not depend on base...
   , mkPackage "beeline" [0] ["mtl"]
   , mkPackage "lens" [0] ["mtl"]
+  ]
+
+newBaseReleased :: [PkgInfo]
+newBaseReleased =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "base" [4,15] []
+  , mkPackage "mtl" [2,3] ["base < 4.15"]
   ]
 
 mkRevFeat :: [PkgInfo] -> IO ReverseFeature
@@ -132,6 +145,52 @@ allTests = testGroup "ReverseDependenciesTest"
       ReverseFeature{revDisplayInfo} <- mkRevFeat mtlBeelineLens
       res <- revDisplayInfo
       assertEqual "beeline preferred is old" (PreferredInfo [] [] Nothing, [mkVersion [0]]) (res "beeline")
+  , testCase "dependencyReleaseEmails sends notification" $ do
+      let idx = PackageIndex.fromList newBaseReleased
+          userSetIdForPackage arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
+                                  | otherwise = error "should only get user ids for mtl"
+          notifyPref = defaultNotifyPrefs { notifyDependencyForMaintained = True, notifyOptOut = False }
+          pref (UserId 0) = Identity (Just notifyPref)
+          pref _ = error "should only get preferences for UserId 0"
+          prefMinAge (UserId 0) = Identity (Just notifyPref { notifyDependencyMinimumAgeDays = 1 })
+          prefMinAge _ = error "should only get preferences with UserId 0"
+          prefMinUploads (UserId 0) = Identity (Just notifyPref { notifyDependencyMinimumUploads = 2 })
+          prefMinUploads _ = error "should only get preferences with UserId 0"
+          jan1st = UTCTime (fromGregorian 2020 1 1) 0
+          prefLink = ["You can adjust your notification preferences at", "foo://hackage/user/fooUser/notify"]
+          refNotification = Map.fromList [(UserId 0, ["Your package", "mtl-2.3", "doesn't accept the newly uploaded/revised", "base-4.15"] ++ prefLink)]
+          base4_15 = PackageIdentifier "base" (mkVersion [4,15])
+          Just baseURI = parseURI "foo://hackage"
+          runWithPref preferences timestampNow index pkg = runIdentity $
+            dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) (\_ -> Just $ UserName "fooUser") baseURI preferences timestampNow pkg
+      assertEqual
+        "dependencyReleaseEmails should generate a notification"
+        refNotification
+        (runWithPref pref jan1st idx base4_15)
+      assertEqual
+        "dependencyReleaseEmails shouldn't generate a notification when minAge hasn't passed"
+        mempty
+        (runWithPref prefMinAge jan1st idx base4_15)
+      assertEqual
+        "dependencyReleaseEmails should generate a notification when minAge has passed"
+        refNotification
+        (runWithPref prefMinAge (UTCTime (fromGregorian 2020 1 2) 0) idx base4_15)
+      assertEqual
+        "dependencyReleaseEmails shouldn't generate a notification when minUploads isn't reached"
+        mempty
+        (runWithPref prefMinUploads jan1st idx base4_15)
+      assertEqual
+        "dependencyReleaseEmails's minUploads should look only within the same major series"
+        mempty $
+          let base4_16 = mkPackage "base" [4,16] []
+          in
+          (runWithPref prefMinUploads jan1st (PackageIndex.fromList $ base4_16 : newBaseReleased) (packageId base4_16))
+      assertEqual
+        "dependencyReleaseEmails should generate a notification when minUploads is reached"
+        (Map.fromList [(UserId 0, ["Your package", "mtl-2.3", "doesn't accept the newly uploaded/revised", "base-4.15.1"] ++ prefLink)]) $
+          let base4_15_1 = mkPackage "base" [4,15,1] []
+          in
+          (runWithPref prefMinUploads jan1st (PackageIndex.fromList $ base4_15_1 : newBaseReleased) (packageId base4_15_1))
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res

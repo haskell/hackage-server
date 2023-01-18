@@ -352,6 +352,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                            userDetailsFeature
                            reportsCoreFeature
                            tagsFeature
+                           reverseFeature
 
     packageFeedFeature <- mkPackageFeedFeature
                             coreFeature

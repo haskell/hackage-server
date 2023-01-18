@@ -3,7 +3,8 @@
 {-# LANGUAGE TupleSections #-}
 
 module Distribution.Server.Features.ReverseDependencies.State
-  ( ReverseIndex(..)
+  ( NodeId
+  , ReverseIndex(..)
   , ReverseDisplay
   , ReverseCount(..)
   , VersionIndex
