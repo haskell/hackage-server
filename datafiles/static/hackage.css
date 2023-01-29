@@ -4,18 +4,23 @@
 
 /* Is this portable? */
 html {
-  background-color: white;
   width: 100%;
   height: 100%;
 }
 
 @media (prefers-color-scheme: dark) {
+  html {
+    background-color: #333;
+  }
   body {
     background: #333;
     color: #fefefe;
   }
 }
 @media (prefers-color-scheme: light) {
+  html {
+    background-color: #fefefe;
+  }
   body {
     background: #fefefe;
     color: #333;
