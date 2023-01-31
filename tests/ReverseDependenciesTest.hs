@@ -9,7 +9,6 @@ import           Data.List (partition, foldl')
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import           Data.Time (UTCTime(..), fromGregorian)
-import           Network.URI (parseURI)
 
 import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, packageName)
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), VersionStatus(NormalVersion), PreferredInfo(..))
@@ -20,7 +19,7 @@ import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
 import Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..))
-import Distribution.Server.Users.Types (UserId(..), UserName(..))
+import Distribution.Server.Users.Types (UserId(..))
 import Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Version (mkVersion, version0)
 
@@ -157,12 +156,15 @@ allTests = testGroup "ReverseDependenciesTest"
           prefMinUploads (UserId 0) = Identity (Just notifyPref { notifyDependencyMinimumUploads = 2 })
           prefMinUploads _ = error "should only get preferences with UserId 0"
           jan1st = UTCTime (fromGregorian 2020 1 1) 0
-          prefLink = ["You can adjust your notification preferences at", "foo://hackage/user/fooUser/notify"]
-          refNotification = Map.fromList [(UserId 0, ["Your package", "mtl-2.3", "doesn't accept the newly uploaded/revised", "base-4.15"] ++ prefLink)]
+          refNotification = Map.fromList
+            [
+              ( (UserId 0, PackageIdentifier (mkPackageName "base") (mkVersion [4,15]))
+              , [PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])]
+              )
+            ]
           base4_15 = PackageIdentifier "base" (mkVersion [4,15])
-          Just baseURI = parseURI "foo://hackage"
           runWithPref preferences timestampNow index pkg = runIdentity $
-            dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) (\_ -> Just $ UserName "fooUser") baseURI preferences timestampNow pkg
+            dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences timestampNow pkg
       assertEqual
         "dependencyReleaseEmails should generate a notification"
         refNotification
@@ -187,7 +189,13 @@ allTests = testGroup "ReverseDependenciesTest"
           (runWithPref prefMinUploads jan1st (PackageIndex.fromList $ base4_16 : newBaseReleased) (packageId base4_16))
       assertEqual
         "dependencyReleaseEmails should generate a notification when minUploads is reached"
-        (Map.fromList [(UserId 0, ["Your package", "mtl-2.3", "doesn't accept the newly uploaded/revised", "base-4.15.1"] ++ prefLink)]) $
+        (Map.fromList
+          [
+            ( (UserId 0, PackageIdentifier (mkPackageName "base") (mkVersion [4,15,1]))
+            , [PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])]
+            )
+          ]
+        ) $
           let base4_15_1 = mkPackage "base" [4,15,1] []
           in
           (runWithPref prefMinUploads jan1st (PackageIndex.fromList $ base4_15_1 : newBaseReleased) (packageId base4_15_1))

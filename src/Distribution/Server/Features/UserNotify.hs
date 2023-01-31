@@ -62,7 +62,7 @@ import Data.Time.Format.Internal (buildTime)
 import Data.Typeable (Typeable)
 import Distribution.Text (display)
 import Network.Mail.Mime
-import Network.URI(URI, uriAuthority, uriRegName, uriToString)
+import Network.URI(uriAuthority, uriRegName, uriToString)
 import Text.CSV (CSV, Record)
 import Text.PrettyPrint hiding ((<>))
 import Text.Read (readMaybe)
@@ -462,18 +462,17 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
 
 -- | Get the release notification emails when a new package has been released.
 --   The new package (PackageIdentifier) must already be in the indexes.
+--   The keys in the returned map are the new packages. The values are the revDeps.
 dependencyReleaseEmails
   :: forall m. Monad m
   => (PackageName -> m UserIdSet)
   -> PackageIndex.PackageIndex PkgInfo
   -> ReverseIndex
-  -> (UserId -> Maybe UserName)
-  -> URI
   -> (UserId -> m (Maybe NotifyPref))
   -> UTCTime
   -> PackageIdentifier
-  -> m (Map.Map UserId [String])
-dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dependencies) idToName baseURI queryGetUserNotifyPref now pkgId =
+  -> m (Map.Map (UserId, PackageId) [PackageId])
+dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref now pkgId =
   case lookup (pkgName pkgId) nodemap :: Maybe NodeId of
     Nothing -> pure mempty
     Just foundPackage -> do
@@ -485,40 +484,22 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
       toNotify <- traverse maintainersToNotify revDepNames
       pure $
         Map.fromList
-          [ ( maintainerId
-            , [ "Your package", display (packageId latestRevDep)
-              , case notifyTriggerBounds of
-                  Always -> "depends on a package that has a new release:"
-                  BoundsOutOfRange -> "doesn't accept the newly uploaded/revised"
-              , display pkgId
-              ]
-            ++ if length ids > 1
-               then ["Other maintainers have also been notified"]
-               else []
-            ++ [ "You can adjust your notification preferences at"
-               , uriToString id baseURI ""
-                 <> "/user/"
-                 <> maybe "<your user name>"
-                      display
-                      (idToName maintainerId)
-                 <> "/notify"
-               ]
-            )
+          [ ( (maintainerId, pkgId), [ packageId latestRevDep ] )
           | (ids, latestRevDep) <- toNotify
-          , (maintainerId, notifyTriggerBounds) <- ids
+          , maintainerId <- ids
           ]
   where
     -- | Goes through the maintainers of the reverse dep identified by the PackageName passed in,
     --   finds the ones to notify.
     --   Returns the userIds and when they wanted notifications (NotifyTriggerBounds).
     --   The PkgInfo is the latest version of the reverse dependency passed in as PackageName.
-    maintainersToNotify :: PackageName -> m ([(UserId, NotifyTriggerBounds)], PkgInfo)
+    maintainersToNotify :: PackageName -> m ([UserId], PkgInfo)
     maintainersToNotify revDepName = do
       userIdSet <- userSetIdForPackage revDepName
       let ids = UserIdSet.toList userIdSet
       mPrefs <- traverse queryGetUserNotifyPref ids
       let
-        idsAndTriggers :: [(UserId, NotifyTriggerBounds)]
+        idsAndTriggers :: [UserId]
         idsAndTriggers = do
           (userId, Just NotifyPref{..}) <- zip ids mPrefs
           guard $ not notifyOptOut
@@ -528,7 +509,7 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
             Always           -> guard $ maybe False (any $ \(Dependency depName _ _) -> depName == pkgName pkgId) mDepList
           guard (genericLength sameMajorPkgInfos >= notifyDependencyMinimumUploads)
           guard (addUTCTime (negate $ nominalDay * fromIntegral notifyDependencyMinimumAgeDays) now >= pkgOriginalUploadTime oldestMajor)
-          [(userId, notifyDependencyTriggerBounds)]
+          [userId]
       pure (idsAndTriggers, latestRevDep)
       where
         latestRevDep = maximumBy (comparing packageVersion) (PackageIndex.lookupPackageName index revDepName)
@@ -696,12 +677,44 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         let
           userIdToName :: UserId -> Maybe UserName
           userIdToName = fmap userName . flip Users.lookupUserId users
-          genEmails :: PackageIdentifier -> IO (Map.Map UserId [String])
+          genEmails :: PackageIdentifier -> IO (Map.Map (UserId, PackageId) [PackageId])
           genEmails =
-            dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx userIdToName serverBaseURI queryGetUserNotifyPref now
+            dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref now
         dependencyEmailMaps <- traverse (genEmails . pkgInfoToPkgId) revisionsAndUploads
+        let
+          dependencyEmailMap :: Map.Map (UserId, PackageId) [PackageId]
+          dependencyEmailMap = Map.unionsWith (++) dependencyEmailMaps
+          emailText :: MonadIO m => (UserId, PackageId) -> [PackageId] -> m [String]
+          emailText (uId, dep) revDeps = do
+            mPrefs <- queryGetUserNotifyPref uId
+            pure $
+              case mPrefs of
+              Nothing -> []
+              Just NotifyPref{notifyDependencyTriggerBounds} ->
+                [ "The dependency " <> display dep <> " has been updated."
+                ] ++
+                  case notifyDependencyTriggerBounds of
+                    Always ->
+                      [ "You have requested to be notified for each upload/revision of a dependency. \
+                        \These are your packages that depend on " <> display dep <> ":"
+                      ]
+                    BoundsOutOfRange ->
+                      [ "You have requested to be notified when a dependency isn't accepted by any of \
+                        \your maintained packages."
+                      , "These are your packages that require " <> display (packageName dep) <> " but don't accept " <> display (packageVersion dep) <> ":"
+                      ]
+                  ++ map display revDeps
+                  ++ [ "You can adjust your notification preferences at"
+                     , uriToString id serverBaseURI ""
+                       <> "/user/"
+                       <> maybe "<your user name>"
+                            display
+                            (userIdToName uId)
+                       <> "/notify"
+                     ]
+        dependencyEmailTextMaps <- Map.mapKeys fst <$> Map.traverseWithKey emailText dependencyEmailMap
 
-        mapM_ sendNotifyEmail . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails] ++ dependencyEmailMaps
+        mapM_ sendNotifyEmail . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails, dependencyEmailTextMaps]
         updateState notifyState (SetNotifyTime now)
 
     formatTimeUser users t u =
