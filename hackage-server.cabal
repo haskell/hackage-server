@@ -113,6 +113,7 @@ common defaults
     , directory              >= 1.3   && < 1.4
     , filepath               >= 1.4   && < 1.5
     , mtl                    >= 2.2.1 && < 2.4
+        -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , pretty                 >= 1.1   && < 1.2
     , process                >= 1.6   && < 1.7
     , text                  ^>= 1.2.5.0 || ^>= 2.0
@@ -128,7 +129,6 @@ common defaults
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
     , fail                  ^>= 4.9.0
-      -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , network                >= 3 && < 3.2
     , network-bsd           ^>= 2.8
     , network-uri           ^>= 2.6
@@ -390,7 +390,7 @@ library lib-server
     , base16-bytestring     ^>= 1.0
     -- requires bumping http-io-streams
     , base64-bytestring     ^>= 1.2.1.0
-    , bimap                 ^>= 0.3
+    , bimap                 ^>= 0.5
       --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder
     , blaze-builder         ^>= 0.4
     , blaze-html            ^>= 0.9
@@ -560,7 +560,7 @@ test-suite ReverseDependenciesTest
     , tasty        ^>= 1.4
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
-    , hedgehog     ^>= 1.1
+    , hedgehog     ^>= 1.2
     , exceptions
     , bimap
   other-modules: RevDepCommon
@@ -651,5 +651,5 @@ test-suite DocTests
 
   build-depends:
     , lib-server
-    , doctest-parallel ^>= 0.2.2
+    , doctest-parallel ^>= 0.3.0
         -- doctest-parallel-0.2.2 is the first to filter out autogen-modules
