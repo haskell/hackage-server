@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 module Main where
 
 import qualified Distribution.Server as Server
@@ -357,19 +358,15 @@ runAction opts = do
                -> return n
       _        -> fail $ "bad port number " ++ show str
 
-    checkHostURI :: ServerConfig -> Maybe String -> Int -> IO URI
     checkHostURI defaults Nothing port = do
       let guessURI       = confHostUri defaults
-      case uriAuthority guessURI of
-        Nothing -> fail "No URI Authority"
-        Just authority -> let
+          Just authority = uriAuthority guessURI
           portStr | port == 80 = ""
                   | otherwise  = ':' : show port
           guessURI' = guessURI { uriAuthority = Just authority { uriPort = portStr } }
-          in do
-          lognotice verbosity $ "Guessing public URI as " ++ show guessURI'
+      lognotice verbosity $ "Guessing public URI as " ++ show guessURI'
                         ++ "\n(you can override with the --base-uri= flag)"
-          return guessURI'
+      return guessURI'
 
     checkHostURI _        (Just str) _ = case parseAbsoluteURI str of
       Nothing -> fail $ "Cannot parse as a URI: " ++ str ++ "\n"
