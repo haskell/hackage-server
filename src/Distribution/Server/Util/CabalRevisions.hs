@@ -337,8 +337,7 @@ checkPackageDescriptions checkXRevision
   changesOk "copyright"  fromShortText copyrightA copyrightB
   changesOk "maintainer" fromShortText maintainerA maintainerB
   changesOk "author"     fromShortText authorA authorB
-  checkSame "The stability field is unused, don't bother changing it."
-            stabilityA stabilityB
+  changesOk "stability"  fromShortText stabilityA stabilityB
   changesOk' Trivial "tested-with" (show . ppTestedWith) testedWithA testedWithB
   changesOk "homepage" fromShortText homepageA homepageB
   checkSame "The package-url field is unused, don't bother changing it."
