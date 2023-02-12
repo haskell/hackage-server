@@ -134,7 +134,10 @@ initListFeature _env = do
 
       registerHookJust packageChangeHook isPackageAdd $ \pkg -> do
         let pkgname = packageName . packageId $ pkg
-        modifyItem pkgname (\x -> x {itemLastUpload = fst (pkgOriginalUploadInfo pkg)})
+        modifyItem pkgname $ \x -> x
+          {itemLastUpload = fst (pkgOriginalUploadInfo pkg)
+          ,itemLastVersion = prettyShow $ pkgVersion $ pkgInfoId pkg
+          }
         runHook_ itemUpdate (Set.singleton pkgname)
 
       registerHook groupChangedHook $ \(gd,_,_,_,_) ->
