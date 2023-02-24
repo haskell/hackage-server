@@ -8,20 +8,13 @@ module Distribution.Server.Features.LegacyPasswds.Auth (
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error
 import Distribution.Server.Framework.MemSize
-import Distribution.Server.Users.Types (UserId, UserName(..), UserInfo)
+import Distribution.Server.Users.Types (UserId, UserInfo)
 import qualified Distribution.Server.Users.Users as Users
-import Distribution.Server.Framework.AuthCrypt (BasicAuthInfo(..))
 
 import Happstack.Server
 
-import qualified Data.ByteString.Base64 as Base64
-import Control.Monad
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
-
-import Foreign.C.String
-import System.IO.Unsafe (unsafePerformIO)
-import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 
 import qualified Data.ByteString.Char8 as BS -- TODO: Verify that we don't need to worry about UTF8 here
 
@@ -41,24 +34,6 @@ newtype HtPasswdHash = HtPasswdHash String
   deriving (Eq, Show, Typeable, MemSize)
 
 $(deriveSafeCopy 0 'base ''HtPasswdHash)
-
-checkCryptAuthInfo :: HtPasswdHash -> BasicAuthInfo -> Bool
-checkCryptAuthInfo (HtPasswdHash hash) (BasicAuthInfo _ _ (PasswdPlain passwd))
-  = crypt passwd hash == hash
-
-foreign import ccall unsafe "crypt" cCrypt :: CString-> CString -> CString
-
-crypt :: String -- ^ Payload
-      -> String -- ^ Salt
-      -> String -- ^ Hash
-crypt key seed = unsafePerformIO $ withMVar cryptMVar $ \_ -> do
-    k <- newCAString key
-    s <- newCAString seed
-    peekCAString $ cCrypt k s
-
-cryptMVar :: MVar ()
-cryptMVar = unsafePerformIO $ newMVar ()
-{-# NOINLINE cryptMVar #-}
 
 --------------------
 -- HTTP Basic auth
@@ -83,32 +58,12 @@ guardAuthenticated realm users getHtPasswdHash = do
       | otherwise
       = Nothing
 
+-- basic auth is deprecated:
+-- https://github.com/haskell/hackage-server/issues/1153#issuecomment-1370308832
 checkBasicAuth :: Users.Users -> (UserId -> Maybe HtPasswdHash) -> RealmName -> BS.ByteString
                -> Either AuthError (UserId, UserInfo, PasswdPlain)
-checkBasicAuth users getHtPasswdHash realm ahdr = do
-    authInfo     <- getBasicAuthInfo realm ahdr       ?! UnrecognizedAuthError
-    let uname    = basicUsername authInfo
-    (uid, uinfo) <- Users.lookupUserName uname users  ?! NoSuchUserError
-    passwdhash   <- getHtPasswdHash uid               ?! NoSuchUserError
-    guard (checkCryptAuthInfo passwdhash authInfo)    ?! PasswordMismatchError
-    return (uid, uinfo, basicPasswd authInfo)
-
-getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
-getBasicAuthInfo realm authHeader
-  | Just (username, pass) <- splitHeader authHeader
-  = Just BasicAuthInfo {
-           basicRealm    = realm,
-           basicUsername = UserName username,
-           basicPasswd   = PasswdPlain pass
-         }
-  | otherwise = Nothing
-  where
-    splitHeader h = case Base64.decode h of
-                    Left _ -> Nothing
-                    Right xs ->
-                        case break (':' ==) $ BS.unpack xs of
-                          (username, ':' : pass) -> Just (username, pass)
-                          _                      -> Nothing
+checkBasicAuth _ _ _ _ =
+  Left UnrecognizedAuthError
 
 setBasicAuthChallenge :: RealmName -> ServerPartE ()
 setBasicAuthChallenge (RealmName realmName) = do
