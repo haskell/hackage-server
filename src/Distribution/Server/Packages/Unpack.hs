@@ -1,8 +1,11 @@
--- Unpack a tarball containing a Cabal package
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
+-- | Unpack a tarball containing a Cabal package
+
 module Distribution.Server.Packages.Unpack (
     CombinedTarErrs(..),
     checkEntries,
@@ -32,7 +35,11 @@ import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
          ( PackageCheck(..), checkPackage, CheckPackageContentOps(..)
-         , checkPackageContent )
+         , checkPackageContent
+#if MIN_VERSION_Cabal(3,9,0)
+         , ppPackageCheck
+#endif
+         )
 import Distribution.Parsec
          ( showPError, showPWarning )
 import Distribution.Text
@@ -293,8 +300,11 @@ extraChecks genPkgDesc pkgId tarIndex = do
       isDistError (PackageDistSuspiciousWarn {}) = False -- just a warning
       isDistError _                              = True
       (errors, warnings) = partition isDistError checks
-  mapM_ (throwError . explanation) errors
-  mapM_ (warn . explanation) warnings
+#if !MIN_VERSION_Cabal(3,9,0)
+      ppPackageCheck = explanation
+#endif
+  mapM_ (throwError . ppPackageCheck) errors
+  mapM_ (warn . ppPackageCheck) warnings
 
   -- Proprietary License check (only active in central-server branch)
   unless (allowAllRightsReserved || isAcceptableLicense pkgDesc) $

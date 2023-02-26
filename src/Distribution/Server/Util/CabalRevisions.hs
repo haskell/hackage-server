@@ -176,12 +176,16 @@ checkCabalFileRevision checkXRevision old new = do
         newwarns -> fail $ "New parse warning: "
                         ++ unlines (map (showPWarning filename) newwarns)
 
+    checkPackageChecks :: Check GenericPackageDescription
     checkPackageChecks pkg pkg' =
       let checks  = checkPackage pkg  Nothing
           checks' = checkPackage pkg' Nothing
        in case checks' \\ checks of
             []        -> return ()
-            newchecks -> fail $ unlines (map explanation newchecks)
+            newchecks -> fail $ unlines (map ppPackageCheck newchecks)
+#if !MIN_VERSION_Cabal(3,9,0)
+      where ppPackageCheck = explanation
+#endif
 
 checkGenericPackageDescription :: Bool -> Check GenericPackageDescription
 checkGenericPackageDescription checkXRevision

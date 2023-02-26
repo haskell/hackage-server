@@ -91,8 +91,14 @@ flag test-create-user
 
 flag cabal-parsers
   description: Enable experimental @cabal-parsers@ checks
-  manual: True
   default: False
+  manual: True
+
+-- Automatic flag to turn off the DocTests suite if its dependencies are not available.
+flag doctests
+  description: Build DocTests test-suite
+  -- default: True
+  -- manual:  False
 
 ----------------------------------------------------------------------------
 
@@ -105,7 +111,7 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.13  && < 4.18
+    , base                   >= 4.13  && < 4.19
     , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.10  && < 0.12
     , containers            ^>= 0.6.0
@@ -119,13 +125,13 @@ common defaults
     , text                  ^>= 1.2.5.0 || ^>= 2.0
     , time                   >= 1.9   && < 1.13
     , transformers           >= 0.5   && < 0.7
-    , unix                   >= 2.7   && < 2.8
+    , unix                   >= 2.7   && < 2.9
     , scientific
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 2.0.3.0 || ^>= 2.1.0.0
-    , Cabal                 ^>= 3.8.1.0
-    , Cabal-syntax          ^>= 3.8.1.0
+    , Cabal                 ^>= 3.10.1.0
+    , Cabal-syntax          ^>= 3.10.1.0
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
     , fail                  ^>= 4.9.0
@@ -649,3 +655,6 @@ test-suite DocTests
     , lib-server
     , doctest-parallel ^>= 0.3.0
         -- doctest-parallel-0.2.2 is the first to filter out autogen-modules
+
+  if !flag(doctests)
+    buildable: False
