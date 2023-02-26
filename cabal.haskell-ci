@@ -9,7 +9,7 @@ installed: +all -Cabal -text -parsec -process
 -- Use Ubuntu 22.04
 distribution: jammy
 
-apt: libbrotli-dev
+apt: libbrotli-dev libgd-dev
 
 -- Make sure the haddock step is included,
 -- even though we don't define any library.

@@ -72,7 +72,7 @@ jobs:
           "$HOME/.ghcup/bin/ghcup" install ghc "$HCVER" || (cat "$HOME"/.ghcup/logs/*.* && false)
           "$HOME/.ghcup/bin/ghcup" install cabal 3.9.0.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
           apt-get update
-          apt-get install -y libbrotli-dev
+          apt-get install -y libbrotli-dev libgd-dev
         env:
           HCKIND: ${{ matrix.compilerKind }}
           HCNAME: ${{ matrix.compiler }}
