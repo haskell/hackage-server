@@ -1,4 +1,8 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 -- | Download counts
 --
 -- We maintain
@@ -33,12 +37,17 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
 import Distribution.Package
-import Distribution.Server.Util.CountingMap (cmFromCSV)
+import Distribution.Server.Util.CountingMap (cmFromCSV, cmToList)
 
 import Data.Time.Calendar (Day, addDays)
 import Data.Time.Clock (getCurrentTime, utctDay)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
+import GHC.Generics (Generic)
+import Data.Aeson (ToJSON)
+import qualified Data.Aeson as Aeson
+import Data.List (sortBy)
+import Data.Function (on)
 
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature
@@ -53,6 +62,14 @@ instance IsHackageFeature DownloadFeature where
 data DownloadResource = DownloadResource {
     topDownloads :: Resource
   }
+
+data PackageDownloads = PackageDownloads {
+    packageName :: !String
+  , downloads   :: !Int
+  }
+  deriving stock (Eq, Ord, Generic)
+  deriving anyclass (ToJSON)
+
 
 initDownloadFeature :: ServerEnv
                     -> IO (CoreFeature -> UserFeature -> IO DownloadFeature)
@@ -176,9 +193,21 @@ downloadFeature CoreFeature{}
 
         updateState inMemState $ RegisterDownload pkg
 
+
     downloadResource = DownloadResource {
-        topDownloads = resourceAt "/packages/top.:format"
+      topDownloads = (resourceAt "/packages/top.:format")
+        { resourceDesc = [ (GET, "Get top downloaded packages for the last 30 days")]
+        , resourceGet  = [ ("json", serveDownloadTopJSON) ]
+        }
       }
+
+    serveDownloadTopJSON :: DynamicPath -> ServerPartE Response
+    serveDownloadTopJSON _ = do
+      pkgList <- sortedPackages <$> recentPackageDownloads
+      pure $ toResponse $ Aeson.toJSON pkgList
+
+    sortedPackages :: RecentDownloads -> [PackageDownloads]
+    sortedPackages = fmap (\(p, c) -> PackageDownloads (unPackageName p) c) . sortBy (flip compare `on` snd) . cmToList
 
     downloadCSV = (resourceAt "/packages/downloads.:format") {
         resourceDesc = [ (GET, "Get download counts")
