@@ -4,18 +4,23 @@
 
 /* Is this portable? */
 html {
-  background-color: white;
   width: 100%;
   height: 100%;
 }
 
 @media (prefers-color-scheme: dark) {
+  html {
+    background-color: #333;
+  }
   body {
     background: #333;
     color: #fefefe;
   }
 }
 @media (prefers-color-scheme: light) {
+  html {
+    background-color: #fefefe;
+  }
   body {
     background: #fefefe;
     color: #333;
@@ -140,21 +145,37 @@ pre, code, kbd, samp, .src {
   font-size: 85%; /* 11pt */
 }
 
-.candidate-warn {
+@media (prefers-color-scheme: dark) {
+  .candidate-warn {
+    border-left: 6px solid #f44336;
+    padding: 0.01em 16px;
+    margin-bottom: 8px !important;
+    margin-top: 8px !important;
+  }
+
+  .candidate-info {
+    border-left: 6px solid #2196F3;
+    padding: 0.01em 16px;
+    margin-bottom: 8px;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  .candidate-warn {
     background-color: #ffdddd;
     border-left: 6px solid #f44336;
     padding: 0.01em 16px;
     margin-bottom: 8px !important;
     margin-top: 8px !important;
-}
+  }
 
-.candidate-info {
+  .candidate-info {
     background-color: #e7f3fe;
     border-left: 6px solid #2196F3;
     padding: 0.01em 16px;
     margin-bottom: 8px;
+  }
 }
-
 
 /* @end */
 
@@ -528,7 +549,6 @@ table.properties td, table.properties th {
   padding: 0;
   padding-bottom: 3em;
 }
-
 
 #page-header {
   background: #5E5184;
@@ -1014,12 +1034,21 @@ p.tip {
 
 /* Misc admin forms */
 
-.box {
-  background: #faf9dc;
-  border: 1px solid #d8d7ad;
-  padding: 0.5em 1em;
-  max-width: 35em;
-  margin: 0.5em 0 1em 1em;
+@media (prefers-color-scheme: dark) {
+    .box {
+        padding: 0.5em 1em;
+        max-width: 35em;
+        margin: 0.5em 0 1em 1em;
+    }
+}
+@media (prefers-color-scheme: light) {
+    .box {
+        background: #faf9dc;
+        border: 1px solid #d8d7ad;
+        padding: 0.5em 1em;
+        max-width: 35em;
+        margin: 0.5em 0 1em 1em;
+    }
 }
 
 table.simpletable th, table.simpletable td {
@@ -1209,4 +1238,21 @@ a.deprecated[href]:visited {
 .paginator .current,
 .paginator .current:hover {
   border: 1px solid #979797;
+}
+
+@media (prefers-color-scheme: dark) {
+  div#modal #content {
+    background: #222;
+  }
+}
+@media (prefers-color-scheme: light) {
+  div#modal #content {
+    background: #fff;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  #search-results {
+    background: #222;
+  }
 }
