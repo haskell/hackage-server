@@ -26,7 +26,7 @@ If you have the [Nix package manager](https://nixos.org/) installed, the easiest
 
 If you have [direnv](https://direnv.net/), `direnv allow` will load this `nix develop` shell automatically.
 
-`nix build` will build a `hackage-server` executable in `result/`. The Hackage dependencies are provided by the inputs specified in `flake.nix`.
+`nix build` will build a `hackage-server` executable in `result/`. The Hackage dependencies are provided by the inputs specified in `flake.nix`. Because some of these inputs are unpublished commits on GitHub, this build should not be considered authoritative.
 
 ### Manually
 
