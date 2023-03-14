@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/haskell/hackage-server.png?branch=master)](https://travis-ci.org/haskell/hackage-server)
 [![Build status](https://github.com/haskell/hackage-server/actions/workflows/haskell-ci.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/haskell-ci.yml)
-[![Build status](https://github.com/haskell/hackage-server/actions/workflows/nix-shell.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/nix-shell.yml)
+[![Build status](https://github.com/haskell/hackage-server/actions/workflows/nix-flake.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/nix-flake.yml)
 
 This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances. The `master` branch is suitable for general usage. Specific policy and documentation for the central hackage instance exists in the `central-server` branch.
 
@@ -10,16 +10,23 @@ This is the `hackage-server` code. This is what powers <http://hackage.haskell.o
 
 `hackage-server` depends on `libgd` and `zlib`. You'll also need `libbrotli-dev` for enabling tests.
 
-### [`nix-shell`](https://nixos.org/manual/nix/stable/command-ref/nix-shell.html)
+### [`nix develop`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-develop.html)
 
-If you have the [Nix package manager](https://nixos.org/) installed, the easiest way to run `hackage-server` is by using the `nix-shell`. It should be unnecessary to install any dependencies manually. In this repository:
+If you have the [Nix package manager](https://nixos.org/) installed, the easiest way to run `hackage-server` is by using `nix develop`. It should be unnecessary to install any dependencies manually. In this repository:
 
-    nix-shell --pure
+    nix develop
 
-    [nix-shell]$ cabal v2-run -- hackage-server init
+    (in develop shell)
+    $ cabal v2-run -- hackage-server init
 
-    [nix-shell]$ cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
+    $ cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
     hackage-server: Ready! Point your browser at http://127.0.0.1:8080
+
+`flake.nix` is provided; it uses [`srid/haskell-flake`](https://github.com/srid/haskell-flake).
+
+If you have [direnv](https://direnv.net/), `direnv allow` will load this `nix develop` shell automatically.
+
+`nix build` will build a `hackage-server` executable in `result/`. The Hackage dependencies are provided by the inputs specified in `flake.nix`. Because some of these inputs are unpublished commits on GitHub, this build should not be considered authoritative.
 
 ### Manually
 

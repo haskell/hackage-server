@@ -3,6 +3,7 @@
              RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns,
              DefaultSignatures, OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 module Distribution.Server.Features.UserNotify (
     initUserNotifyFeature,
     UserNotifyFeature(..),

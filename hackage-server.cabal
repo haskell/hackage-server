@@ -645,7 +645,6 @@ test-suite DocTests
 
   type:           exitcode-stdio-1.0
   main-is:        DocTestMain.hs
-
   build-depends:
     , lib-server
     , doctest-parallel ^>= 0.3.0
