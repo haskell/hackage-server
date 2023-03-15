@@ -1,0 +1,35 @@
+on:
+  push:
+    branches:
+      - master
+      - ci*
+  pull_request:
+    branches:
+      - master
+      - ci*
+name: Cabal
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ['9.4.4', '9.2.7', '9.0.2']
+        cabal: ['3.8.1.0']
+        os: [ubuntu-latest]
+    name: Cabal with GHC ${{ matrix.ghc }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Haskell
+        uses: haskell/actions/setup@v2
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+      - name: Install dependencies
+        run: sudo apt install -y libbrotli-dev libgd-dev
+      - name: Build
+        run: cabal build all --enable-tests
+      - name: Test
+        run: cabal test all --enable-tests
+      - name: Haddock
+        run: cabal haddock all
