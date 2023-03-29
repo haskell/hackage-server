@@ -659,7 +659,13 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                   ++ map display revDeps
         dependencyEmailTextMaps <- Map.mapKeys fst <$> Map.traverseWithKey emailText dependencyEmailMap
 
-        mapM_ (sendNotifyEmail users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails, dependencyEmailTextMaps]
+        -- Concat the constituent email parts such that only one email is sent per user
+        mapM_ (sendNotifyEmail users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails]
+
+        -- Dependency email notifications consist of multiple paragraphs, so it would be confusing if concatenated.
+        -- So they're sent independently.
+        mapM_ (sendNotifyEmail users) . Map.toList $ dependencyEmailTextMaps
+
         updateState notifyState (SetNotifyTime now)
 
     formatTimeUser users t u =
