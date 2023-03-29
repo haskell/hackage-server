@@ -175,7 +175,13 @@ $(deriveSafeCopy 0 'base ''NotifyPref_v0)
 instance Migrate NotifyPref where
   type MigrateFrom NotifyPref = NotifyPref_v0
   migrate (NotifyPref_v0 f0 f1 f2 f3 f4 f5) =
-    NotifyPref f0 f1 f2 f3 f4 f5 True BoundsOutOfRange
+    NotifyPref f0 f1 f2 f3 f4 f5
+      False -- Users that already have opted in to notifications
+            -- did so at at a time when it did not include
+            -- reverse dependency emails.
+            -- So let's assume they don't want these.
+            -- Note that this differs from defaultNotifyPrefs.
+      BoundsOutOfRange
 
 $(deriveSafeCopy 1 'extension ''NotifyPref)
 $(deriveSafeCopy 0 'base ''NotifyData)
