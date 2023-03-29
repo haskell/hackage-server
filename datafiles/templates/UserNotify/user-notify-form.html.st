@@ -10,6 +10,12 @@ td {
 label {
   align-items: center;
 }
+.expandable {
+  visibility: visible;
+}
+#notifyDependencyForMaintainedFalse:checked ~ .expandable {
+  visibility: collapse;
+}
 </style>
 </head>
 
@@ -56,11 +62,24 @@ $endif$
 
     <tr>
       <td><label>Notify when a dependency is updated for any of my maintained packages:
-      <td>$notifyDependencyForMaintained$
-          <p>trigger:
-          $notifyDependencyTriggerBounds$
-          <p>There must be at least <input value=$notifyDependencyMinimumUploads$ style=width:3em name=notifyDependencyMinimumUploads=%s type=number min=0> releases in the major series, including the new release.
-          <p>The oldest release must be at least <input value=$notifyDependencyMinimumAgeDays$ style=width:3em name=notifyDependencyMinimumAgeDays=%s type=number min=0> days old.
+      <td>
+        <input $notifyDependencyForMaintainedTrueChecked$ type="radio" name="notifyDependencyForMaintained=%s" value="true" id="notifyDependencyForMaintainedTrue">
+        <label for="notifyDependencyForMaintainedTrue">Yes</label>
+        <input $notifyDependencyForMaintainedFalseChecked$ type="radio" name="notifyDependencyForMaintained=%s" value="false" id="notifyDependencyForMaintainedFalse">
+        <label for="notifyDependencyForMaintainedFalse">No</label>
+        <p class="expandable">
+          trigger:
+          <label style="display:flex">
+            <input $notifyDependencyTriggerBoundsAlwaysChecked$ type="radio" name="notifyDependencyTriggerBounds=%s" value="Always">
+            always
+          </label>
+          <label style="display:flex">
+            <input $notifyDependencyTriggerBoundsBoundsOutOfRangeChecked$ type="radio" name="notifyDependencyTriggerBounds=%s" value="BoundsOutOfRange">
+            my maintained package doesn't accept the version of the newly uploaded or revised dependency
+          </label>
+        </p>
+      </td>
+    </tr>
   </table>
   <input type="submit" value="Save notify preference" />
 </form>

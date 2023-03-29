@@ -52,12 +52,12 @@ import Data.Bifunctor (Bifunctor(second))
 import Data.Bimap (lookup, lookupR)
 import Data.Graph (Vertex)
 import Data.Hashable (Hashable(..))
-import Data.List (maximumBy, minimumBy, genericLength)
+import Data.List (maximumBy)
 import Data.List (intercalate)
 import Data.Maybe (fromJust, fromMaybe, listToMaybe, mapMaybe, maybeToList)
 import Data.Ord (comparing)
 import Data.SafeCopy (Migrate(migrate), MigrateFrom, base, deriveSafeCopy, extension)
-import Data.Time (UTCTime(..), addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime, nominalDay)
+import Data.Time (UTCTime(..), addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
 import Data.Time.Format.Internal (buildTime)
 import Data.Typeable (Typeable)
 import Distribution.Text (display)
@@ -65,7 +65,6 @@ import Network.Mail.Mime
 import Network.URI(uriAuthority, uriRegName, uriToString)
 import Text.CSV (CSV, Record)
 import Text.PrettyPrint hiding ((<>))
-import Text.Read (readMaybe)
 import Text.XHtml hiding (base, text, (</>))
 
 import qualified Data.Aeson as Aeson
@@ -114,9 +113,7 @@ data NotifyPref = NotifyPref
                     notifyDocBuilderReport :: Bool,
                     notifyPendingTags :: Bool,
                     notifyDependencyForMaintained :: Bool,
-                    notifyDependencyTriggerBounds :: NotifyTriggerBounds,
-                    notifyDependencyMinimumUploads :: Word,
-                    notifyDependencyMinimumAgeDays :: Word
+                    notifyDependencyTriggerBounds :: NotifyTriggerBounds
                   }
                   deriving (Eq, Read, Show, Typeable)
 
@@ -129,9 +126,7 @@ defaultNotifyPrefs = NotifyPref {
                        notifyDocBuilderReport = True,
                        notifyPendingTags = True,
                        notifyDependencyForMaintained = True,
-                       notifyDependencyTriggerBounds = BoundsOutOfRange,
-                       notifyDependencyMinimumUploads = 0,
-                       notifyDependencyMinimumAgeDays = 0
+                       notifyDependencyTriggerBounds = BoundsOutOfRange
                      }
 
 data NotifyRevisionRange = NotifyAllVersions | NotifyNewestVersion | NoNotifyRevisions deriving (Eq, Enum, Read, Show, Typeable)
@@ -147,7 +142,7 @@ instance Hashable NotifyRevisionRange where
   hash = fromEnum
   hashWithSalt s x = s `hashWithSalt` hash x
 
-data NotifyTriggerBounds = Always | BoundsOutOfRange deriving (Eq, Enum, Bounded, Read, Show, Typeable)
+data NotifyTriggerBounds = Always | BoundsOutOfRange deriving (Eq, Enum, Read, Show, Typeable)
 
 instance MemSize NotifyTriggerBounds where
   memSize _ = 1
@@ -161,10 +156,9 @@ instance Hashable NotifyTriggerBounds where
   hashWithSalt s x = s `hashWithSalt` hash x
 
 instance MemSize NotifyPref_v0 where memSize _ = memSize ((True,True,True),(True,True, True))
-instance MemSize NotifyPref    where memSize NotifyPref{..} = memSize10 notifyOptOut notifyRevisionRange notifyUpload notifyMaintainerGroup
-                                                                        notifyDocBuilderReport notifyPendingTags notifyDependencyForMaintained
-                                                                        notifyDependencyTriggerBounds notifyDependencyMinimumUploads
-                                                                        notifyDependencyMinimumAgeDays
+instance MemSize NotifyPref    where memSize NotifyPref{..} = memSize8 notifyOptOut notifyRevisionRange notifyUpload notifyMaintainerGroup
+                                                                       notifyDocBuilderReport notifyPendingTags notifyDependencyForMaintained
+                                                                       notifyDependencyTriggerBounds
 
 data NotifyData = NotifyData {unNotifyData :: (Map.Map UserId NotifyPref, UTCTime)} deriving (Eq, Show, Typeable)
 
@@ -180,7 +174,7 @@ $(deriveSafeCopy 0 'base ''NotifyPref_v0)
 instance Migrate NotifyPref where
   type MigrateFrom NotifyPref = NotifyPref_v0
   migrate (NotifyPref_v0 f0 f1 f2 f3 f4 f5) =
-    NotifyPref f0 f1 f2 f3 f4 f5 True BoundsOutOfRange 0 0
+    NotifyPref f0 f1 f2 f3 f4 f5 True BoundsOutOfRange
 
 $(deriveSafeCopy 1 'extension ''NotifyPref)
 $(deriveSafeCopy 0 'base ''NotifyData)
@@ -229,8 +223,6 @@ data NotifyPrefUI
     , ui_notifyPendingTags      :: OK
     , ui_notifyDependencyForMaintained :: OK
     , ui_notifyDependencyTriggerBounds :: NotifyTriggerBounds
-    , ui_notifyDependencyMinimumUploads :: String
-    , ui_notifyDependencyMinimumAgeDays :: String
     }
   deriving (Eq, Show, Typeable)
 
@@ -255,15 +247,11 @@ notifyPrefToUI NotifyPref{..} = NotifyPrefUI
   , ui_notifyPendingTags      = OK notifyPendingTags
   , ui_notifyDependencyForMaintained = OK notifyDependencyForMaintained
   , ui_notifyDependencyTriggerBounds = notifyDependencyTriggerBounds
-  , ui_notifyDependencyMinimumUploads = show notifyDependencyMinimumUploads
-  , ui_notifyDependencyMinimumAgeDays = show notifyDependencyMinimumAgeDays
   }
 
-notifyPrefFromUI :: NotifyPrefUI -> Either String NotifyPref
+notifyPrefFromUI :: NotifyPrefUI -> NotifyPref
 notifyPrefFromUI NotifyPrefUI{..}
-  | Just readMinUploads <- readMaybe ui_notifyDependencyMinimumUploads
-  , Just readMinAgeDays <- readMaybe ui_notifyDependencyMinimumAgeDays
-  = Right NotifyPref
+  = NotifyPref
   { notifyOptOut           = not (unOK ui_notifyEnabled)
   , notifyRevisionRange    = ui_notifyRevisionRange
   , notifyUpload           = unOK ui_notifyUpload
@@ -272,45 +260,32 @@ notifyPrefFromUI NotifyPrefUI{..}
   , notifyPendingTags      = unOK ui_notifyPendingTags
   , notifyDependencyForMaintained = unOK ui_notifyDependencyForMaintained
   , notifyDependencyTriggerBounds = ui_notifyDependencyTriggerBounds
-  , notifyDependencyMinimumUploads = readMinUploads
-  , notifyDependencyMinimumAgeDays = readMinAgeDays
   }
-  | otherwise = Left "Invalid minUploads or minAgeDays"
 
 class ToRadioButtons a where
   toRadioButtons :: String -> a -> Html
 
-data RadioButtonLayout = EachOnOwnLine | Compact
-
-renderRadioButtons :: (Eq a, Aeson.ToJSON a, Pretty a) => RadioButtonLayout -> [a] -> String -> a -> Html
-renderRadioButtons layout choices nm def = foldr1 (+++) $ map renderRadioButton choices
+renderRadioButtons :: (Eq a, Aeson.ToJSON a, Pretty a) => [a] -> String -> a -> Html
+renderRadioButtons choices nm def = foldr1 (+++) $ map renderRadioButton choices
   where
-    renderRadioButton choice = toHtml $
-      [ label ! labelAttrs << [input ! inputAttrs, stringToHtml $ display choice] ]
+    renderRadioButton choice = toHtml
+      [ input ! (if (def == choice) then (checked :) else id)
+          [thetype "radio", identifier htmlId, name nm, value choiceName]
+      , label ! [thefor htmlId] << display choice
+      ]
       where
-        labelAttrs =
-          case layout of
-            EachOnOwnLine ->
-              [thestyle "display:flex"]
-            Compact ->
-              []
-        inputAttrs =
-          (if def == choice then (checked :) else id)
-          [thetype "radio", name nm, value choiceName]
         jsonName = Aeson.encode choice
         -- try to strip quotes
         choiceName = BS.unpack $ if BS.head jsonName == '"' && BS.last jsonName == '"'
                         then BS.init (BS.tail jsonName)
                         else jsonName
-
-instance ToRadioButtons NotifyTriggerBounds where
-  toRadioButtons = renderRadioButtons EachOnOwnLine [minBound..]
+        htmlId = nm ++ "." ++ choiceName
 
 instance ToRadioButtons NotifyRevisionRange where
-  toRadioButtons = renderRadioButtons Compact [NoNotifyRevisions, NotifyAllVersions, NotifyNewestVersion]
+  toRadioButtons = renderRadioButtons [NoNotifyRevisions, NotifyAllVersions, NotifyNewestVersion]
 
 instance ToRadioButtons OK where
-  toRadioButtons = renderRadioButtons Compact [OK True, OK False]
+  toRadioButtons = renderRadioButtons [OK True, OK False]
 
 ------------------------------
 -- State queries and updates
@@ -378,7 +353,7 @@ importNotifyPref :: CSV -> Restore [(UserId, NotifyPref)]
 importNotifyPref = sequence . map fromRecord . drop 2
   where
     fromRecord :: Record -> Restore (UserId, NotifyPref)
-    fromRecord [uid,o,rr,ul,g,db,t,dep1,dep2,dep3,dep4] = do
+    fromRecord [uid,o,rr,ul,g,db,t,dep1,dep2] = do
         puid <- parseText "user id" uid
         po <- parseRead "notify opt out" o
         prr <- parseRead "notify revsion" rr
@@ -388,15 +363,13 @@ importNotifyPref = sequence . map fromRecord . drop 2
         pt <- parseRead "notify pending tags" t
         pdep1 <- parseRead "notify dependency for maintained" dep1
         pdep2 <- parseRead "notify dependency trigger bounds" dep2
-        pdep3 <- parseRead "notify dependency minimum uploads" dep3
-        pdep4 <- parseRead "notify dependency minimum age days" dep4
-        return (puid, NotifyPref po prr pul pg pd pt pdep1 pdep2 pdep3 pdep4)
+        return (puid, NotifyPref po prr pul pg pd pt pdep1 pdep2)
     fromRecord x = fail $ "Error processing notify record: " ++ show x
 
 notifyDataToCSV :: BackupType -> NotifyData -> CSV
 notifyDataToCSV _backuptype (NotifyData (tbl,_))
     = ["0.1"]
-    : [ "uid","freq","revisionrange","upload","group"]
+    : [ "uid","freq","revisionrange","upload","group","pending_tags","dep_for_maintained","dep_trigger_bounds"]
     : flip map (Map.toList tbl) (\(uid,np) ->
         [ display uid
         , show (notifyOptOut np)
@@ -407,8 +380,6 @@ notifyDataToCSV _backuptype (NotifyData (tbl,_))
         , show (notifyPendingTags np)
         , show (notifyDependencyForMaintained np)
         , show (notifyDependencyTriggerBounds np)
-        , show (notifyDependencyMinimumUploads np)
-        , show (notifyDependencyMinimumAgeDays np)
         ]
       )
 
@@ -469,10 +440,9 @@ dependencyReleaseEmails
   -> PackageIndex.PackageIndex PkgInfo
   -> ReverseIndex
   -> (UserId -> m (Maybe NotifyPref))
-  -> UTCTime
   -> PackageIdentifier
   -> m (Map.Map (UserId, PackageId) [PackageId])
-dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref now pkgId =
+dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref pkgId =
   case lookup (pkgName pkgId) nodemap :: Maybe NodeId of
     Nothing -> pure mempty
     Just foundPackage -> do
@@ -507,8 +477,6 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
           case notifyDependencyTriggerBounds of
             BoundsOutOfRange -> guard $ maybe False (any isDependencyMatchingAndOutOfRange) mDepList
             Always           -> guard $ maybe False (any $ \(Dependency depName _ _) -> depName == pkgName pkgId) mDepList
-          guard (genericLength sameMajorPkgInfos >= notifyDependencyMinimumUploads)
-          guard (addUTCTime (negate $ nominalDay * fromIntegral notifyDependencyMinimumAgeDays) now >= pkgOriginalUploadTime oldestMajor)
           [userId]
       pure (idsAndTriggers, latestRevDep)
       where
@@ -520,20 +488,6 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
           | depName /= pkgName pkgId = False
           | pkgVersion pkgId `withinRange` depRange = False
           | otherwise = True
-        allNewUploadPkgInfos = PackageIndex.lookupPackageName index (pkgName pkgId)
-        sameMajorPkgInfos =
-          filter ((`withinRange` (majorBoundVersion $ currentMajor $ pkgVersion pkgId)) . packageVersion) allNewUploadPkgInfos
-        oldestMajor :: PkgInfo
-        oldestMajor = minimumBy (comparing packageVersion) sameMajorPkgInfos
-
--- | Compute current major version
---
--- Example: @0.4.1@ produces the version @0.4@
-currentMajor :: Version -> Version
-currentMajor = alterVersion $ \numbers -> case numbers of
-    []        -> [0,1] -- should not happen
-    [m1]      -> [m1]
-    (m1:m2:_) -> [m1,m2]
 
 pkgInfoToPkgId :: PkgInfo -> PackageIdentifier
 pkgInfoToPkgId pkgInfo =
@@ -607,36 +561,37 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
     handlerGetUserNotifyHtml dpath = do
       (uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-      nprefui@NotifyPrefUI{..} <- notifyPrefToUI . fromMaybe defaultNotifyPrefs <$> queryGetUserNotifyPref uid
+      NotifyPrefUI{..} <- notifyPrefToUI . fromMaybe defaultNotifyPrefs <$> queryGetUserNotifyPref uid
       showConfirmationOfSave <- not . Prelude.null <$> queryString (lookBSs "showConfirmationOfSave")
       template <- getTemplate templates "user-notify-form.html"
-      cacheControl [Private] $ etagFromHash (nprefui, showConfirmationOfSave)
-      ok . toResponse $
-        template
-          [ "username"                $= display (userName uinfo)
-          , "showConfirmationOfSave"  $= showConfirmationOfSave
-          , "notifyEnabled"           $= toRadioButtons "notifyEnabled=%s"          ui_notifyEnabled
-          , "notifyRevisionRange"     $= toRadioButtons "notifyRevisionRange=%s"    ui_notifyRevisionRange
-          , "notifyUpload"            $= toRadioButtons "notifyUpload=%s"           ui_notifyUpload
-          , "notifyMaintainerGroup"   $= toRadioButtons "notifyMaintainerGroup=%s"  ui_notifyMaintainerGroup
-          , "notifyDocBuilderReport"  $= toRadioButtons "notifyDocBuilderReport=%s" ui_notifyDocBuilderReport
-          , "notifyPendingTags"       $= toRadioButtons "notifyPendingTags=%s"      ui_notifyPendingTags
-          , "notifyDependencyForMaintained" $= toRadioButtons "notifyDependencyForMaintained=%s" ui_notifyDependencyForMaintained
-          , "notifyDependencyTriggerBounds" $= toRadioButtons "notifyDependencyTriggerBounds=%s" ui_notifyDependencyTriggerBounds
-          , "notifyDependencyMinimumUploads" $= ui_notifyDependencyMinimumUploads
-          , "notifyDependencyMinimumAgeDays" $= ui_notifyDependencyMinimumAgeDays
-          ]
+      cacheControlWithoutETag [NoCache]
+      let
+        addNotifyDependencyForMaintainedChecked =
+          case ui_notifyDependencyForMaintained of
+            OK True  -> (("notifyDependencyForMaintainedTrueChecked" $= ("checked=checked" :: String)) :)
+            OK False -> (("notifyDependencyForMaintainedFalseChecked" $= ("checked=checked" :: String)) :)
+        addNotifyDependencyTriggerBoundsChecked =
+          case ui_notifyDependencyTriggerBounds of
+            Always           -> (("notifyDependencyTriggerBoundsAlwaysChecked" $= ("checked=checked" :: String)) :)
+            BoundsOutOfRange -> (("notifyDependencyTriggerBoundsBoundsOutOfRangeChecked" $= ("checked=checked" :: String)) :)
+      ok . toResponse . template . addNotifyDependencyForMaintainedChecked . addNotifyDependencyTriggerBoundsChecked $
+        [ "username"                $= display (userName uinfo)
+        , "showConfirmationOfSave"  $= showConfirmationOfSave
+        , "notifyEnabled"           $= toRadioButtons "notifyEnabled=%s"          ui_notifyEnabled
+        , "notifyRevisionRange"     $= toRadioButtons "notifyRevisionRange=%s"    ui_notifyRevisionRange
+        , "notifyUpload"            $= toRadioButtons "notifyUpload=%s"           ui_notifyUpload
+        , "notifyMaintainerGroup"   $= toRadioButtons "notifyMaintainerGroup=%s"  ui_notifyMaintainerGroup
+        , "notifyDocBuilderReport"  $= toRadioButtons "notifyDocBuilderReport=%s" ui_notifyDocBuilderReport
+        , "notifyPendingTags"       $= toRadioButtons "notifyPendingTags=%s"      ui_notifyPendingTags
+        ]
 
     handlerPutUserNotify dpath = do
       uid <- lookupUserName =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
       nprefui <- expectAesonContent
-      case notifyPrefFromUI nprefui of
-        Left err ->
-          errBadRequest "Notification preferences couldn't be decoded" [MText err]
-        Right pref -> do
-          updateSetUserNotifyPref uid pref
-          noContent $ toResponse ()
+      let pref = notifyPrefFromUI nprefui
+      updateSetUserNotifyPref uid pref
+      noContent $ toResponse ()
 
     -- Engine
     --
@@ -679,7 +634,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
           userIdToName = fmap userName . flip Users.lookupUserId users
           genEmails :: PackageIdentifier -> IO (Map.Map (UserId, PackageId) [PackageId])
           genEmails =
-            dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref now
+            dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
         dependencyEmailMaps <- traverse (genEmails . pkgInfoToPkgId) revisionsAndUploads
         let
           dependencyEmailMap :: Map.Map (UserId, PackageId) [PackageId]

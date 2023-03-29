@@ -8,7 +8,6 @@ import           Data.Functor.Identity (Identity(..))
 import           Data.List (partition, foldl')
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import           Data.Time (UTCTime(..), fromGregorian)
 
 import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, packageName)
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), VersionStatus(NormalVersion), PreferredInfo(..))
@@ -151,11 +150,6 @@ allTests = testGroup "ReverseDependenciesTest"
           notifyPref = defaultNotifyPrefs { notifyDependencyForMaintained = True, notifyOptOut = False }
           pref (UserId 0) = Identity (Just notifyPref)
           pref _ = error "should only get preferences for UserId 0"
-          prefMinAge (UserId 0) = Identity (Just notifyPref { notifyDependencyMinimumAgeDays = 1 })
-          prefMinAge _ = error "should only get preferences with UserId 0"
-          prefMinUploads (UserId 0) = Identity (Just notifyPref { notifyDependencyMinimumUploads = 2 })
-          prefMinUploads _ = error "should only get preferences with UserId 0"
-          jan1st = UTCTime (fromGregorian 2020 1 1) 0
           refNotification = Map.fromList
             [
               ( (UserId 0, PackageIdentifier (mkPackageName "base") (mkVersion [4,15]))
@@ -163,42 +157,12 @@ allTests = testGroup "ReverseDependenciesTest"
               )
             ]
           base4_15 = PackageIdentifier "base" (mkVersion [4,15])
-          runWithPref preferences timestampNow index pkg = runIdentity $
-            dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences timestampNow pkg
+          runWithPref preferences index pkg = runIdentity $
+            dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences pkg
       assertEqual
         "dependencyReleaseEmails should generate a notification"
         refNotification
-        (runWithPref pref jan1st idx base4_15)
-      assertEqual
-        "dependencyReleaseEmails shouldn't generate a notification when minAge hasn't passed"
-        mempty
-        (runWithPref prefMinAge jan1st idx base4_15)
-      assertEqual
-        "dependencyReleaseEmails should generate a notification when minAge has passed"
-        refNotification
-        (runWithPref prefMinAge (UTCTime (fromGregorian 2020 1 2) 0) idx base4_15)
-      assertEqual
-        "dependencyReleaseEmails shouldn't generate a notification when minUploads isn't reached"
-        mempty
-        (runWithPref prefMinUploads jan1st idx base4_15)
-      assertEqual
-        "dependencyReleaseEmails's minUploads should look only within the same major series"
-        mempty $
-          let base4_16 = mkPackage "base" [4,16] []
-          in
-          (runWithPref prefMinUploads jan1st (PackageIndex.fromList $ base4_16 : newBaseReleased) (packageId base4_16))
-      assertEqual
-        "dependencyReleaseEmails should generate a notification when minUploads is reached"
-        (Map.fromList
-          [
-            ( (UserId 0, PackageIdentifier (mkPackageName "base") (mkVersion [4,15,1]))
-            , [PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])]
-            )
-          ]
-        ) $
-          let base4_15_1 = mkPackage "base" [4,15,1] []
-          in
-          (runWithPref prefMinUploads jan1st (PackageIndex.fromList $ base4_15_1 : newBaseReleased) (packageId base4_15_1))
+        (runWithPref pref idx base4_15)
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res
