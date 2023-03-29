@@ -20,7 +20,7 @@ import Distribution.Version
 
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Group
-import Distribution.Server.Users.Types (UserId, UserInfo (..), UserName)
+import Distribution.Server.Users.Types (UserId, UserInfo (..))
 import Distribution.Server.Users.UserIdSet as UserIdSet
 
 import Distribution.Server.Packages.Types
@@ -630,8 +630,6 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
         let
-          userIdToName :: UserId -> Maybe UserName
-          userIdToName = fmap userName . flip Users.lookupUserId users
           genEmails :: PackageIdentifier -> IO (Map.Map (UserId, PackageId) [PackageId])
           genEmails =
             dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
@@ -659,17 +657,9 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                       , "These are your packages that require " <> display (packageName dep) <> " but don't accept " <> display (packageVersion dep) <> ":"
                       ]
                   ++ map display revDeps
-                  ++ [ "You can adjust your notification preferences at"
-                     , uriToString id serverBaseURI ""
-                       <> "/user/"
-                       <> maybe "<your user name>"
-                            display
-                            (userIdToName uId)
-                       <> "/notify"
-                     ]
         dependencyEmailTextMaps <- Map.mapKeys fst <$> Map.traverseWithKey emailText dependencyEmailMap
 
-        mapM_ sendNotifyEmail . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails, dependencyEmailTextMaps]
+        mapM_ (sendNotifyEmail users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails, dependencyEmailTextMaps]
         updateState notifyState (SetNotifyTime now)
 
     formatTimeUser users t u =
@@ -792,8 +782,8 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
       where
         showTags = intercalate ", " . map display . Set.toList
 
-    sendNotifyEmail :: (UserId, [String]) -> IO ()
-    sendNotifyEmail (uid, ebody) = do
+    sendNotifyEmail :: Users.Users -> (UserId, [String]) -> IO ()
+    sendNotifyEmail users (uid, ebody) = do
         mudetails <- queryUserDetails uid
         case mudetails of
              Nothing -> return ()
@@ -805,9 +795,22 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                        mailHeaders = [(BSS.pack "Subject",
                                        T.pack "[Hackage] Maintainer Notifications")],
                        mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
-                                             None DefaultDisposition [] (PartContent $ BS.pack $ intercalate ("\n\n") ebody)]]
+                                             None DefaultDisposition []
+                                             (PartContent $ BS.pack $
+                                                   intercalate "\n\n" ebody
+                                                <> "\n\n"
+                                                <> adjustmentLinkParagraph
+                                             )
+                                     ]]
                      }
                      Just ourHost = uriAuthority serverBaseURI
 
                  renderSendMail mail --TODO: if we need any configuration of
                                      -- sendmail stuff, has to go here
+      where
+        adjustmentLinkParagraph =
+          "You can adjust your notification preferences at\n"
+          <> uriToString id serverBaseURI ""
+          <> "/user/"
+          <> display (Users.userIdToName users uid)
+          <> "/notify"
