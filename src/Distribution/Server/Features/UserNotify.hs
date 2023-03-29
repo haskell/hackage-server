@@ -45,6 +45,7 @@ import Distribution.Server.Features.Users
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+import Control.Concurrent (threadDelay)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put)
 import Data.Aeson.TH (defaultOptions, deriveJSON)
@@ -660,11 +661,11 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         dependencyEmailTextMaps <- Map.mapKeys fst <$> Map.traverseWithKey emailText dependencyEmailMap
 
         -- Concat the constituent email parts such that only one email is sent per user
-        mapM_ (sendNotifyEmail users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails]
+        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails]
 
         -- Dependency email notifications consist of multiple paragraphs, so it would be confusing if concatenated.
         -- So they're sent independently.
-        mapM_ (sendNotifyEmail users) . Map.toList $ dependencyEmailTextMaps
+        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ dependencyEmailTextMaps
 
         updateState notifyState (SetNotifyTime now)
 
@@ -788,8 +789,8 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
       where
         showTags = intercalate ", " . map display . Set.toList
 
-    sendNotifyEmail :: Users.Users -> (UserId, [String]) -> IO ()
-    sendNotifyEmail users (uid, ebody) = do
+    sendNotifyEmailAndDelay :: Users.Users -> (UserId, [String]) -> IO ()
+    sendNotifyEmailAndDelay users (uid, ebody) = do
         mudetails <- queryUserDetails uid
         case mudetails of
              Nothing -> return ()
@@ -813,6 +814,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
 
                  renderSendMail mail --TODO: if we need any configuration of
                                      -- sendmail stuff, has to go here
+                 threadDelay 250000
       where
         adjustmentLinkParagraph =
           "You can adjust your notification preferences at\n"
