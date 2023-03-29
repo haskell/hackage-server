@@ -77,6 +77,11 @@ $endif$
             <input $notifyDependencyTriggerBoundsBoundsOutOfRangeChecked$ type="radio" name="notifyDependencyTriggerBounds=%s" value="BoundsOutOfRange">
             my maintained package doesn't accept the version of the newly uploaded or revised dependency
           </label>
+          <label style="display:flex">
+            <input $newIncompatibilityChecked$ type="radio" name="notifyDependencyTriggerBounds=%s" value="NewIncompatibility">
+            my maintained package doesn't accept the version of the newly uploaded or revised dependency
+            and my package does accept the second highest version of said dependency
+          </label>
         </p>
       </td>
     </tr>

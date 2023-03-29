@@ -7,6 +7,7 @@
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 module Distribution.Server.Features.UserNotify (
     NotifyPref(..),
+    NotifyTriggerBounds(..),
     UserNotifyFeature(..),
     defaultNotifyPrefs,
     dependencyReleaseEmails,
@@ -53,7 +54,7 @@ import Data.Bifunctor (Bifunctor(second))
 import Data.Bimap (lookup, lookupR)
 import Data.Graph (Vertex)
 import Data.Hashable (Hashable(..))
-import Data.List (maximumBy)
+import Data.List (maximumBy, sortBy)
 import Data.List (intercalate)
 import Data.Maybe (fromJust, fromMaybe, listToMaybe, mapMaybe, maybeToList)
 import Data.Ord (comparing)
@@ -127,7 +128,7 @@ defaultNotifyPrefs = NotifyPref {
                        notifyDocBuilderReport = True,
                        notifyPendingTags = True,
                        notifyDependencyForMaintained = True,
-                       notifyDependencyTriggerBounds = BoundsOutOfRange
+                       notifyDependencyTriggerBounds = NewIncompatibility
                      }
 
 data NotifyRevisionRange = NotifyAllVersions | NotifyNewestVersion | NoNotifyRevisions deriving (Eq, Enum, Read, Show, Typeable)
@@ -143,14 +144,14 @@ instance Hashable NotifyRevisionRange where
   hash = fromEnum
   hashWithSalt s x = s `hashWithSalt` hash x
 
-data NotifyTriggerBounds = Always | BoundsOutOfRange deriving (Eq, Enum, Read, Show, Typeable)
+data NotifyTriggerBounds
+  = Always
+  | BoundsOutOfRange
+  | NewIncompatibility
+  deriving (Eq, Enum, Read, Show, Typeable)
 
 instance MemSize NotifyTriggerBounds where
   memSize _ = 1
-
-instance Pretty NotifyTriggerBounds where
-  pretty Always = text "always"
-  pretty BoundsOutOfRange = text "my maintained package doesn't accept the version of the newly uploaded or revised dependency"
 
 instance Hashable NotifyTriggerBounds where
   hash = fromEnum
@@ -181,7 +182,7 @@ instance Migrate NotifyPref where
             -- reverse dependency emails.
             -- So let's assume they don't want these.
             -- Note that this differs from defaultNotifyPrefs.
-      BoundsOutOfRange
+      NewIncompatibility
 
 $(deriveSafeCopy 1 'extension ''NotifyPref)
 $(deriveSafeCopy 0 'base ''NotifyData)
@@ -438,6 +439,8 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                       revers notifyState templates
       return feature
 
+data InRange = InRange | OutOfRange
+
 -- | Get the release notification emails when a new package has been released.
 --   The new package (PackageIdentifier) must already be in the indexes.
 --   The keys in the returned map are the new packages. The values are the revDeps.
@@ -482,7 +485,21 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
           guard $ not notifyOptOut
           guard notifyDependencyForMaintained
           case notifyDependencyTriggerBounds of
-            BoundsOutOfRange -> guard $ maybe False (any isDependencyMatchingAndOutOfRange) mDepList
+            NewIncompatibility -> do
+              let allNewUploadPkgInfos = PackageIndex.lookupPackageName index (pkgName pkgId)
+                  sortedByVersionDesc = sortBy (flip $ comparing packageVersion) allNewUploadPkgInfos
+                  mNextHighest =
+                    case sortedByVersionDesc of
+                      _:b:_ -> Just b
+                      _     -> Nothing
+              case (,) <$> mDepList <*> mNextHighest of
+                Just (depList, secondHighest) ->
+                  guard $ any (\dep -> isDependencyMatchingAnd InRange (packageVersion secondHighest) dep
+                                    && isDependencyMatchingAnd OutOfRange newestVersion dep
+                              ) depList
+                Nothing ->
+                  pure ()
+            BoundsOutOfRange -> guard $ maybe False (any $ isDependencyMatchingAnd OutOfRange newestVersion) mDepList
             Always           -> guard $ maybe False (any $ \(Dependency depName _ _) -> depName == pkgName pkgId) mDepList
           [userId]
       pure (idsAndTriggers, latestRevDep)
@@ -490,11 +507,16 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
         latestRevDep = maximumBy (comparing packageVersion) (PackageIndex.lookupPackageName index revDepName)
         mDepList :: Maybe [Dependency]
         mDepList = Map.lookup (packageId latestRevDep) dependencies
-        isDependencyMatchingAndOutOfRange :: Dependency -> Bool
-        isDependencyMatchingAndOutOfRange (Dependency depName depRange _)
+        isDependencyMatchingAnd :: InRange -> Version -> Dependency -> Bool
+        isDependencyMatchingAnd InRange depVersion (Dependency depName depRange _)
           | depName /= pkgName pkgId = False
-          | pkgVersion pkgId `withinRange` depRange = False
+          | not (depVersion `withinRange` depRange) = False
           | otherwise = True
+        isDependencyMatchingAnd OutOfRange depVersion (Dependency depName depRange _)
+          | depName /= pkgName pkgId = False
+          | depVersion `withinRange` depRange = False
+          | otherwise = True
+        newestVersion = pkgVersion pkgId
 
 pkgInfoToPkgId :: PkgInfo -> PackageIdentifier
 pkgInfoToPkgId pkgInfo =
@@ -581,6 +603,8 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
           case ui_notifyDependencyTriggerBounds of
             Always           -> (("notifyDependencyTriggerBoundsAlwaysChecked" $= ("checked=checked" :: String)) :)
             BoundsOutOfRange -> (("notifyDependencyTriggerBoundsBoundsOutOfRangeChecked" $= ("checked=checked" :: String)) :)
+            NewIncompatibility ->
+              (("newIncompatibilityChecked" $= ("checked=checked" :: String)) :)
       ok . toResponse . template . addNotifyDependencyForMaintainedChecked . addNotifyDependencyTriggerBoundsChecked $
         [ "username"                $= display (userName uinfo)
         , "showConfirmationOfSave"  $= showConfirmationOfSave
@@ -658,10 +682,19 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                       [ "You have requested to be notified for each upload/revision of a dependency. \
                         \These are your packages that depend on " <> display dep <> ":"
                       ]
-                    BoundsOutOfRange ->
+                    outOfRangeOption ->
                       [ "You have requested to be notified when a dependency isn't accepted by any of \
                         \your maintained packages."
-                      , "These are your packages that require " <> display (packageName dep) <> " but don't accept " <> display (packageVersion dep) <> ":"
+                      ] ++
+                        case outOfRangeOption of
+                          NewIncompatibility ->
+                            [ "The following packages did accept the second highest version of "
+                              <> display (packageName dep) <> "."
+                            ]
+                          _ ->
+                            []
+                        ++
+                      [ "These are your packages that require " <> display (packageName dep) <> " but don't accept " <> display (packageVersion dep) <> ":"
                       ]
                   ++ map display revDeps
         dependencyEmailTextMaps <- Map.mapKeys fst <$> Map.traverseWithKey emailText dependencyEmailMap

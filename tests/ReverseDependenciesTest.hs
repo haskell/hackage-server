@@ -13,7 +13,7 @@ import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, pa
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), VersionStatus(NormalVersion), PreferredInfo(..))
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
-import Distribution.Server.Features.UserNotify (NotifyPref(..), defaultNotifyPrefs, dependencyReleaseEmails)
+import Distribution.Server.Features.UserNotify (NotifyPref(..), NotifyTriggerBounds(..), defaultNotifyPrefs, dependencyReleaseEmails)
 import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
 import Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -45,6 +45,14 @@ newBaseReleased :: [PkgInfo]
 newBaseReleased =
   [ mkPackage "base" [4,14] []
   , mkPackage "base" [4,15] []
+  , mkPackage "mtl" [2,3] ["base < 4.15"]
+  ]
+
+twoNewBasesReleased :: [PkgInfo]
+twoNewBasesReleased =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "base" [4,15] []
+  , mkPackage "base" [4,16] []
   , mkPackage "mtl" [2,3] ["base < 4.15"]
   ]
 
@@ -144,25 +152,42 @@ allTests = testGroup "ReverseDependenciesTest"
       res <- revDisplayInfo
       assertEqual "beeline preferred is old" (PreferredInfo [] [] Nothing, [mkVersion [0]]) (res "beeline")
   , testCase "dependencyReleaseEmails sends notification" $ do
-      let idx = PackageIndex.fromList newBaseReleased
-          userSetIdForPackage arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
+      let userSetIdForPackage arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
                                   | otherwise = error "should only get user ids for mtl"
-          notifyPref = defaultNotifyPrefs { notifyDependencyForMaintained = True, notifyOptOut = False }
-          pref (UserId 0) = Identity (Just notifyPref)
-          pref _ = error "should only get preferences for UserId 0"
-          refNotification = Map.fromList
+          notifyPref triggerBounds =
+            defaultNotifyPrefs
+              { notifyDependencyForMaintained = True
+              , notifyOptOut = False
+              , notifyDependencyTriggerBounds = triggerBounds
+              }
+          pref triggerBounds (UserId 0) = Identity (Just $ notifyPref triggerBounds)
+          pref _ _ = error "should only get preferences for UserId 0"
+          refNotification base = Map.fromList
             [
-              ( (UserId 0, PackageIdentifier (mkPackageName "base") (mkVersion [4,15]))
+              ( (UserId 0, base)
               , [PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])]
               )
             ]
           base4_15 = PackageIdentifier "base" (mkVersion [4,15])
+          base4_16 = PackageIdentifier "base" (mkVersion [4,16])
           runWithPref preferences index pkg = runIdentity $
             dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences pkg
       assertEqual
-        "dependencyReleaseEmails should generate a notification"
-        refNotification
-        (runWithPref pref idx base4_15)
+        "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
+        (refNotification base4_15)
+        (runWithPref (pref NewIncompatibility) (PackageIndex.fromList newBaseReleased) base4_15)
+      assertEqual
+        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is a single base version behind"
+        (refNotification base4_15)
+        (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newBaseReleased) base4_15)
+      assertEqual
+        "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when package is two base versions behind"
+        mempty
+        (runWithPref (pref NewIncompatibility) (PackageIndex.fromList twoNewBasesReleased) base4_16)
+      assertEqual
+        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
+        (refNotification base4_16)
+        (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList twoNewBasesReleased) base4_16)
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res
