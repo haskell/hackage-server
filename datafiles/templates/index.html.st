@@ -78,7 +78,7 @@ command.</li>
 <li><a href="https://wiki.haskell.org/Taking_over_a_package">Taking over a package</a></li>
 <li><a href="https://wiki.haskell.org/Abandoning_a_package">Abandoning a package</a></li>
 <li><a href="https://wiki.haskell.org/Hackage_trustees">Hackage trustees</a> and what they do</li>
-<li><a href="https://wiki.haskell.org/Library_submissions">Submitting  changes</a> for the core libraries</li>
+<li><a href="https://github.com/haskell/core-libraries-committee/blob/main/PROPOSALS.md">Submitting  changes</a> for the base library</li>
 </ul>
 
 <h2 id="reporting-problems">Reporting problems</h2>
