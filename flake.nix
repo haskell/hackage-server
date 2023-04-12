@@ -60,13 +60,13 @@
           ];
           packages.hackage-server.root = ./.;  # Auto-discovered by haskell-flake
           overrides = self: super: {
-            Cabal = super.Cabal_3_8_1_0;
-            Cabal-syntax = super.Cabal-syntax_3_8_1_0;
-            doctest-parallel = super.doctest-parallel_0_3_0;
+            Cabal = super.Cabal_3_10_1_0;
+            Cabal-syntax = super.Cabal-syntax_3_10_1_0;
+            doctest-parallel = super.doctest-parallel_0_3_0_1;
 
             ghc-lib-parser = super.ghc-lib-parser_9_4_4_20221225;
             ghc-lib-parser-ex = super.ghc-lib-parser-ex_9_4_0_0;
-            text = super.text_2_0_1;
+            text = super.text_2_0_2;
             parsec = self.callHackage "parsec" "3.1.16.1" {};
 
             chell = pkgs.haskell.lib.doJailbreak (self.callHackage "chell" "0.5.0.1" {});
