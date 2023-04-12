@@ -36,7 +36,7 @@
 
     $if(isDeprecated)$
     <div id="deprecated">
-      <span style="color:#D00B3C">Deprecated.</span>
+      <span style="color:#D00B3C">Deprecated</span>
       $deprecatedMsg$
     </div>
     $else$
