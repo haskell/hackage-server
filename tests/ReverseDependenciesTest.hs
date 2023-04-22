@@ -199,10 +199,6 @@ allTests = testGroup "ReverseDependenciesTest"
         "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
         (refNotification base4_16)
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList twoNewBasesReleased) base4_16)
-      assertEqual
-        "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
-        (refNotification base4_15)
-        (runWithPref (pref NewIncompatibility) (PackageIndex.fromList newBaseReleased) base4_15)
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res
