@@ -484,23 +484,27 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
           (userId, Just NotifyPref{..}) <- zip ids mPrefs
           guard $ not notifyOptOut
           guard notifyDependencyForMaintained
+          Just depList <- [mDepList]
           case notifyDependencyTriggerBounds of
             NewIncompatibility -> do
               let allNewUploadPkgInfos = PackageIndex.lookupPackageName index (pkgName pkgId)
                   sortedByVersionDesc = sortBy (flip $ comparing packageVersion) allNewUploadPkgInfos
-                  mNextHighest =
+                  mSecondHighest =
                     case sortedByVersionDesc of
                       _:b:_ -> Just b
                       _     -> Nothing
-              case (,) <$> mDepList <*> mNextHighest of
-                Just (depList, secondHighest) ->
+              case mSecondHighest of
+                Just secondHighest ->
                   guard $ any (\dep -> isDependencyMatchingAnd InRange (packageVersion secondHighest) dep
                                     && isDependencyMatchingAnd OutOfRange newestVersion dep
                               ) depList
                 Nothing ->
-                  pure ()
-            BoundsOutOfRange -> guard $ maybe False (any $ isDependencyMatchingAnd OutOfRange newestVersion) mDepList
-            Always           -> guard $ maybe False (any $ \(Dependency depName _ _) -> depName == pkgName pkgId) mDepList
+                  -- If there is no second highest version, we just need to check whether the
+                  -- newest version is out of range. Otherwise you'd get a notification for
+                  -- a dependency which is within bounds.
+                  guard $ any (isDependencyMatchingAnd OutOfRange newestVersion) depList
+            BoundsOutOfRange -> guard $ any (isDependencyMatchingAnd OutOfRange newestVersion) depList
+            Always           -> guard $ any (\(Dependency depName _ _) -> depName == pkgName pkgId) depList
           [userId]
       pure (idsAndTriggers, latestRevDep)
       where

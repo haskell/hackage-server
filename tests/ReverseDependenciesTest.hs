@@ -41,6 +41,12 @@ mtlBeelineLens =
   , mkPackage "lens" [0] ["mtl"]
   ]
 
+twoPackagesWithNoDepsOutOfRange :: [PkgInfo]
+twoPackagesWithNoDepsOutOfRange =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "mtl" [2,3] ["base < 4.15"]
+  ]
+
 newBaseReleased :: [PkgInfo]
 newBaseReleased =
   [ mkPackage "base" [4,14] []
@@ -168,10 +174,15 @@ allTests = testGroup "ReverseDependenciesTest"
               , [PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])]
               )
             ]
+          base4_14 = PackageIdentifier "base" (mkVersion [4,14])
           base4_15 = PackageIdentifier "base" (mkVersion [4,15])
           base4_16 = PackageIdentifier "base" (mkVersion [4,16])
           runWithPref preferences index pkg = runIdentity $
             dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences pkg
+      assertEqual
+        "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when there are packages, but none are behind"
+        mempty
+        (runWithPref (pref NewIncompatibility) (PackageIndex.fromList twoPackagesWithNoDepsOutOfRange) base4_14)
       assertEqual
         "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
         (refNotification base4_15)
@@ -188,6 +199,10 @@ allTests = testGroup "ReverseDependenciesTest"
         "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
         (refNotification base4_16)
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList twoNewBasesReleased) base4_16)
+      assertEqual
+        "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
+        (refNotification base4_15)
+        (runWithPref (pref NewIncompatibility) (PackageIndex.fromList newBaseReleased) base4_15)
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res
