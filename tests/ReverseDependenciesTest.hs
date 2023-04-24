@@ -56,6 +56,14 @@ newBaseReleased =
   , mkPackage "mtl" [2,3] ["base < 4.15"]
   ]
 
+newVersionOfOldBase :: [PkgInfo]
+newVersionOfOldBase =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "base" [4,14,1] []
+  , mkPackage "base" [4,15] []
+  , mkPackage "mtl" [2,3] ["base >= 4.15"]
+  ]
+
 twoNewBasesReleased :: [PkgInfo]
 twoNewBasesReleased =
   [ mkPackage "base" [4,14] []
@@ -177,6 +185,7 @@ allTests = testGroup "ReverseDependenciesTest"
               )
             ]
           base4_14 = PackageIdentifier "base" (mkVersion [4,14])
+          base4_14_1 = PackageIdentifier "base" (mkVersion [4,14,1])
           base4_15 = PackageIdentifier "base" (mkVersion [4,15])
           base4_16 = PackageIdentifier "base" (mkVersion [4,16])
           runWithPref preferences index pkg = runIdentity $
@@ -201,6 +210,10 @@ allTests = testGroup "ReverseDependenciesTest"
         "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
         (refNotification base4_16)
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList twoNewBasesReleased) base4_16)
+      assertEqual
+        "dependencyReleaseEmails(trigger=BoundsOutOfRange) shouldn't generate a notification when the new package is for an old release series"
+        mempty
+        (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newVersionOfOldBase) base4_14_1)
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res

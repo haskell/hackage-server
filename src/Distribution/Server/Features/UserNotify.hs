@@ -456,6 +456,12 @@ dependencyReleaseEmails
   -> (UserId -> m (Maybe NotifyPref))
   -> PackageIdentifier
   -> m (Map.Map (UserId, PackageId) [PackageId])
+dependencyReleaseEmails _ index _ _ pkgId
+  | let versionsForNewRelease = packageVersion <$> PackageIndex.lookupPackageName index (pkgName pkgId)
+  , pkgVersion pkgId /= maximum versionsForNewRelease
+  -- If e.g. a minor bugfix release is made for an old release series, never notify maintainers.
+  -- Only start checking if the new version is the highest.
+  = pure mempty
 dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref pkgId =
   case lookup (pkgName pkgId) nodemap :: Maybe NodeId of
     Nothing -> pure mempty
