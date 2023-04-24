@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings, NamedFieldPuns, TypeApplications, ScopedTypeVariables #-}
 module Main where
 
+import           Control.Monad.IO.Class (liftIO)
 import qualified Data.Array as Arr
 import qualified Data.Bimap as Bimap
 import           Data.Foldable (for_)
@@ -13,7 +14,8 @@ import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, pa
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), VersionStatus(NormalVersion), PreferredInfo(..))
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
-import Distribution.Server.Features.UserNotify (NotifyPref(..), NotifyTriggerBounds(..), defaultNotifyPrefs, dependencyReleaseEmails)
+import Distribution.Server.Features.UserNotify (NotifyData(..), NotifyPref(..), NotifyRevisionRange, NotifyTriggerBounds(..), defaultNotifyPrefs, dependencyReleaseEmails, importNotifyPref, notifyDataToCSV)
+import Distribution.Server.Framework.BackupRestore (runRestore)
 import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
 import Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -272,11 +274,40 @@ packsUntil allowMultipleVersions limit generated | length generated < limit = do
   packsUntil allowMultipleVersions limit added
 packsUntil _ _ generated = pure generated
 
+genRevisionRange :: MonadGen m => m NotifyRevisionRange
+genRevisionRange = Gen.enumBounded
+
+genDependencyTriggerBounds :: MonadGen m => m NotifyTriggerBounds
+genDependencyTriggerBounds = Gen.enumBounded
+
+genUidPref :: MonadGen m => m (UserId, NotifyPref)
+genUidPref = do
+  uid <- UserId <$> Gen.int (Range.linear 0 100)
+  pref <-
+    NotifyPref
+      <$> Gen.bool
+      <*> genRevisionRange
+      <*> Gen.bool
+      <*> Gen.bool
+      <*> Gen.bool
+      <*> Gen.bool
+      <*> Gen.bool
+      <*> genDependencyTriggerBounds
+  pure (uid, pref)
+
+prop_csvBackupRoundtrips :: Property
+prop_csvBackupRoundtrips = property $ do
+  prefMap <- forAll $ Gen.map (Range.linear 0 10) genUidPref
+  let csv = notifyDataToCSV (error "unused backupType") (NotifyData (prefMap, error "unused timestamp"))
+  Right listOfMappings <- liftIO $ runRestore (error "unused blobStores") (importNotifyPref csv)
+  prefMap === Map.fromList listOfMappings
+
 hedgehogTests :: IO Bool
 hedgehogTests =
   checkSequential $ Group "hedgehogTests"
     [ ("prop_constructRevDeps", prop_constructRevDeps)
     , ("prop_statsEqualsDeps",  prop_statsEqualsDeps)
+    , ("prop_csvBackupRoundtrips", prop_csvBackupRoundtrips)
     ]
 
 main :: IO ()

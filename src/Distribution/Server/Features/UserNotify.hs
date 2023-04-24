@@ -6,12 +6,16 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 module Distribution.Server.Features.UserNotify (
+    NotifyData(..),
     NotifyPref(..),
+    NotifyRevisionRange,
     NotifyTriggerBounds(..),
     UserNotifyFeature(..),
     defaultNotifyPrefs,
     dependencyReleaseEmails,
-    initUserNotifyFeature
+    importNotifyPref,
+    initUserNotifyFeature,
+    notifyDataToCSV,
   ) where
 
 import Prelude hiding (lookup)
@@ -131,7 +135,7 @@ defaultNotifyPrefs = NotifyPref {
                        notifyDependencyTriggerBounds = NewIncompatibility
                      }
 
-data NotifyRevisionRange = NotifyAllVersions | NotifyNewestVersion | NoNotifyRevisions deriving (Eq, Enum, Read, Show, Typeable)
+data NotifyRevisionRange = NotifyAllVersions | NotifyNewestVersion | NoNotifyRevisions deriving (Bounded, Enum, Eq, Read, Show, Typeable)
 instance MemSize NotifyRevisionRange where
   memSize _ = 1
 
@@ -148,7 +152,7 @@ data NotifyTriggerBounds
   = Always
   | BoundsOutOfRange
   | NewIncompatibility
-  deriving (Eq, Enum, Read, Show, Typeable)
+  deriving (Bounded, Enum, Eq, Read, Show, Typeable)
 
 instance MemSize NotifyTriggerBounds where
   memSize _ = 1
