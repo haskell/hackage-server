@@ -29,7 +29,7 @@ by helping with providing accurate meta-data.
 </p>
 
 <p>Packages must be in the form produced by Cabal's
-<a href="https://cabal.readthedocs.io/en/latest/cabal-commands.html#cabal-v2-sdist">sdist</a> command:
+<a href="https://cabal.readthedocs.io/en/latest/cabal-commands.html#cabal-sdist">sdist</a> command:
 a gzipped tar file <em>package</em>-<em>version</em><tt>.tar.gz</tt>
 comprising a directory <em>package</em>-<em>version</em> containing a package
 of that name and version, including <em>package</em><tt>.cabal</tt>.
