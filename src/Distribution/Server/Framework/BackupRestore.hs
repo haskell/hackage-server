@@ -35,6 +35,7 @@ module Distribution.Server.Framework.BackupRestore (
     restoreAddBlob,
     restoreGetBlob,
     restoreFindBlob,
+    runRestore,
 
     AbstractRestoreBackup(..),
     abstractRestoreBackup

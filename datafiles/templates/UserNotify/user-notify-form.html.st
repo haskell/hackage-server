@@ -3,6 +3,20 @@
 <head>
 $hackageCssTheme()$
 <title>Set user notification preferences | Hackage</title>
+<style>
+td {
+  vertical-align: top;
+}
+label {
+  align-items: center;
+}
+.expandable {
+  visibility: visible;
+}
+#notifyDependencyForMaintainedFalse:checked ~ .expandable {
+  visibility: collapse;
+}
+</style>
 </head>
 
 <body>
@@ -45,6 +59,32 @@ $endif$
     <tr>
       <td><label>Notify on maintained package pending proposed tags:
       <td>$notifyPendingTags$
+
+    <tr>
+      <td><label>Notify when a dependency is updated for any of my maintained packages:
+      <td>
+        <input $notifyDependencyForMaintainedTrueChecked$ type="radio" name="notifyDependencyForMaintained=%s" value="true" id="notifyDependencyForMaintainedTrue">
+        <label for="notifyDependencyForMaintainedTrue">Yes</label>
+        <input $notifyDependencyForMaintainedFalseChecked$ type="radio" name="notifyDependencyForMaintained=%s" value="false" id="notifyDependencyForMaintainedFalse">
+        <label for="notifyDependencyForMaintainedFalse">No</label>
+        <p class="expandable">
+          trigger:
+          <label style="display:flex">
+            <input $notifyDependencyTriggerBoundsAlwaysChecked$ type="radio" name="notifyDependencyTriggerBounds=%s" value="Always">
+            always
+          </label>
+          <label style="display:flex">
+            <input $notifyDependencyTriggerBoundsBoundsOutOfRangeChecked$ type="radio" name="notifyDependencyTriggerBounds=%s" value="BoundsOutOfRange">
+            my maintained package doesn't accept the version of the newly uploaded or revised dependency
+          </label>
+          <label style="display:flex">
+            <input $newIncompatibilityChecked$ type="radio" name="notifyDependencyTriggerBounds=%s" value="NewIncompatibility">
+            my maintained package doesn't accept the version of the newly uploaded or revised dependency
+            and my package does accept the second highest version of said dependency
+          </label>
+        </p>
+      </td>
+    </tr>
   </table>
   <input type="submit" value="Save notify preference" />
 </form>
