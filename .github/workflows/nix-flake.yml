@@ -1,21 +1,25 @@
-name: "Test nix-shell"
+name: "Test Nix Flake"
 on:
   push:
     branches:
       - master
-      - ci*
   pull_request:
     branches:
       - master
-      - ci*
 jobs:
-  nix-shell:
-    runs-on: ubuntu-latest
+  nix:
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+        - ubuntu-latest
+        # - macos-latest
+    name: Nix on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3.1.0
-    - uses: cachix/install-nix-action@v18
+    - uses: cachix/install-nix-action@v20
       with:
-        nix_path: nixpkgs=channel:nixos-21.11
         extra_nix_config: |
           trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hackage-server.cachix.org-1:iw0iRh6+gsFIrxROFaAt5gKNgIHejKjIfyRdbpPYevY=
           substituters = https://hydra.iohk.io https://cache.nixos.org/ https://hackage-server.cachix.org/
@@ -24,4 +28,5 @@ jobs:
         # https://nix.dev/tutorials/continuous-integration-github-actions#setting-up-github-actions
         name: hackage-server
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix-shell --pure --run ./.github/workflows/test-nix-shell.sh
+    - run: nix build
+    # - run: nix flake check

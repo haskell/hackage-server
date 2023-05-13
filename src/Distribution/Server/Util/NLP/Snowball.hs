@@ -8,6 +8,7 @@ import           Data.ByteString.Char8 (packCStringLen, useAsCString)
 import           Data.Text             (Text)
 import qualified Data.Text             as Text
 import qualified Data.Text.Encoding    as Text
+import qualified Data.Text.Encoding.Error as Text
 -------------------------------------------------------------------------------
 import           Foreign               (ForeignPtr, FunPtr, Ptr, newForeignPtr,
                                         nullPtr, withForeignPtr)
@@ -32,7 +33,7 @@ newtype Stemmer = Stemmer (MVar (ForeignPtr Struct))
 
 -- | Create a new reusable 'Stemmer' instance.
 newStemmer :: IO Stemmer
-newStemmer = do 
+newStemmer = do
   struct <- stemmer_new
   when (struct == nullPtr) $
     error "Text.Snowball.newStemmer: nullPtr"
@@ -61,7 +62,7 @@ stemsWith (Stemmer mvar) ws =
                         fromIntegral $ Text.length word
                len <- stemmer_length struct
                bytes <- packCStringLen (ptr,fromIntegral len)
-               return $ Text.decodeUtf8 bytes
+               return $ Text.decodeUtf8With Text.lenientDecode bytes
 
 
 -------------------------------------------------------------------------------

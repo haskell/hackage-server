@@ -54,7 +54,8 @@ data ReverseFeature = ReverseFeature {
     revCountForAllPackages :: forall m. MonadIO m => m [(PackageName, ReverseCount)],
     revJSON :: IO ByteString,
     revDisplayInfo :: forall m. MonadIO m => m VersionIndex,
-    revForEachVersion :: PackageName -> IO (Map.Map Version (Set PackageIdentifier))
+    revForEachVersion :: PackageName -> IO (Map.Map Version (Set PackageIdentifier)),
+    queryReverseIndex :: forall m. MonadIO m => m ReverseIndex
 }
 
 instance IsHackageFeature ReverseFeature where

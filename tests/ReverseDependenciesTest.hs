@@ -1,21 +1,27 @@
 {-# LANGUAGE OverloadedStrings, NamedFieldPuns, TypeApplications, ScopedTypeVariables #-}
 module Main where
 
+import           Control.Monad.IO.Class (liftIO)
 import qualified Data.Array as Arr
 import qualified Data.Bimap as Bimap
 import           Data.Foldable (for_)
+import           Data.Functor.Identity (Identity(..))
 import           Data.List (partition, foldl')
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-import Distribution.Package (mkPackageName, packageId, packageName)
+import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, packageName)
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), VersionStatus(NormalVersion), PreferredInfo(..))
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
+import Distribution.Server.Features.UserNotify (NotifyData(..), NotifyPref(..), NotifyRevisionRange, NotifyTriggerBounds(..), defaultNotifyPrefs, dependencyReleaseEmails, importNotifyPref, notifyDataToCSV)
+import Distribution.Server.Framework.BackupRestore (runRestore)
 import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
 import Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..))
+import Distribution.Server.Users.Types (UserId(..))
+import Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Version (mkVersion, version0)
 
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -35,6 +41,35 @@ mtlBeelineLens =
   -- since these two do not depend on base...
   , mkPackage "beeline" [0] ["mtl"]
   , mkPackage "lens" [0] ["mtl"]
+  ]
+
+twoPackagesWithNoDepsOutOfRange :: [PkgInfo]
+twoPackagesWithNoDepsOutOfRange =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "mtl" [2,3] ["base < 4.15"]
+  ]
+
+newBaseReleased :: [PkgInfo]
+newBaseReleased =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "base" [4,15] []
+  , mkPackage "mtl" [2,3] ["base < 4.15"]
+  ]
+
+newVersionOfOldBase :: [PkgInfo]
+newVersionOfOldBase =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "base" [4,14,1] []
+  , mkPackage "base" [4,15] []
+  , mkPackage "mtl" [2,3] ["base >= 4.15"]
+  ]
+
+twoNewBasesReleased :: [PkgInfo]
+twoNewBasesReleased =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "base" [4,15] []
+  , mkPackage "base" [4,16] []
+  , mkPackage "mtl" [2,3] ["base < 4.15"]
   ]
 
 mkRevFeat :: [PkgInfo] -> IO ReverseFeature
@@ -132,6 +167,53 @@ allTests = testGroup "ReverseDependenciesTest"
       ReverseFeature{revDisplayInfo} <- mkRevFeat mtlBeelineLens
       res <- revDisplayInfo
       assertEqual "beeline preferred is old" (PreferredInfo [] [] Nothing, [mkVersion [0]]) (res "beeline")
+  , testCase "dependencyReleaseEmails sends notification" $ do
+      let userSetIdForPackage arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
+                                  | otherwise = error "should only get user ids for mtl"
+          notifyPref triggerBounds =
+            defaultNotifyPrefs
+              { notifyDependencyForMaintained = True
+              , notifyOptOut = False
+              , notifyDependencyTriggerBounds = triggerBounds
+              }
+          pref triggerBounds (UserId 0) = Identity (Just $ notifyPref triggerBounds)
+          pref _ _ = error "should only get preferences for UserId 0"
+          refNotification base = Map.fromList
+            [
+              ( (UserId 0, base)
+              , [PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])]
+              )
+            ]
+          base4_14 = PackageIdentifier "base" (mkVersion [4,14])
+          base4_14_1 = PackageIdentifier "base" (mkVersion [4,14,1])
+          base4_15 = PackageIdentifier "base" (mkVersion [4,15])
+          base4_16 = PackageIdentifier "base" (mkVersion [4,16])
+          runWithPref preferences index pkg = runIdentity $
+            dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences pkg
+      assertEqual
+        "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when there are packages, but none are behind"
+        mempty
+        (runWithPref (pref NewIncompatibility) (PackageIndex.fromList twoPackagesWithNoDepsOutOfRange) base4_14)
+      assertEqual
+        "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
+        (refNotification base4_15)
+        (runWithPref (pref NewIncompatibility) (PackageIndex.fromList newBaseReleased) base4_15)
+      assertEqual
+        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is a single base version behind"
+        (refNotification base4_15)
+        (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newBaseReleased) base4_15)
+      assertEqual
+        "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when package is two base versions behind"
+        mempty
+        (runWithPref (pref NewIncompatibility) (PackageIndex.fromList twoNewBasesReleased) base4_16)
+      assertEqual
+        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
+        (refNotification base4_16)
+        (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList twoNewBasesReleased) base4_16)
+      assertEqual
+        "dependencyReleaseEmails(trigger=BoundsOutOfRange) shouldn't generate a notification when the new package is for an old release series"
+        mempty
+        (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newVersionOfOldBase) base4_14_1)
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res
@@ -205,11 +287,40 @@ packsUntil allowMultipleVersions limit generated | length generated < limit = do
   packsUntil allowMultipleVersions limit added
 packsUntil _ _ generated = pure generated
 
+genRevisionRange :: MonadGen m => m NotifyRevisionRange
+genRevisionRange = Gen.enumBounded
+
+genDependencyTriggerBounds :: MonadGen m => m NotifyTriggerBounds
+genDependencyTriggerBounds = Gen.enumBounded
+
+genUidPref :: MonadGen m => m (UserId, NotifyPref)
+genUidPref = do
+  uid <- UserId <$> Gen.int (Range.linear 0 100)
+  pref <-
+    NotifyPref
+      <$> Gen.bool
+      <*> genRevisionRange
+      <*> Gen.bool
+      <*> Gen.bool
+      <*> Gen.bool
+      <*> Gen.bool
+      <*> Gen.bool
+      <*> genDependencyTriggerBounds
+  pure (uid, pref)
+
+prop_csvBackupRoundtrips :: Property
+prop_csvBackupRoundtrips = property $ do
+  prefMap <- forAll $ Gen.map (Range.linear 0 10) genUidPref
+  let csv = notifyDataToCSV (error "unused backupType") (NotifyData (prefMap, error "unused timestamp"))
+  Right listOfMappings <- liftIO $ runRestore (error "unused blobStores") (importNotifyPref csv)
+  prefMap === Map.fromList listOfMappings
+
 hedgehogTests :: IO Bool
 hedgehogTests =
   checkSequential $ Group "hedgehogTests"
     [ ("prop_constructRevDeps", prop_constructRevDeps)
     , ("prop_statsEqualsDeps",  prop_statsEqualsDeps)
+    , ("prop_csvBackupRoundtrips", prop_csvBackupRoundtrips)
     ]
 
 main :: IO ()

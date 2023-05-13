@@ -1,6 +1,10 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
-             ScopedTypeVariables, TypeFamilies, CPP,
-             RecordWildCards #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.BlobStorage
@@ -199,7 +203,11 @@ withIncoming' store file blobId action = do
         if commit
             then do
 #ifndef mingw32_HOST_OS
+#if !MIN_VERSION_unix(2,8,0)
               fd <- openFd (directory store blobId) ReadOnly Nothing defaultFileFlags
+#else
+              fd <- openFd (directory store blobId) ReadOnly defaultFileFlags
+#endif
 #endif
               -- TODO: if the target already exists then there is no need to overwrite
               -- it since it will have the same content. Checking and then renaming

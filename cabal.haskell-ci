@@ -1,10 +1,6 @@
 branches: master ci*
 
-installed: +all -Cabal -text -parsec -process
-  -- Cabal-3.8.1.0 wants process-1.6.14 or newer
-
--- Did not help to salvage ghc-9.2 and below:
--- installed: -all +ghc
+installed: +all -Cabal -Cabal-syntax -text -parsec -process
 
 -- Does not work with GHA:
 -- -- allow failures with ghc-7.6 and ghc-7.8
@@ -13,14 +9,15 @@ installed: +all -Cabal -text -parsec -process
 -- Use Ubuntu 22.04
 distribution: jammy
 
-apt: libbrotli-dev
+apt: libbrotli-dev libgd-dev
+  -- libgd-dev is for gd via hs-captcha
 
 -- Make sure the haddock step is included,
 -- even though we don't define any library.
 haddock-components: all
   -- since haskell-ci 0.15.20220822
 
-tests: >= 9.4
-  -- parallel-doctest uses the ghc package
-  -- and thus does not build with Cabal-3.8.1.0 below GHC 9.4
-  -- See: https://github.com/haskell/cabal/issues/8554
+-- tests: >= 9.4
+--   -- parallel-doctest uses the ghc package
+--   -- and thus does not build with Cabal-3.8.1.0 below GHC 9.4
+--   -- See: https://github.com/haskell/cabal/issues/8554

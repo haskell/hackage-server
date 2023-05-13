@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 {-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.AdminFrontend (
     initAdminFrontendFeature
@@ -190,7 +191,8 @@ adminFrontendFeature _env templates
         ok $ toResponse $ template
           [ "resets" $= [ resetRequestToTemplate resetInfo uinfo
                         | resetInfo@ResetInfo {resetUserId} <- allResetInfo
-                        , let Just uinfo = Users.lookupUserId resetUserId usersdb ]
+                        , let Just uinfo = Users.lookupUserId resetUserId usersdb
+                        ]
           ]
 
     serveAdminLegacyGet :: DynamicPath -> ServerPartE Response
@@ -203,7 +205,8 @@ adminFrontendFeature _env templates
         ok $ toResponse $ template
           [ "accounts" $= [ accountBasicInfoToTemplate uid uinfo
                           | uid <- legacyUsers
-                          , let Just uinfo = Users.lookupUserId uid usersdb ]
+                          , let Just uinfo = Users.lookupUserId uid usersdb
+                          ]
           ]
 
     resetRequestToTemplate :: SignupResetInfo -> UserInfo -> TemplateVal
