@@ -8,7 +8,7 @@
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Sans:400,400i,700"/>
+  <link rel="stylesheet" href="/static/hackage-fonts.css"/>
   <link rel="stylesheet" href="/static/hackage.css" type="text/css"/>
   <link rel="icon" href="/static/favicon.png" type="image/png"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
