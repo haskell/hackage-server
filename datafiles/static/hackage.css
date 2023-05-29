@@ -1079,6 +1079,12 @@ table.fancy th {
   table.dataTable.compact.fancy tbody td {
     background: #333;
   }
+  div#table_length.dataTables_length {
+    color: #fff
+  }
+  div#table_filter.dataTables_filter {
+    color: #fff
+  }
 }
 
 table.fancy td, table.properties td,
@@ -1162,6 +1168,9 @@ a.deprecated[href]:visited {
 @media (prefers-color-scheme: dark) {
       .paginator a {
         color: #474747;
+      }
+      .paginate_button {
+        background-color: #979797;
       }
 }
 
