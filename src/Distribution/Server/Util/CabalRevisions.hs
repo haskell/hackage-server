@@ -181,7 +181,7 @@ checkCabalFileRevision checkXRevision old new = do
       let checks  = checkPackage pkg  Nothing
           checks' = filter notUpperBounds $ checkPackage pkg' Nothing
           -- if multiple upper bounds are missing, then the simple set subtraction might detect a change to
-          -- just one, and fail. Ideally we'd peform a set subtraction directly on just the missing bounds
+          -- just one, and fail. Ideally we'd perform a set subtraction directly on just the missing bounds
           -- warning contents. A simple second best is to discard this check for now.
           notUpperBounds (PackageDistSuspiciousWarn (MissingUpperBounds _)) = False
           notUpperBounds _ = True
