@@ -31,6 +31,13 @@ packToPkgInfo Package {pName, pVersion, pDeps} =
 
 mkPackage :: PackageName -> [Int] -> [BSL.ByteString] -> PkgInfo
 mkPackage name intVersion depends =
+  mkPackageWithCabalFileSuffix name intVersion $
+    if depends /= []
+      then "library\n  build-depends: " <> BSL.intercalate "," depends
+      else ""
+
+mkPackageWithCabalFileSuffix :: PackageName -> [Int] -> BSL.ByteString -> PkgInfo
+mkPackageWithCabalFileSuffix name intVersion cabalFileSuffix =
   let
     version = mkVersion intVersion
     -- e.g. "2.3" for [2,3]
@@ -41,7 +48,7 @@ mkPackage name intVersion depends =
 \name: " <> BSL.fromStrict (Char8.pack $ unPackageName name) <> "\n\
 \version: " <> dotVersion <> "\n"
     cabalFile :: CabalFileText
-    cabalFile = CabalFileText $ cabalFilePrefix <> if depends /= [] then "library\n  build-depends: " <> BSL.intercalate "," depends else ""
+    cabalFile = CabalFileText $ cabalFilePrefix <> cabalFileSuffix
   in
   PkgInfo
   (PackageIdentifier name version)
