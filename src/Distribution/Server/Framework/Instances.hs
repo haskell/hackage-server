@@ -137,6 +137,7 @@ instance SafeCopy OS where
     putCopy Hurd        = contain $ putWord8 15
     putCopy Android     = contain $ putWord8 16
     putCopy Wasi        = contain $ putWord8 17
+    putCopy Haiku       = contain $ putWord8 18
 
     getCopy = contain $ do
       tag <- getWord8
@@ -159,6 +160,7 @@ instance SafeCopy OS where
         15 -> return Hurd
         16 -> return Android
         17 -> return Wasi
+        18 -> return Haiku
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
