@@ -494,7 +494,14 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
           (userId, Just NotifyPref{..}) <- zip ids mPrefs
           guard $ not notifyOptOut
           guard notifyDependencyForMaintained
-          Just depList <- [mDepList]
+
+          Just depListWithCollisions <- [mDepList]
+          -- Remove collisions on the same PackageName, amassed e.g. across
+          -- multiple conditional branches. The branches could be from either
+          -- side of an 'if' block conditioned on a flag. If either of them
+          -- permits the newly released version, avoid sending the notification.
+          let depList = unionSamePackageName depListWithCollisions
+
           case notifyDependencyTriggerBounds of
             NewIncompatibility -> do
               let allNewUploadPkgInfos = PackageIndex.lookupPackageName index (pkgName pkgId)
@@ -531,6 +538,23 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
           | depVersion `withinRange` depRange = False
           | otherwise = True
         newestVersion = pkgVersion pkgId
+
+-- | Boolean OR on ranges across dependencies on the same PackageName
+unionSamePackageName :: [Dependency] -> [Dependency]
+unionSamePackageName collisions =
+  let
+    maps = [Map.singleton depName dep | dep@(Dependency depName _ _) <- collisions]
+    disjunct :: Dependency -> Dependency -> Dependency
+    disjunct
+      (Dependency fName fRange fLibraries)
+      (Dependency _     gRange gLibraries) =
+        mkDependency
+          fName
+          (unionVersionRanges fRange gRange)
+          (fLibraries <> gLibraries)
+    disjunctions = Map.unionsWith disjunct maps
+  in
+    Map.elems disjunctions
 
 pkgInfoToPkgId :: PkgInfo -> PackageIdentifier
 pkgInfoToPkgId pkgInfo =

@@ -31,7 +31,7 @@ import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog ((===), Group(Group), MonadGen, Property, PropertyT, checkSequential, forAll, property)
 
-import RevDepCommon (Package(..), TestPackage(..), mkPackage, packToPkgInfo)
+import RevDepCommon (Package(..), TestPackage(..), mkPackage, mkPackageWithCabalFileSuffix, packToPkgInfo)
 
 mtlBeelineLens :: [PkgInfo]
 mtlBeelineLens =
@@ -214,6 +214,22 @@ allTests = testGroup "ReverseDependenciesTest"
         "dependencyReleaseEmails(trigger=BoundsOutOfRange) shouldn't generate a notification when the new package is for an old release series"
         mempty
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newVersionOfOldBase) base4_14_1)
+      assertEqual
+        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should only generate a notification when the new version is forbidden across all branches"
+        mempty -- The two branches below should get OR'd and therefore the dependency is not out of bounds
+        (runWithPref
+          (pref BoundsOutOfRange)
+          (PackageIndex.fromList
+            [ mkPackage "base" [4,14] []
+            , mkPackage "base" [4,15] []
+            , mkPackageWithCabalFileSuffix "mtl" [2,3]
+                "library\n\
+                \  if arch(arm)\n\
+                \    build-depends: base >= 4.14 && < 4.15\n\
+                \  else\n\
+                \    build-depends: base >= 4.15 && < 4.16"
+            ])
+          base4_15)
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res

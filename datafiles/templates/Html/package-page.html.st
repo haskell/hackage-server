@@ -31,7 +31,7 @@
     <h1><a href="$baseurl$/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
     <div style="font-size: small">
       [ $tags$ ]
-      [ <a href="/package/$package.name$/tags/edit">Propose Tags </a> ]
+      [ <a href="/package/$package.name$/tags/edit">Propose Tags</a> ]
     </div>
 
     $if(isDeprecated)$
@@ -186,9 +186,7 @@
             <tr>
               <th>Home page</th>
               <td class="word-wrap">
-                <a href=$package.optional.homepage$>
-                  $package.optional.homepage$
-                </a>
+                <a href=$package.optional.homepage$>$package.optional.homepage$</a>
               </td>
             </tr>
             $endif$
@@ -197,9 +195,7 @@
             <tr>
               <th>Bug&nbsp;tracker</th>
               <td class="word-wrap">
-                <a href="$package.optional.bugTracker$">
-                  $package.optional.bugTracker$
-                </a>
+                <a href="$package.optional.bugTracker$">$package.optional.bugTracker$</a>
               </td>
             </tr>
             $endif$
