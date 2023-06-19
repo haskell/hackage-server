@@ -13,7 +13,7 @@ jobs:
       matrix:
         os:
         - ubuntu-latest
-        # - macos-latest
+        - macos-latest
     name: Nix on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -29,4 +29,4 @@ jobs:
         name: hackage-server
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: nix build
-    # - run: nix flake check
+    - run: nix flake check
