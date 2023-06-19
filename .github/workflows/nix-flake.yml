@@ -17,8 +17,8 @@ jobs:
     name: Nix on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v3.1.0
-    - uses: cachix/install-nix-action@v21
+    - uses: actions/checkout@v3.5.3
+    - uses: cachix/install-nix-action@v22
       with:
         extra_nix_config: |
           trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hackage-server.cachix.org-1:iw0iRh6+gsFIrxROFaAt5gKNgIHejKjIfyRdbpPYevY=
