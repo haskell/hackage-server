@@ -119,6 +119,8 @@ instance SafeCopy VersionRange where
 instance SafeCopy OS where
     errorTypeName _ = "OS"
 
+    putCopy (OtherOS "haiku") = contain $ putWord8 18
+    -- replace with OSHaiku when cabal can be updated to 3.12
     putCopy (OtherOS s) = contain $ putWord8 0 >> safePut s
     putCopy Linux       = contain $ putWord8 1
     putCopy Windows     = contain $ putWord8 2
@@ -159,6 +161,7 @@ instance SafeCopy OS where
         15 -> return Hurd
         16 -> return Android
         17 -> return Wasi
+        18 -> return (OtherOS "haiku")
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
@@ -382,7 +385,8 @@ instance Arbitrary OS where
   arbitrary = oneof [ pure OtherOS <*> vectorOf 3 (choose ('A', 'Z'))
                     , pure Linux, pure Windows, pure OSX, pure FreeBSD
                     , pure OpenBSD, pure NetBSD, pure Solaris, pure AIX
-                    , pure HPUX, pure IRIX, pure HaLVM, pure IOS ]
+                    , pure HPUX, pure IRIX, pure HaLVM, pure IOS
+                    , pure (OtherOS "haiku") ]
 
 instance Arbitrary FlagName where
   arbitrary = mkFlagName <$> vectorOf 4 (choose ('a', 'z'))
