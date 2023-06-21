@@ -93,6 +93,22 @@ service.</p>
 material that you upload. For example, check that your tarball includes the
 license files of any 3rd party code that you include.</p>
 
+<h3>Public repositories</h3>
+
+It is preferable if any web pages linked from the following fields are publicly accessible:
+<ul>
+<li>Bug report URL</li>
+<li>Homepage URL</li>
+<li>Source repositories</li>
+</ul>
+
+In particular, where these fields refer to a repository, a public repository is preferable.
+This gives users access to existing issues (e.g. to check for duplicates before raising a bug)
+and package version history. It also enables users to gauge whether packages are being
+actively maintained or developed.
+
+That said, links to private repositories are acceptable, just not as useful.
+
 <h3>Privileges</h3>
 
 <p>To upload a package, you'll need a Hackage <a href="/accounts">username</a>
