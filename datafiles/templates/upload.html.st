@@ -97,9 +97,9 @@ license files of any 3rd party code that you include.</p>
 
 It is preferable if any web pages linked from the following fields are publicly accessible:
 <ul>
-<li> Bug report URL
-<li> Homepage URL
-<li> Source repositories
+<li>Bug report URL</li>
+<li>Homepage URL</li>
+<li>Source repositories</li>
 </ul>
 
 In particular, where these fields refer to a repository, a public repository is preferable.
