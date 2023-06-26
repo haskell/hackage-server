@@ -216,9 +216,9 @@ specVersionChecks specVerOk specVer = do
   when (specVer < CabalSpecV1_2) $
     throwError "'cabal-version' must be at least 1.2"
 
-  -- Safeguard; should already be caught by parser
-  unless (specVer <= CabalSpecV3_0) $
-    throwError "'cabal-version' must be at most 3.0"
+  -- To keep people from uploading packages most users cannot use.
+  unless (specVer <= CabalSpecV3_6) $
+    throwError "'cabal-version' must be at most 3.6"
 
 -- | The issue is that browsers can upload the file name using either unix
 -- or windows convention, so we need to take the basename using either
