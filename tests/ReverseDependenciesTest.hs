@@ -56,6 +56,14 @@ newBaseReleased =
   , mkPackage "mtl" [2,3] ["base < 4.15"]
   ]
 
+newBaseReleasedMultiple :: [PkgInfo]
+newBaseReleasedMultiple =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "base" [4,15] []
+  , mkPackage "mtl" [2,3] ["base < 4.15"]
+  , mkPackage "mtl2" [2,3] ["base < 4.15"]
+  ]
+
 newVersionOfOldBase :: [PkgInfo]
 newVersionOfOldBase =
   [ mkPackage "base" [4,14] []
@@ -104,6 +112,17 @@ allTests = testGroup "ReverseDependenciesTest"
       res <- revPackageName "mtl"
       let ref = Map.fromList [("beeline", (version0, Just NormalVersion))]
       assertEqual "reverse dependencies must be [beeline]" ref res
+  , testCase "with set [beeline->mtl, beeline2->mtl] and querying for mtl, we get [beeline, beeline2]" $ do
+      let pkgs =
+            [ mkPackage "base" [4,15] []
+            , mkPackage "mtl" [2,3] ["base"]
+            , mkPackage "beeline" [0] ["mtl"]
+            , mkPackage "beeline2" [0] ["mtl"]
+            ]
+      ReverseFeature{revPackageName} <- mkRevFeat pkgs
+      res <- revPackageName "mtl"
+      let ref = Map.fromList [("beeline", (version0, Just NormalVersion)), ("beeline2", (version0, Just NormalVersion))]
+      assertEqual "reverse dependencies must be [beeline, beeline2]" ref res
   , testCase "revPackageName selects only the version with an actual dependency, even if it is not the newest" $ do
       let pkgs =
             [ mkPackage "base" [4,15] []
@@ -190,6 +209,12 @@ allTests = testGroup "ReverseDependenciesTest"
           base4_16 = PackageIdentifier "base" (mkVersion [4,16])
           runWithPref preferences index pkg = runIdentity $
             dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences pkg
+          runWithPrefAlsoMtl2 preferences index pkg = runIdentity $
+            dependencyReleaseEmails userSet index (constructReverseIndex index) preferences pkg
+              where
+              userSet arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
+                          | arg == mkPackageName "mtl2" = Identity (UserIdSet.fromList [UserId 0])
+                          | otherwise = error "should only get user ids for mtl and mtl2"
       assertEqual
         "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when there are packages, but none are behind"
         mempty
@@ -198,6 +223,18 @@ allTests = testGroup "ReverseDependenciesTest"
         "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
         (refNotification base4_15)
         (runWithPref (pref NewIncompatibility) (PackageIndex.fromList newBaseReleased) base4_15)
+      assertEqual
+        "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification for two packages that are a single base version behind"
+        (Just $
+           Set.fromList
+             [ PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])
+             , PackageIdentifier (mkPackageName "mtl2") (mkVersion [2,3])
+             ]
+        )
+        ( fmap Set.fromList
+          . Map.lookup (UserId 0, base4_15)
+          $ runWithPrefAlsoMtl2 (pref NewIncompatibility) (PackageIndex.fromList newBaseReleasedMultiple) base4_15
+        )
       assertEqual
         "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is a single base version behind"
         (refNotification base4_15)
