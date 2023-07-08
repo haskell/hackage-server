@@ -473,7 +473,7 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
         revDepNames = mapMaybe (`lookupR` nodemap) (Set.toList vertices)
       toNotify <- traverse maintainersToNotify revDepNames
       pure $
-        Map.fromList
+        Map.fromListWith (++)
           [ ( (maintainerId, pkgId), [ packageId latestRevDep ] )
           | (ids, latestRevDep) <- toNotify
           , maintainerId <- ids
