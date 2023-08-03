@@ -129,7 +129,7 @@ common defaults
     , scientific
   -- other dependencies shared by most components
   build-depends:
-    , aeson                 ^>= 2.0.3.0 || ^>= 2.1.0.0
+    , aeson                 ^>= 2.2.0.0
     , Cabal                  >= 3.10.1.0 && < 3.12
     , Cabal-syntax           >= 3.10.1.0 && < 3.12
         -- Cabal-syntax needs to be bound to constrain hackage-security
@@ -547,6 +547,7 @@ test-suite HighLevelTest
   build-depends:
     -- version constraints inherited from lib-server
     , HTTP
+    , attoparsec-aeson ^>= 2.2.0.0
     , base64-bytestring
     , random
       -- component-specific dependencies
