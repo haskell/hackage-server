@@ -111,11 +111,11 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.13  && < 4.19
+    , base                   >= 4.13  && < 4.20
     , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.10  && < 0.12
     , containers            ^>= 0.6.0
-    , deepseq                >= 1.4   && < 1.5
+    , deepseq                >= 1.4   && < 1.6
     , directory              >= 1.3   && < 1.4
     , filepath               >= 1.4   && < 1.5
     , mtl                    >= 2.2.1 && < 2.4
@@ -564,7 +564,7 @@ test-suite ReverseDependenciesTest
     , tasty        ^>= 1.4
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
-    , hedgehog     ^>= 1.2
+    , hedgehog     ^>= 1.3
     , exceptions
     , bimap
   other-modules: RevDepCommon
