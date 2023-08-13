@@ -34,6 +34,9 @@
             Cabal-syntax = super.Cabal-syntax_3_10_1_0;
 
             ghcide = pkgs.haskell.lib.dontCheck (self.callHackage "ghcide" "1.9.0.0" {});
+
+            streamly = self.callHackage "streamly" "0.9.0" {};
+            streamly_0_9_0 = self.callHackage "streamly" "0.9.0" {};
           };
           devShell = {
             hlsCheck.enable = false;
