@@ -702,10 +702,8 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
           genEmails :: PackageIdentifier -> IO (Map.Map (UserId, PackageId) [PackageId])
           genEmails =
             dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
-        dependencyEmailMaps <- traverse (genEmails . pkgInfoToPkgId) revisionsAndUploads
+        dependencyEmailMap <- Map.unionsWith (++) <$> traverse (genEmails . pkgInfoToPkgId) revisionsAndUploads
         let
-          dependencyEmailMap :: Map.Map (UserId, PackageId) [PackageId]
-          dependencyEmailMap = Map.unionsWith (++) dependencyEmailMaps
           emailText :: MonadIO m => (UserId, PackageId) -> [PackageId] -> m [String]
           emailText (uId, dep) revDeps = do
             mPrefs <- queryGetUserNotifyPref uId
