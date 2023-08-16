@@ -89,6 +89,33 @@ You'll need to do the following to get `hackage-server`'s dependency `hs-captcha
 
         nix-shell --packages zlib
 
+#### Mac OS X
+
+In addition to the above commands, you'll need to run
+
+```bash
+brew install pkg-config
+```
+
+After running the above `brew install` commands, you also need to update `cabal.project.local` with the following:
+
+```bash
+cat >> cabal.project.local <<EOF
+package gd
+  extra-include-dirs:
+    $(echo $(brew --prefix)/Cellar/gd/*/include)
+  extra-lib-dirs:
+    $(echo $(brew --prefix)/Cellar/gd/*/lib)
+    $(echo $(brew --prefix)/Cellar/libpng/*/lib)
+    $(echo $(brew --prefix)/Cellar/jpeg-turbo/*/lib)
+    $(echo $(brew --prefix)/Cellar/fontconfig/*/lib)
+    $(echo $(brew --prefix)/Cellar/freetype/*/lib)
+
+constraints:
+  , HsOpenSSL +use-pkg-config
+EOF
+```
+
 
 ## Setting up security infrastructure
 
