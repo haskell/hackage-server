@@ -699,14 +699,22 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
         dependencyUpdateNotifications <- Map.unionsWith (++) <$> traverse (genDependencyUpdateList idx revIdx . pkgInfoToPkgId) revisionsAndUploads
-        dependencyEmails <- Map.mapKeys fst <$> Map.traverseWithKey describeDependencyUpdate dependencyUpdateNotifications
+        dependencyEmails <- Map.traverseWithKey describeDependencyUpdate dependencyUpdateNotifications
 
         -- Concat the constituent email parts such that only one email is sent per user
-        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails]
+        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $
+          fmap ("Maintainer Notifications",) . foldr1 (Map.unionWith (++)) $
+            [ revisionUploadEmails
+            , groupActionEmails
+            , docReportEmails
+            , tagProposalEmails
+            ]
 
         -- Dependency email notifications consist of multiple paragraphs, so it would be confusing if concatenated.
         -- So they're sent independently.
-        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ dependencyEmails
+        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $
+          Map.mapKeys fst . Map.mapWithKey (\(_, dep) ebody -> ("Dependency Update: " <> T.pack (display dep), ebody)) $
+            dependencyEmails
 
         updateState notifyState (SetNotifyTime now)
 
@@ -862,8 +870,8 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                   ]
               ++ map display revDeps
 
-    sendNotifyEmailAndDelay :: Users.Users -> (UserId, [String]) -> IO ()
-    sendNotifyEmailAndDelay users (uid, ebody) = do
+    sendNotifyEmailAndDelay :: Users.Users -> (UserId, (T.Text, [String])) -> IO ()
+    sendNotifyEmailAndDelay users (uid, (subject, ebody)) = do
         mudetails <- queryUserDetails uid
         case mudetails of
              Nothing -> return ()
@@ -872,8 +880,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                                     (T.pack ("noreply@" ++ uriRegName ourHost))
                      mail     = (emptyMail mailFrom) {
                        mailTo      = [Address (Just aname) eml],
-                       mailHeaders = [(BSS.pack "Subject",
-                                       T.pack "[Hackage] Maintainer Notifications")],
+                       mailHeaders = [(BSS.pack "Subject", "[Hackage] " <> subject)],
                        mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
                                              None DefaultDisposition []
                                              (PartContent $ BS.pack $
