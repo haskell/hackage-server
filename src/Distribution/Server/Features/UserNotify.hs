@@ -703,44 +703,14 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
           genEmails =
             dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
         dependencyEmailMap <- Map.unionsWith (++) <$> traverse (genEmails . pkgInfoToPkgId) revisionsAndUploads
-        let
-          emailText :: MonadIO m => (UserId, PackageId) -> [PackageId] -> m [String]
-          emailText (uId, dep) revDeps = do
-            mPrefs <- queryGetUserNotifyPref uId
-            pure $
-              case mPrefs of
-              Nothing -> []
-              Just NotifyPref{notifyDependencyTriggerBounds} ->
-                [ "The dependency " <> display dep <> " has been updated."
-                ] ++
-                  case notifyDependencyTriggerBounds of
-                    Always ->
-                      [ "You have requested to be notified for each upload/revision of a dependency. \
-                        \These are your packages that depend on " <> display dep <> ":"
-                      ]
-                    outOfRangeOption ->
-                      [ "You have requested to be notified when a dependency isn't accepted by any of \
-                        \your maintained packages."
-                      ] ++
-                        case outOfRangeOption of
-                          NewIncompatibility ->
-                            [ "The following packages did accept the second highest version of "
-                              <> display (packageName dep) <> "."
-                            ]
-                          _ ->
-                            []
-                        ++
-                      [ "These are your packages that require " <> display (packageName dep) <> " but don't accept " <> display (packageVersion dep) <> ":"
-                      ]
-                  ++ map display revDeps
-        dependencyEmailTextMaps <- Map.mapKeys fst <$> Map.traverseWithKey emailText dependencyEmailMap
+        dependencyEmails <- Map.mapKeys fst <$> Map.traverseWithKey describeDependencyUpdate dependencyEmailMap
 
         -- Concat the constituent email parts such that only one email is sent per user
         mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails]
 
         -- Dependency email notifications consist of multiple paragraphs, so it would be confusing if concatenated.
         -- So they're sent independently.
-        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ dependencyEmailTextMaps
+        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ dependencyEmails
 
         updateState notifyState (SetNotifyTime now)
 
@@ -863,6 +833,35 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         "Deletions: " ++ showTags delTags
       where
         showTags = intercalate ", " . map display . Set.toList
+
+    describeDependencyUpdate (uId, dep) revDeps = do
+      mPrefs <- queryGetUserNotifyPref uId
+      pure $
+        case mPrefs of
+          Nothing -> []
+          Just NotifyPref{notifyDependencyTriggerBounds} ->
+            [ "The dependency " <> display dep <> " has been updated."
+            ] ++
+              case notifyDependencyTriggerBounds of
+                Always ->
+                  [ "You have requested to be notified for each upload/revision of a dependency. \
+                    \These are your packages that depend on " <> display dep <> ":"
+                  ]
+                outOfRangeOption ->
+                  [ "You have requested to be notified when a dependency isn't accepted by any of \
+                    \your maintained packages."
+                  ] ++
+                    case outOfRangeOption of
+                      NewIncompatibility ->
+                        [ "The following packages did accept the second highest version of "
+                          <> display (packageName dep) <> "."
+                        ]
+                      _ ->
+                        []
+                    ++
+                  [ "These are your packages that require " <> display (packageName dep) <> " but don't accept " <> display (packageVersion dep) <> ":"
+                  ]
+              ++ map display revDeps
 
     sendNotifyEmailAndDelay :: Users.Users -> (UserId, [String]) -> IO ()
     sendNotifyEmailAndDelay users (uid, ebody) = do
