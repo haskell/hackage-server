@@ -846,11 +846,11 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
             (Admin_GroupAddUser tn (MaintainerGroup pkg)) -> Just $
                     "Group modified by " ++ formatTimeUser users time uid ++ ":\n" ++
                     display (Users.userIdToName users tn) ++ " added to maintainers for " ++ BS.unpack pkg ++
-                    "\n" ++ "reason: " ++ BS.unpack descr
+                    "\n" ++ "Reason: " ++ BS.unpack descr
             (Admin_GroupDelUser tn (MaintainerGroup pkg)) -> Just $
                     "Group modified by " ++ formatTimeUser users time uid ++ ":\n" ++
                     display (Users.userIdToName users tn) ++ " removed from maintainers for " ++ BS.unpack pkg ++
-                    "\n" ++ "reason: " ++ BS.unpack descr
+                    "\n" ++ "Reason: " ++ BS.unpack descr
             _ -> Nothing
 
     describeDocReport (pkg, doc) =
@@ -860,9 +860,9 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
           else "Build failed."
 
     describeTagProposal (pkgName, (addTags, delTags)) =
-      "Pending tag propasal for " ++ display pkgName ++ ":\n" ++
-        "Addition: " ++ showTags addTags ++ "\n" ++
-        "Deletion: " ++ showTags delTags
+      "Pending tag proposal for " ++ display pkgName ++ ":\n" ++
+        "Additions: " ++ showTags addTags ++ "\n" ++
+        "Deletions: " ++ showTags delTags
       where
         showTags = intercalate ", " . map display . Set.toList
 
