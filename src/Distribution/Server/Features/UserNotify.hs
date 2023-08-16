@@ -12,7 +12,7 @@ module Distribution.Server.Features.UserNotify (
     NotifyTriggerBounds(..),
     UserNotifyFeature(..),
     defaultNotifyPrefs,
-    dependencyReleaseEmails,
+    getUserNotificationsOnRelease,
     importNotifyPref,
     initUserNotifyFeature,
     notifyDataToCSV,
@@ -446,24 +446,26 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
 
 data InRange = InRange | OutOfRange
 
--- | Get the release notification emails when a new package has been released.
---   The new package (PackageIdentifier) must already be in the indexes.
---   The keys in the returned map are the new packages. The values are the revDeps.
-dependencyReleaseEmails
+-- | Get the users to notify when a new package has been released.
+--   The new package (PackageId) must already be in the indexes.
+--   The keys in the returned map are the user to notify, and the values are
+--   the packages the user maintains that depend on the new package (i.e. the
+--   reverse dependencies of the new package).
+getUserNotificationsOnRelease
   :: forall m. Monad m
   => (PackageName -> m UserIdSet)
   -> PackageIndex.PackageIndex PkgInfo
   -> ReverseIndex
   -> (UserId -> m (Maybe NotifyPref))
-  -> PackageIdentifier
-  -> m (Map.Map (UserId, PackageId) [PackageId])
-dependencyReleaseEmails _ index _ _ pkgId
+  -> PackageId
+  -> m (Map.Map UserId [PackageId])
+getUserNotificationsOnRelease _ index _ _ pkgId
   | let versionsForNewRelease = packageVersion <$> PackageIndex.lookupPackageName index (pkgName pkgId)
   , pkgVersion pkgId /= maximum versionsForNewRelease
   -- If e.g. a minor bugfix release is made for an old release series, never notify maintainers.
   -- Only start checking if the new version is the highest.
   = pure mempty
-dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref pkgId =
+getUserNotificationsOnRelease userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref pkgId =
   case lookup (pkgName pkgId) nodemap :: Maybe NodeId of
     Nothing -> pure mempty
     Just foundPackage -> do
@@ -475,7 +477,7 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
       toNotify <- traverse maintainersToNotify revDepNames
       pure $
         Map.fromListWith (++)
-          [ ( (maintainerId, pkgId), [ packageId latestRevDep ] )
+          [ (maintainerId, [packageId latestRevDep])
           | (ids, latestRevDep) <- toNotify
           , maintainerId <- ids
           ]
@@ -812,8 +814,9 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         maintainers <- queryUserGroup $ maintainersGroup (fst pkgTags)
         return $ foldr addNotification mp (toList maintainers)
 
-    genDependencyUpdateList idx revIdx =
-      dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
+    genDependencyUpdateList idx revIdx pid =
+      Map.mapKeys (, pid) <$>
+        getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pid
 
     describeRevision users earlier now pkg
       | pkgNumRevisions pkg <= 1 =

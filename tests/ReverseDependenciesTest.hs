@@ -14,7 +14,16 @@ import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, pa
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), VersionStatus(NormalVersion), PreferredInfo(..))
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
-import Distribution.Server.Features.UserNotify (NotifyData(..), NotifyPref(..), NotifyRevisionRange, NotifyTriggerBounds(..), defaultNotifyPrefs, dependencyReleaseEmails, importNotifyPref, notifyDataToCSV)
+import Distribution.Server.Features.UserNotify
+  ( NotifyData(..)
+  , NotifyPref(..)
+  , NotifyRevisionRange
+  , NotifyTriggerBounds(..)
+  , defaultNotifyPrefs
+  , getUserNotificationsOnRelease
+  , importNotifyPref
+  , notifyDataToCSV
+  )
 import Distribution.Server.Framework.BackupRestore (runRestore)
 import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
@@ -186,7 +195,7 @@ allTests = testGroup "ReverseDependenciesTest"
       ReverseFeature{revDisplayInfo} <- mkRevFeat mtlBeelineLens
       res <- revDisplayInfo
       assertEqual "beeline preferred is old" (PreferredInfo [] [] Nothing, [mkVersion [0]]) (res "beeline")
-  , testCase "dependencyReleaseEmails sends notification" $ do
+  , testCase "getUserNotificationsOnRelease sends notification" $ do
       let userSetIdForPackage arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
                                   | otherwise = error "should only get user ids for mtl"
           notifyPref triggerBounds =
@@ -197,9 +206,9 @@ allTests = testGroup "ReverseDependenciesTest"
               }
           pref triggerBounds (UserId 0) = Identity (Just $ notifyPref triggerBounds)
           pref _ _ = error "should only get preferences for UserId 0"
-          refNotification base = Map.fromList
+          userNotification = Map.fromList
             [
-              ( (UserId 0, base)
+              ( UserId 0
               , [PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])]
               )
             ]
@@ -208,23 +217,23 @@ allTests = testGroup "ReverseDependenciesTest"
           base4_15 = PackageIdentifier "base" (mkVersion [4,15])
           base4_16 = PackageIdentifier "base" (mkVersion [4,16])
           runWithPref preferences index pkg = runIdentity $
-            dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences pkg
+            getUserNotificationsOnRelease userSetIdForPackage index (constructReverseIndex index) preferences pkg
           runWithPrefAlsoMtl2 preferences index pkg = runIdentity $
-            dependencyReleaseEmails userSet index (constructReverseIndex index) preferences pkg
+            getUserNotificationsOnRelease userSet index (constructReverseIndex index) preferences pkg
               where
               userSet arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
                           | arg == mkPackageName "mtl2" = Identity (UserIdSet.fromList [UserId 0])
                           | otherwise = error "should only get user ids for mtl and mtl2"
       assertEqual
-        "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when there are packages, but none are behind"
+        "getUserNotificationsOnRelease(trigger=NewIncompatibility) shouldn't generate a notification when there are packages, but none are behind"
         mempty
         (runWithPref (pref NewIncompatibility) (PackageIndex.fromList twoPackagesWithNoDepsOutOfRange) base4_14)
       assertEqual
-        "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
-        (refNotification base4_15)
+        "getUserNotificationsOnRelease(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
+        userNotification
         (runWithPref (pref NewIncompatibility) (PackageIndex.fromList newBaseReleased) base4_15)
       assertEqual
-        "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification for two packages that are a single base version behind"
+        "getUserNotificationsOnRelease(trigger=NewIncompatibility) should generate a notification for two packages that are a single base version behind"
         (Just $
            Set.fromList
              [ PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])
@@ -232,27 +241,27 @@ allTests = testGroup "ReverseDependenciesTest"
              ]
         )
         ( fmap Set.fromList
-          . Map.lookup (UserId 0, base4_15)
+          . Map.lookup (UserId 0)
           $ runWithPrefAlsoMtl2 (pref NewIncompatibility) (PackageIndex.fromList newBaseReleasedMultiple) base4_15
         )
       assertEqual
-        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is a single base version behind"
-        (refNotification base4_15)
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) should generate a notification when package is a single base version behind"
+        userNotification
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newBaseReleased) base4_15)
       assertEqual
-        "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when package is two base versions behind"
+        "getUserNotificationsOnRelease(trigger=NewIncompatibility) shouldn't generate a notification when package is two base versions behind"
         mempty
         (runWithPref (pref NewIncompatibility) (PackageIndex.fromList twoNewBasesReleased) base4_16)
       assertEqual
-        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
-        (refNotification base4_16)
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
+        userNotification
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList twoNewBasesReleased) base4_16)
       assertEqual
-        "dependencyReleaseEmails(trigger=BoundsOutOfRange) shouldn't generate a notification when the new package is for an old release series"
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) shouldn't generate a notification when the new package is for an old release series"
         mempty
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newVersionOfOldBase) base4_14_1)
       assertEqual
-        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should only generate a notification when the new version is forbidden across all branches"
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) should only generate a notification when the new version is forbidden across all branches"
         mempty -- The two branches below should get OR'd and therefore the dependency is not out of bounds
         (runWithPref
           (pref BoundsOutOfRange)
