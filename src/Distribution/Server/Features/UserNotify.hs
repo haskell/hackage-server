@@ -818,8 +818,8 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
     describeRevision users earlier now pkg
       | pkgNumRevisions pkg <= 1 =
           EmailContentParagraph $
-          "Package upload, " <> renderPkgLink (pkgInfoId pkg) <> ", by " <>
-          formatTimeUser users (pkgLatestUploadTime pkg) (pkgLatestUploadUser pkg)
+            "Package upload, " <> renderPkgLink (pkgInfoId pkg) <> ", by " <>
+            formatTimeUser users (pkgLatestUploadTime pkg) (pkgLatestUploadUser pkg)
       | otherwise =
           EmailContentParagraph ("Package metadata revision(s), " <> renderPkgLink (pkgInfoId pkg) <> ":")
           <> EmailContentList (map (uncurry (formatTimeUser users) . snd) recentRevs)
@@ -875,25 +875,25 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                 depVersion = emailContentDisplay (packageVersion dep)
             in
               foldMap EmailContentParagraph
-              [ "The dependency " <> renderPkgLink dep <> " has been uploaded or revised."
-              , case notifyDependencyTriggerBounds of
-                  Always ->
-                    "You have requested to be notified for each upload or revision \
-                    \of a dependency."
-                  _ ->
-                    "You have requested to be notified when a dependency isn't \
-                    \accepted by any of your maintained packages."
-              , case notifyDependencyTriggerBounds of
-                  Always ->
-                    "These are your packages that depend on " <> depName <> ":"
-                  BoundsOutOfRange ->
-                    "These are your packages that require " <> depName
-                    <> " but don't accept " <> depVersion <> ":"
-                  NewIncompatibility ->
-                    "The following packages require " <> depName
-                    <> " but don't accept " <> depVersion
-                    <> " (they do accept the second-highest version):"
-              ]
+                [ "The dependency " <> renderPkgLink dep <> " has been uploaded or revised."
+                , case notifyDependencyTriggerBounds of
+                    Always ->
+                      "You have requested to be notified for each upload or revision \
+                      \of a dependency."
+                    _ ->
+                      "You have requested to be notified when a dependency isn't \
+                      \accepted by any of your maintained packages."
+                , case notifyDependencyTriggerBounds of
+                    Always ->
+                      "These are your packages that depend on " <> depName <> ":"
+                    BoundsOutOfRange ->
+                      "These are your packages that require " <> depName
+                      <> " but don't accept " <> depVersion <> ":"
+                    NewIncompatibility ->
+                      "The following packages require " <> depName
+                      <> " but don't accept " <> depVersion
+                      <> " (they do accept the second-highest version):"
+                ]
               <> EmailContentList (map renderPkgLink revDeps)
 
     sendNotifyEmailAndDelay :: Users.Users -> (UserId, (T.Text, EmailContent)) -> IO ()
@@ -919,13 +919,13 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
       where
         updatePreferencesText =
           EmailContentParagraph $
-          "You can adjust your notification preferences at" <> EmailContentSoftBreak
-          <> emailContentUrl
-              serverBaseURI
-                { uriPath =
-                    concatMap ("/" <>)
-                      [ "user"
-                      , display $ Users.userIdToName users uid
-                      , "notify"
-                      ]
-                }
+            "You can adjust your notification preferences at" <> EmailContentSoftBreak
+            <> emailContentUrl
+                serverBaseURI
+                  { uriPath =
+                      concatMap ("/" <>)
+                        [ "user"
+                        , display $ Users.userIdToName users uid
+                        , "notify"
+                        ]
+                  }
