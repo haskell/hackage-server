@@ -806,31 +806,40 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
     genDependencyUpdateList idx revIdx =
       dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
 
-    describeRevision users earlier now pkg =
-          if pkgNumRevisions pkg <= 1
-            then "Package upload, " ++ display (packageName pkg) ++ ", by " ++
-                 formatTimeUser users  (pkgLatestUploadTime pkg) (pkgLatestUploadUser pkg)
-            else "Package metadata revision(s), " ++ display (packageName pkg) ++ ":\n" ++
-                  unlines (map (uncurry (formatTimeUser users) . snd) recentRevs)
+    describeRevision users earlier now pkg
+      | pkgNumRevisions pkg <= 1 =
+          "Package upload, " ++ display (packageName pkg) ++ ", by " ++
+          formatTimeUser users  (pkgLatestUploadTime pkg) (pkgLatestUploadUser pkg)
+      | otherwise =
+          "Package metadata revision(s), " ++ display (packageName pkg) ++ ":\n" ++
+          unlines (map (uncurry (formatTimeUser users) . snd) recentRevs)
         where
            revs = reverse $ Vec.toList (pkgMetadataRevisions pkg)
            recentRevs = filter ((\x -> x > earlier && x <= now) . fst . snd) revs
 
-    describeGroupAction users (time, uid, act, descr) =
-       case act of
-            (Admin_GroupAddUser tn (MaintainerGroup pkg)) -> Just $
-                    "Group modified by " ++ formatTimeUser users time uid ++ ":\n" ++
-                    display (Users.userIdToName users tn) ++ " added to maintainers for " ++ BS.unpack pkg ++
-                    "\n" ++ "Reason: " ++ BS.unpack descr
-            (Admin_GroupDelUser tn (MaintainerGroup pkg)) -> Just $
-                    "Group modified by " ++ formatTimeUser users time uid ++ ":\n" ++
-                    display (Users.userIdToName users tn) ++ " removed from maintainers for " ++ BS.unpack pkg ++
-                    "\n" ++ "Reason: " ++ BS.unpack descr
+    describeGroupAction users (time, uid, act, reason) =
+      fmap
+        ( \message ->
+            "Group modified by " ++ formatTimeUser users time uid ++ ":\n"
+            ++ message ++ "\n"
+            ++ "Reason: " ++ BS.unpack reason
+        )
+        $ case act of
+            (Admin_GroupAddUser tn (MaintainerGroup pkg)) ->
+              Just $
+                display (Users.userIdToName users tn)
+                  <> " added to maintainers for "
+                  <> BS.unpack pkg
+            (Admin_GroupDelUser tn (MaintainerGroup pkg)) ->
+              Just $
+                display (Users.userIdToName users tn)
+                  <> " removed from maintainers for "
+                  <> BS.unpack pkg
             _ -> Nothing
 
-    describeDocReport (pkg, doc) =
+    describeDocReport (pkg, success) =
       "Package doc build for " ++ display (packageName pkg) ++ ":\n" ++
-        if doc
+        if success
           then "Build successful."
           else "Build failed."
 
@@ -885,9 +894,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                        mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
                                              None DefaultDisposition []
                                              (PartContent $ BS.pack $
-                                                   intercalate "\n\n" ebody
-                                                <> "\n\n"
-                                                <> adjustmentLinkParagraph
+                                                   intercalate "\n\n" (ebody <> [adjustmentLinkParagraph])
                                              )
                                      ]]
                      }
