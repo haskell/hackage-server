@@ -847,27 +847,28 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         case mPrefs of
           Nothing -> []
           Just NotifyPref{notifyDependencyTriggerBounds} ->
-            [ "The dependency " <> display dep <> " has been updated."
-            ] ++
-              case notifyDependencyTriggerBounds of
-                Always ->
-                  [ "You have requested to be notified for each upload/revision of a dependency. \
-                    \These are your packages that depend on " <> display dep <> ":"
-                  ]
-                outOfRangeOption ->
-                  [ "You have requested to be notified when a dependency isn't accepted by any of \
-                    \your maintained packages."
-                  ] ++
-                    case outOfRangeOption of
-                      NewIncompatibility ->
-                        [ "The following packages did accept the second highest version of "
-                          <> display (packageName dep) <> "."
-                        ]
-                      _ ->
-                        []
-                    ++
-                  [ "These are your packages that require " <> display (packageName dep) <> " but don't accept " <> display (packageVersion dep) <> ":"
-                  ]
+            let depName = display (packageName dep)
+                depVersion = display (packageVersion dep)
+            in
+              [ "The dependency " <> display dep <> " has been uploaded or revised."
+              , case notifyDependencyTriggerBounds of
+                  Always ->
+                    "You have requested to be notified for each upload or revision \
+                    \of a dependency."
+                  _ ->
+                    "You have requested to be notified when a dependency isn't \
+                    \accepted by any of your maintained packages."
+              , case notifyDependencyTriggerBounds of
+                  Always ->
+                    "These are your packages that depend on " <> depName <> ":"
+                  BoundsOutOfRange ->
+                    "These are your packages that require " <> depName
+                    <> " but don't accept " <> depVersion <> ":"
+                  NewIncompatibility ->
+                    "The following packages require " <> depName
+                    <> " but don't accept " <> depVersion
+                    <> " (they do accept the second-highest version):"
+              ]
               ++ map display revDeps
 
     sendNotifyEmailAndDelay :: Users.Users -> (UserId, (T.Text, [String])) -> IO ()
