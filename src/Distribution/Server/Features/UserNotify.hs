@@ -698,12 +698,8 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
 
         idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
-        let
-          genEmails :: PackageIdentifier -> IO (Map.Map (UserId, PackageId) [PackageId])
-          genEmails =
-            dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
-        dependencyEmailMap <- Map.unionsWith (++) <$> traverse (genEmails . pkgInfoToPkgId) revisionsAndUploads
-        dependencyEmails <- Map.mapKeys fst <$> Map.traverseWithKey describeDependencyUpdate dependencyEmailMap
+        dependencyUpdateNotifications <- Map.unionsWith (++) <$> traverse (genDependencyUpdateList idx revIdx . pkgInfoToPkgId) revisionsAndUploads
+        dependencyEmails <- Map.mapKeys fst <$> Map.traverseWithKey describeDependencyUpdate dependencyUpdateNotifications
 
         -- Concat the constituent email parts such that only one email is sent per user
         mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails]
@@ -798,6 +794,9 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                     where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
         maintainers <- queryUserGroup $ maintainersGroup (fst pkgTags)
         return $ foldr addNotification mp (toList maintainers)
+
+    genDependencyUpdateList idx revIdx =
+      dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
 
     describeRevision users earlier now pkg =
           if pkgNumRevisions pkg <= 1
