@@ -69,7 +69,7 @@ import Data.Time.Format.Internal (buildTime)
 import Data.Typeable (Typeable)
 import Distribution.Text (display)
 import Network.Mail.Mime
-import Network.URI(uriAuthority, uriRegName, uriToString)
+import Network.URI (uriAuthority, uriPath, uriRegName)
 import Text.CSV (CSV, Record)
 import Text.PrettyPrint hiding ((<>))
 import Text.XHtml hiding (base, text, (</>))
@@ -683,19 +683,19 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
 
         revisionsAndUploads <- collectRevisionsAndUploads trimLastTime now
         revisionUploadNotifications <- foldM (genRevUploadList notifyPrefs) Map.empty revisionsAndUploads
-        let revisionUploadEmails = map (describeRevision users trimLastTime now) <$> revisionUploadNotifications
+        let revisionUploadEmails = foldMap (describeRevision users trimLastTime now) <$> revisionUploadNotifications
 
         groupActions <- collectAdminActions trimLastTime now
         groupActionNotifications <- foldM (genGroupUploadList notifyPrefs) Map.empty groupActions
-        let groupActionEmails = mapMaybe (describeGroupAction users) <$> groupActionNotifications
+        let groupActionEmails = mconcat . mapMaybe (describeGroupAction users) <$> groupActionNotifications
 
         docReports <- collectDocReport trimLastTime now
         docReportNotifications <- foldM (genDocReportList notifyPrefs) Map.empty docReports
-        let docReportEmails = map describeDocReport <$> docReportNotifications
+        let docReportEmails = foldMap describeDocReport <$> docReportNotifications
 
         tagProposals <- collectTagProposals
         tagProposalNotifications <- foldM (genTagProposalList notifyPrefs) Map.empty tagProposals
-        let tagProposalEmails = map describeTagProposal <$> tagProposalNotifications
+        let tagProposalEmails = foldMap describeTagProposal <$> tagProposalNotifications
 
         idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
@@ -704,7 +704,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
 
         -- Concat the constituent email parts such that only one email is sent per user
         mapM_ (sendNotifyEmailAndDelay users) . Map.toList $
-          fmap ("Maintainer Notifications",) . foldr1 (Map.unionWith (++)) $
+          fmap ("Maintainer Notifications",) . foldr1 (Map.unionWith (<>)) $
             [ revisionUploadEmails
             , groupActionEmails
             , docReportEmails
@@ -718,6 +718,13 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
             dependencyEmails
 
         updateState notifyState (SetNotifyTime now)
+
+    renderPkgLink pkg =
+      EmailContentLink
+        (T.pack $ display pkg)
+        serverBaseURI
+          { uriPath = "/package/" <> display (packageName pkg) <> "-" <> display (packageVersion pkg)
+          }
 
     formatTimeUser users t u =
       EmailContentText . T.pack $
@@ -810,11 +817,12 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
 
     describeRevision users earlier now pkg
       | pkgNumRevisions pkg <= 1 =
-          "Package upload, " <> emailContentDisplay (packageName pkg) <> ", by " <>
+          EmailContentParagraph $
+          "Package upload, " <> renderPkgLink (pkgInfoId pkg) <> ", by " <>
           formatTimeUser users (pkgLatestUploadTime pkg) (pkgLatestUploadUser pkg)
       | otherwise =
-          "Package metadata revision(s), " <> emailContentDisplay (packageName pkg) <> ":" <> EmailContentSoftBreak
-          <> foldMap (<> EmailContentSoftBreak) (map (uncurry (formatTimeUser users) . snd) recentRevs)
+          EmailContentParagraph ("Package metadata revision(s), " <> renderPkgLink (pkgInfoId pkg) <> ":")
+          <> EmailContentList (map (uncurry (formatTimeUser users) . snd) recentRevs)
         where
            revs = reverse $ Vec.toList (pkgMetadataRevisions pkg)
            recentRevs = filter ((\x -> x > earlier && x <= now) . fst . snd) revs
@@ -822,9 +830,11 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
     describeGroupAction users (time, uid, act, reason) =
       fmap
         ( \message ->
-            "Group modified by " <> formatTimeUser users time uid <> ":" <> EmailContentSoftBreak
-            <> message <> EmailContentSoftBreak
-            <> "Reason: " <> emailContentLBS reason
+            EmailContentParagraph ("Group modified by " <> formatTimeUser users time uid <> ":")
+            <> EmailContentList
+                [ message
+                , "Reason: " <> emailContentLBS reason
+                ]
         )
         $ case act of
             (Admin_GroupAddUser tn (MaintainerGroup pkg)) ->
@@ -840,15 +850,18 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
             _ -> Nothing
 
     describeDocReport (pkg, success) =
-      "Package doc build for " <> emailContentDisplay (packageName pkg) <> ":" <> EmailContentSoftBreak <>
-        if success
-          then "Build successful."
-          else "Build failed."
+      EmailContentParagraph $
+        "Package doc build for " <> emailContentDisplay (packageName pkg) <> ":" <> EmailContentSoftBreak <>
+          if success
+            then "Build successful."
+            else "Build failed."
 
     describeTagProposal (pkgName, (addTags, delTags)) =
-      "Pending tag proposal for " <> emailContentDisplay pkgName <> ":" <> EmailContentSoftBreak
-        <> "Additions: " <> showTags addTags <> EmailContentSoftBreak
-        <> "Deletions: " <> showTags delTags
+      EmailContentParagraph ("Pending tag proposal for " <> emailContentDisplay pkgName <> ":")
+      <> EmailContentList
+          [ "Additions: " <> showTags addTags
+          , "Deletions: " <> showTags delTags
+          ]
       where
         showTags = emailContentIntercalate ", " . map emailContentDisplay . Set.toList
 
@@ -856,12 +869,13 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
       mPrefs <- queryGetUserNotifyPref uId
       pure $
         case mPrefs of
-          Nothing -> []
+          Nothing -> mempty
           Just NotifyPref{notifyDependencyTriggerBounds} ->
             let depName = emailContentDisplay (packageName dep)
                 depVersion = emailContentDisplay (packageVersion dep)
             in
-              [ "The dependency " <> emailContentDisplay dep <> " has been uploaded or revised."
+              foldMap EmailContentParagraph
+              [ "The dependency " <> renderPkgLink dep <> " has been uploaded or revised."
               , case notifyDependencyTriggerBounds of
                   Always ->
                     "You have requested to be notified for each upload or revision \
@@ -880,9 +894,9 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                     <> " but don't accept " <> depVersion
                     <> " (they do accept the second-highest version):"
               ]
-              ++ map emailContentDisplay revDeps
+              <> EmailContentList (map renderPkgLink revDeps)
 
-    sendNotifyEmailAndDelay :: Users.Users -> (UserId, (T.Text, [EmailContent])) -> IO ()
+    sendNotifyEmailAndDelay :: Users.Users -> (UserId, (T.Text, EmailContent)) -> IO ()
     sendNotifyEmailAndDelay users (uid, (subject, emailContent)) = do
         mudetails <- queryUserDetails uid
         case mudetails of
@@ -894,9 +908,7 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                        mailTo      = [Address (Just aname) eml],
                        mailHeaders = [(BSS.pack "Subject", "[Hackage] " <> subject)],
                        mailParts   =
-                        [ fromEmailContent $
-                            foldMap EmailContentParagraph $
-                              emailContent <> [updatePreferencesText]
+                        [ fromEmailContent $ emailContent <> updatePreferencesText
                         ]
                      }
                      Just ourHost = uriAuthority serverBaseURI
@@ -906,10 +918,14 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                  threadDelay 250000
       where
         updatePreferencesText =
+          EmailContentParagraph $
           "You can adjust your notification preferences at" <> EmailContentSoftBreak
-            <> (EmailContentText . T.pack)
-                ( uriToString id serverBaseURI ""
-                  <> "/user/"
-                  <> display (Users.userIdToName users uid)
-                  <> "/notify"
-                )
+          <> emailContentUrl
+              serverBaseURI
+                { uriPath =
+                    concatMap ("/" <>)
+                      [ "user"
+                      , display $ Users.userIdToName users uid
+                      , "notify"
+                      ]
+                }
