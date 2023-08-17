@@ -2,6 +2,7 @@
              TypeFamilies, TemplateHaskell,
              RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns,
              DefaultSignatures, OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
@@ -49,7 +50,9 @@ import Distribution.Server.Features.Users
 
 import Distribution.Server.Util.Email
 
+import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Control.Concurrent (threadDelay)
@@ -76,7 +79,6 @@ import Text.XHtml hiding (base, text, (</>))
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
-import qualified Data.ByteString.Char8 as BSS
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Text as T
 import qualified Data.Vector as Vec
@@ -575,12 +577,12 @@ userNotifyFeature :: ServerEnv
                   -> StateComponent AcidState NotifyData
                   -> Templates
                   -> UserNotifyFeature
-userNotifyFeature ServerEnv{serverBaseURI, serverCron}
+userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
                   UserFeature{..}
                   CoreFeature{..}
                   UploadFeature{..}
                   AdminLogFeature{..}
-                  UserDetailsFeature{..}
+                  userDetailsFeature@UserDetailsFeature{..}
                   ReportsFeature{..}
                   TagsFeature{..}
                   ReverseFeature{queryReverseIndex}
@@ -704,20 +706,17 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         dependencyUpdateNotifications <- Map.unionsWith (++) <$> traverse (genDependencyUpdateList idx revIdx . pkgInfoToPkgId) revisionsAndUploads
         dependencyEmails <- Map.traverseWithKey describeDependencyUpdate dependencyUpdateNotifications
 
-        -- Concat the constituent email parts such that only one email is sent per user
-        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $
-          fmap ("Maintainer Notifications",) . foldr1 (Map.unionWith (<>)) $
-            [ revisionUploadEmails
-            , groupActionEmails
-            , docReportEmails
-            , tagProposalEmails
-            ]
-
-        -- Dependency email notifications consist of multiple paragraphs, so it would be confusing if concatenated.
-        -- So they're sent independently.
-        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $
-          Map.mapKeys fst . Map.mapWithKey (\(_, dep) emailContent -> ("Dependency Update: " <> T.pack (display dep), emailContent)) $
-            dependencyEmails
+        emails <-
+          getNotificationEmails serverEnv userDetailsFeature users
+            ( foldr1 (Map.unionWith (<>))
+              [ revisionUploadEmails
+              , groupActionEmails
+              , docReportEmails
+              , tagProposalEmails
+              ]
+            , dependencyEmails
+            )
+        mapM_ sendNotifyEmailAndDelay emails
 
         updateState notifyState (SetNotifyTime now)
 
@@ -899,36 +898,103 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
                 ]
               <> EmailContentList (map renderPkgLink revDeps)
 
-    sendNotifyEmailAndDelay :: Users.Users -> (UserId, (T.Text, EmailContent)) -> IO ()
-    sendNotifyEmailAndDelay users (uid, (subject, emailContent)) = do
-        mudetails <- queryUserDetails uid
-        case mudetails of
-             Nothing -> return ()
-             Just (AccountDetails{accountContactEmail=eml, accountName=aname})-> do
-                 let mailFrom = Address (Just (T.pack "Hackage website"))
-                                    (T.pack ("noreply@" ++ uriRegName ourHost))
-                     mail     = (emptyMail mailFrom) {
-                       mailTo      = [Address (Just aname) eml],
-                       mailHeaders = [(BSS.pack "Subject", "[Hackage] " <> subject)],
-                       mailParts   =
-                        [ fromEmailContent $ emailContent <> updatePreferencesText
-                        ]
-                     }
-                     Just ourHost = uriAuthority serverBaseURI
+    sendNotifyEmailAndDelay :: Mail -> IO ()
+    sendNotifyEmailAndDelay email = do
+      -- TODO: if we need any configuration of sendmail stuff, has to go here
+      renderSendMail email
 
-                 renderSendMail mail --TODO: if we need any configuration of
-                                     -- sendmail stuff, has to go here
-                 threadDelay 250000
-      where
-        updatePreferencesText =
-          EmailContentParagraph $
-            "You can adjust your notification preferences at" <> EmailContentSoftBreak
-            <> emailContentUrl
-                serverBaseURI
-                  { uriPath =
-                      concatMap ("/" <>)
-                        [ "user"
-                        , display $ Users.userIdToName users uid
-                        , "notify"
-                        ]
-                  }
+      -- delay sending out emails, because ???
+      threadDelay 250000
+
+-- | Notifications in the same group are batched in the same email.
+--
+-- TODO: How often do multiple notifications come in at once? Maybe it's
+-- fine to just send one email per notification.
+data NotificationGroup
+  = GeneralNotification
+  | DependencyNotification PackageId
+  deriving (Eq, Ord)
+
+-- | Get all the emails to send for the given notifications.
+getNotificationEmails
+  :: ServerEnv
+  -> UserDetailsFeature
+  -> Users.Users
+  -> (Map UserId EmailContent, Map (UserId, PackageId) EmailContent)
+  -> IO [Mail]
+getNotificationEmails
+  ServerEnv{serverBaseURI}
+  UserDetailsFeature{queryUserDetails}
+  allUsers
+  (generalEmails, dependencyUpdateEmails) = do
+    let userIds = Set.fromList . Map.keys $ generalEmails <> Map.mapKeys fst dependencyUpdateEmails
+    userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails userIds
+
+    pure $
+      let emails =
+            groupNotifications . concat $
+              [ Map.toList
+                . fmap (, GeneralNotification)
+                $ generalEmails
+              , Map.toList
+                . Map.mapKeys fst
+                . Map.mapWithKey (\(_, pkg) emailContent -> (emailContent, DependencyNotification pkg))
+                $ dependencyUpdateEmails
+              ]
+      in flip mapMaybe (Map.toList emails) $ \((uid, group), emailContent) ->
+          case uid `Map.lookup` userIdToDetails of
+            Nothing -> Nothing
+            Just AccountDetails{..} -> Just $
+              Mail
+                { mailFrom =
+                    Address
+                      { addressName = Just "Hackage website"
+                      , addressEmail = "noreply@" <> hostname
+                      }
+                , mailTo =
+                    [ Address
+                        { addressName = Just accountName
+                        , addressEmail = accountContactEmail
+                        }
+                    ]
+                , mailCc = []
+                , mailBcc = []
+                , mailHeaders =
+                    [ ("Subject", "[Hackage] " <> getEmailSubject group)
+                    ]
+                , mailParts =
+                    [ fromEmailContent $ emailContent <> updatePreferencesText uid
+                    ]
+                }
+  where
+    groupNotifications :: [(UserId, (EmailContent, NotificationGroup))] -> Map (UserId, NotificationGroup) EmailContent
+    groupNotifications =
+      Map.fromListWith (<>)
+        . map (\(uid, (emailContent, group)) -> ((uid, group), emailContent))
+
+    getEmailSubject = \case
+      GeneralNotification -> "Maintainer Notifications"
+      DependencyNotification pkg -> "Dependency Update: " <> T.pack (display pkg)
+
+    hostname =
+      case uriAuthority serverBaseURI of
+        Just auth -> T.pack $ uriRegName auth
+        Nothing -> error $ "Could not get hostname from serverBaseURI: " <> show serverBaseURI
+
+    updatePreferencesText uid =
+      EmailContentParagraph $
+        "You can adjust your notification preferences at" <> EmailContentSoftBreak
+        <> emailContentUrl
+            serverBaseURI
+              { uriPath =
+                  concatMap ("/" <>)
+                    [ "user"
+                    , display $ Users.userIdToName allUsers uid
+                    , "notify"
+                    ]
+              }
+
+{----- Utilities -----}
+
+fromSetM :: Monad m => (k -> m v) -> Set k -> m (Map k v)
+fromSetM f = traverse id . Map.fromSet f
