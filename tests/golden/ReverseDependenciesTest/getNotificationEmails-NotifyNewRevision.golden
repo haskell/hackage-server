@@ -1,0 +1,34 @@
+From: =?utf-8?Q?Hackage_website?= <noreply@hackage.haskell.org>
+To: =?utf-8?Q?user-watcher?= <user-watcher@example.com>
+Subject: [Hackage] Maintainer Notifications
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="YIYrWcf3to"
+
+--YIYrWcf3to
+Content-Type: text/plain; charset=utf-8
+
+Package metadata revision(s), base-4.18.0.0 (https://hackage.haskell.org/package/base-4.18.0.0):
+
+* user-actor [Fri Jan  3 00:00:00 UTC 2020]
+* user-actor [Thu Jan  2 00:00:00 UTC 2020]
+
+You can adjust your notification preferences at
+https://hackage.haskell.org/user/user-watcher/notify (https://hackage.haskell.org/user/user-watcher/notify)
+
+
+--YIYrWcf3to
+Content-Type: text/html; charset=utf-8
+
+
+<p>
+Package metadata revision(s), <a href="https://hackage.haskell.org/package/base-4.18.0.0">base-4.18.0.0</a>:
+</p>
+<ul>
+  <li>user-actor [Fri Jan  3 00:00:00 UTC 2020]</li>
+  <li>user-actor [Thu Jan  2 00:00:00 UTC 2020]</li>
+</ul>
+<p>
+You can adjust your notification preferences at
+<br /><a href="https://hackage.haskell.org/user/user-watcher/notify">https://hackage.haskell.org/user/user-watcher/notify</a>
+</p>
+--YIYrWcf3to--

@@ -52,6 +52,17 @@ data-files:
   TUF/timestamp.private
 
 extra-source-files:
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyNewVersion.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyNewRevision.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyMaintainerUpdate-MaintainerAdded.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyMaintainerUpdate-MaintainerRemoved.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyDocsBuild-success.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyDocsBuild-failure.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyUpdateTags.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyDependencyUpdate-Always.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyDependencyUpdate-NewIncompatibility.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-NotifyDependencyUpdate-BoundsOutOfRange.golden
+  tests/golden/ReverseDependenciesTest/getNotificationEmails-batched.golden
   tests/permissions-tarballs/*.tar.gz
   tests/unpack-checks/correct-package-0.1.0.0/LICENSE
   tests/unpack-checks/correct-package-0.1.0.0/Main.hs
@@ -569,11 +580,16 @@ test-suite ReverseDependenciesTest
   build-tool-depends: hackage-server:hackage-server
   build-depends:
     , tasty        ^>= 1.4
+    , tasty-golden ^>= 2.3
+    , tasty-hedgehog ^>= 1.4
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
     , hedgehog     ^>= 1.3
     , exceptions
     , bimap
+    , mime-mail
+    , random
+    , transformers
   other-modules: RevDepCommon
 
 benchmark RevDeps
