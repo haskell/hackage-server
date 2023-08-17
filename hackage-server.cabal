@@ -265,6 +265,7 @@ library lib-server
     Distribution.Server.Util.CountingMap
     Distribution.Server.Util.CabalRevisions
     Distribution.Server.Util.DocMeta
+    Distribution.Server.Util.Email
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.Validators
