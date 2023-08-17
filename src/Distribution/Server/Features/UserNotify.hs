@@ -58,10 +58,10 @@ import Data.Bifunctor (Bifunctor(second))
 import Data.Bimap (lookup, lookupR)
 import Data.Graph (Vertex)
 import Data.Hashable (Hashable(..))
-import Data.List (maximumBy, sortBy)
+import Data.List (maximumBy, sortOn)
 import Data.List (intercalate)
 import Data.Maybe (fromJust, fromMaybe, listToMaybe, mapMaybe, maybeToList)
-import Data.Ord (comparing)
+import Data.Ord (Down(..), comparing)
 import Data.SafeCopy (Migrate(migrate), MigrateFrom, base, deriveSafeCopy, extension)
 import Data.Time (UTCTime(..), addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
 import Data.Time.Format.Internal (buildTime)
@@ -505,7 +505,7 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
           case notifyDependencyTriggerBounds of
             NewIncompatibility -> do
               let allNewUploadPkgInfos = PackageIndex.lookupPackageName index (pkgName pkgId)
-                  sortedByVersionDesc = sortBy (flip $ comparing packageVersion) allNewUploadPkgInfos
+                  sortedByVersionDesc = sortOn (Down . packageVersion) allNewUploadPkgInfos
                   mSecondHighest =
                     case sortedByVersionDesc of
                       _:b:_ -> Just b
