@@ -1,0 +1,29 @@
+From: =?utf-8?Q?Hackage_website?= <noreply@hackage.haskell.org>
+To: =?utf-8?Q?user-watcher?= <user-watcher@example.com>
+Subject: [Hackage] Maintainer Notifications
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="YIYrWcf3to"
+
+--YIYrWcf3to
+Content-Type: text/plain; charset=utf-8
+
+Package doc build for base-4.18.0.0 (https://hackage.haskell.org/package/base-4.18.0.0):
+Build failed.
+
+You can adjust your notification preferences at
+https://hackage.haskell.org/user/user-watcher/notify (https://hackage.haskell.org/user/user-watcher/notify)
+
+
+--YIYrWcf3to
+Content-Type: text/html; charset=utf-8
+
+
+<p>
+Package doc build for <a href="https://hackage.haskell.org/package/base-4.18.0.0">base-4.18.0.0</a>:
+<br />Build failed.
+</p>
+<p>
+You can adjust your notification preferences at
+<br /><a href="https://hackage.haskell.org/user/user-watcher/notify">https://hackage.haskell.org/user/user-watcher/notify</a>
+</p>
+--YIYrWcf3to--

@@ -9,7 +9,7 @@
 module Distribution.Server.Features.UserNotify (
     NotifyData(..),
     NotifyPref(..),
-    NotifyRevisionRange,
+    NotifyRevisionRange(..),
     NotifyTriggerBounds(..),
     UserNotifyFeature(..),
     defaultNotifyPrefs,
@@ -17,6 +17,11 @@ module Distribution.Server.Features.UserNotify (
     importNotifyPref,
     initUserNotifyFeature,
     notifyDataToCSV,
+
+    -- * getNotificationEmails
+    Notification(..),
+    NotifyMaintainerUpdateType(..),
+    getNotificationEmails,
   ) where
 
 import Prelude hiding (lookup)
@@ -887,8 +892,10 @@ data Notification
       , notifyWatchedPackages :: [PackageId]
         -- ^ Packages maintained by user that depend on updated dep
       }
+  deriving (Show)
 
 data NotifyMaintainerUpdateType = MaintainerAdded | MaintainerRemoved
+  deriving (Show)
 
 -- | Notifications in the same group are batched in the same email.
 --

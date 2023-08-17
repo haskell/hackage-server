@@ -1,0 +1,42 @@
+From: =?utf-8?Q?Hackage_website?= <noreply@hackage.haskell.org>
+To: =?utf-8?Q?user-watcher?= <user-watcher@example.com>
+Subject: [Hackage] Dependency Update: base-4.18.0.0
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="YIYrWcf3to"
+
+--YIYrWcf3to
+Content-Type: text/plain; charset=utf-8
+
+The dependency base-4.18.0.0 (https://hackage.haskell.org/package/base-4.18.0.0) has been uploaded or revised.
+
+You have requested to be notified for each upload or revision of a dependency.
+
+These are your packages that depend on base:
+
+* mtl-2.3 (https://hackage.haskell.org/package/mtl-2.3)
+
+You can adjust your notification preferences at
+https://hackage.haskell.org/user/user-watcher/notify (https://hackage.haskell.org/user/user-watcher/notify)
+
+
+--YIYrWcf3to
+Content-Type: text/html; charset=utf-8
+
+
+<p>
+The dependency <a href="https://hackage.haskell.org/package/base-4.18.0.0">base-4.18.0.0</a> has been uploaded or revised.
+</p>
+<p>
+You have requested to be notified for each upload or revision of a dependency.
+</p>
+<p>
+These are your packages that depend on base:
+</p>
+<ul>
+  <li><a href="https://hackage.haskell.org/package/mtl-2.3">mtl-2.3</a></li>
+</ul>
+<p>
+You can adjust your notification preferences at
+<br /><a href="https://hackage.haskell.org/user/user-watcher/notify">https://hackage.haskell.org/user/user-watcher/notify</a>
+</p>
+--YIYrWcf3to--
