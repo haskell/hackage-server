@@ -68,20 +68,9 @@ emailContentUrl uri = EmailContentLink (uriToText uri) uri
 
 fromEmailContent :: EmailContent -> Alternatives
 fromEmailContent emailContent =
-  [ Part
-      { partType = contentType <> "; charset=utf-8"
-      , partEncoding = None
-      , partDisposition = DefaultDisposition
-      , partHeaders = []
-      , partContent = PartContent $ TextL.encodeUtf8 $ TextL.fromStrict content
-      }
-  | (contentType, content) <- contents
+  [ plainPart $ TextL.fromStrict $ toPlainContent emailContent
+  , htmlPart $ TextL.fromStrict $ toHtmlContent emailContent
   ]
-  where
-    contents =
-      [ ("text/plain", toPlainContent emailContent)
-      , ("text/html", toHtmlContent emailContent)
-      ]
 
 -- | Convert an 'EmailContent' to plain text.
 --
