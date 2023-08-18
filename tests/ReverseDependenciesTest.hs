@@ -391,36 +391,36 @@ getNotificationEmailsTests =
           . getNotificationEmail
               testServerEnv
               testUserDetailsFeature
-              (\_ -> pure $ Just notifyEverything{notifyDependencyTriggerBounds = Always})
               allUsers
               userWatcher
           $ NotifyDependencyUpdate
               { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
               , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
+              , notifyTriggerBounds = Always
               }
     , testGolden "Render NotifyDependencyUpdate-NewIncompatibility" "getNotificationEmails-NotifyDependencyUpdate-NewIncompatibility.golden" $
         fmap renderMail
           . getNotificationEmail
               testServerEnv
               testUserDetailsFeature
-              (\_ -> pure $ Just notifyEverything{notifyDependencyTriggerBounds = NewIncompatibility})
               allUsers
               userWatcher
           $ NotifyDependencyUpdate
               { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
               , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
+              , notifyTriggerBounds = NewIncompatibility
               }
     , testGolden "Render NotifyDependencyUpdate-BoundsOutOfRange" "getNotificationEmails-NotifyDependencyUpdate-BoundsOutOfRange.golden" $
         fmap renderMail
           . getNotificationEmail
               testServerEnv
               testUserDetailsFeature
-              (\_ -> pure $ Just notifyEverything{notifyDependencyTriggerBounds = BoundsOutOfRange})
               allUsers
               userWatcher
           $ NotifyDependencyUpdate
               { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
               , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
+              , notifyTriggerBounds = BoundsOutOfRange
               }
     , testGolden "Render general notifications in single batched email" "getNotificationEmails-batched.golden" $ do
         emails <-
@@ -478,8 +478,8 @@ getNotificationEmailsTests =
           <*> addUser "user-actor"
           <*> addUser "user-subject"
 
-    getNotificationEmail env details pref users uid notif =
-      getNotificationEmails env details pref users [(uid, notif)] >>= \case
+    getNotificationEmail env details users uid notif =
+      getNotificationEmails env details users [(uid, notif)] >>= \case
         [email] -> pure email
         _ -> error "Did not get exactly one email"
 
@@ -500,31 +500,15 @@ getNotificationEmailsTests =
                   , accountAdminNotes = ""
                   }
         }
-    notifyEverything =
-      NotifyPref
-        { notifyOptOut = False
-        , notifyRevisionRange = NotifyAllVersions
-        , notifyUpload = True
-        , notifyMaintainerGroup = True
-        , notifyDocBuilderReport = True
-        , notifyPendingTags = True
-        , notifyDependencyForMaintained = True
-        , notifyDependencyTriggerBounds = Always
-        }
-    testGetUserNotifyPref uid = pure $ do
-      guard $ uid == userWatcher
-      Just notifyEverything
     getNotificationEmailsMocked =
       getNotificationEmails
         testServerEnv
         testUserDetailsFeature
-        testGetUserNotifyPref
         allUsers
     getNotificationEmailMocked =
       getNotificationEmail
         testServerEnv
         testUserDetailsFeature
-        testGetUserNotifyPref
         allUsers
 
     renderMail = fst . Mail.renderMail (mkStdGen 0)
@@ -554,6 +538,7 @@ getNotificationEmailsTests =
         , NotifyDependencyUpdate
             <$> genPackageId
             <*> Gen.list (Range.linear 1 10) genPackageId
+            <*> Gen.element [Always, NewIncompatibility, BoundsOutOfRange]
         ]
 
     genPackageName = mkPackageName <$> Gen.string (Range.linear 1 30) Gen.unicode
