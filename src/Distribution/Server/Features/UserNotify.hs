@@ -580,7 +580,7 @@ userNotifyFeature :: ServerEnv
                   -> StateComponent AcidState NotifyData
                   -> Templates
                   -> UserNotifyFeature
-userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
+userNotifyFeature serverEnv@ServerEnv{serverCron}
                   UserFeature{..}
                   CoreFeature{..}
                   UploadFeature{..}
@@ -703,31 +703,24 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
 
         idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
-        dependencyUpdateNotifications <- Map.unionsWith (++) <$> traverse (genDependencyUpdateList idx revIdx . pkgInfoToPkgId) revisionsAndUploads
-        dependencyEmails <- Map.traverseWithKey describeDependencyUpdate dependencyUpdateNotifications
+        dependencyUpdateNotifications <- concatMapM (genDependencyUpdateList idx revIdx . pkgInfoToPkgId) revisionsAndUploads
 
         emails <-
-          getNotificationEmails serverEnv userDetailsFeature users
+          getNotificationEmails serverEnv userDetailsFeature queryGetUserNotifyPref users
             ( foldr1 (Map.unionWith (<>))
               [ docReportEmails
               ]
-            , dependencyEmails
+            , mempty
             ) $
             concat
               [ revisionUploadNotifications
               , groupActionNotifications
               , tagProposalNotifications
+              , dependencyUpdateNotifications
               ]
         mapM_ sendNotifyEmailAndDelay emails
 
         updateState notifyState (SetNotifyTime now)
-
-    renderPkgLink pkg =
-      EmailContentLink
-        (T.pack $ display pkg)
-        serverBaseURI
-          { uriPath = "/package/" <> display (packageName pkg) <> "-" <> display (packageVersion pkg)
-          }
 
     collectRevisionsAndUploads earlier now = do
         pkgIndex <- queryGetPackageIndex
@@ -847,9 +840,14 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
               , notifyDeletedTags = deletedTags
               }
 
-    genDependencyUpdateList idx revIdx pid =
-      Map.mapKeys (, pid) <$>
-        getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pid
+    genDependencyUpdateList idx revIdx pkg = do
+      let toNotif watchedPkgs =
+            NotifyDependencyUpdate
+              { notifyPackageId = pkg
+              , notifyWatchedPackages = watchedPkgs
+              }
+      Map.toList . fmap toNotif
+        <$> getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pkg
 
     describeDocReport (pkg, success) =
       EmailContentParagraph $
@@ -857,37 +855,6 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
           if success
             then "Build successful."
             else "Build failed."
-
-    describeDependencyUpdate (uId, dep) revDeps = do
-      mPrefs <- queryGetUserNotifyPref uId
-      pure $
-        case mPrefs of
-          Nothing -> mempty
-          Just NotifyPref{notifyDependencyTriggerBounds} ->
-            let depName = emailContentDisplay (packageName dep)
-                depVersion = emailContentDisplay (packageVersion dep)
-            in
-              foldMap EmailContentParagraph
-                [ "The dependency " <> renderPkgLink dep <> " has been uploaded or revised."
-                , case notifyDependencyTriggerBounds of
-                    Always ->
-                      "You have requested to be notified for each upload or revision \
-                      \of a dependency."
-                    _ ->
-                      "You have requested to be notified when a dependency isn't \
-                      \accepted by any of your maintained packages."
-                , case notifyDependencyTriggerBounds of
-                    Always ->
-                      "These are your packages that depend on " <> depName <> ":"
-                    BoundsOutOfRange ->
-                      "These are your packages that require " <> depName
-                      <> " but don't accept " <> depVersion <> ":"
-                    NewIncompatibility ->
-                      "The following packages require " <> depName
-                      <> " but don't accept " <> depVersion
-                      <> " (they do accept the second-highest version):"
-                ]
-              <> EmailContentList (map renderPkgLink revDeps)
 
     sendNotifyEmailAndDelay :: Mail -> IO ()
     sendNotifyEmailAndDelay email = do
@@ -918,6 +885,12 @@ data Notification
       , notifyAddedTags :: Set Tag
       , notifyDeletedTags :: Set Tag
       }
+  | NotifyDependencyUpdate
+      { notifyPackageId :: PackageId
+        -- ^ Dependency that was updated
+      , notifyWatchedPackages :: [PackageId]
+        -- ^ Packages maintained by user that depend on updated dep
+      }
 
 data NotifyMaintainerUpdateType = MaintainerAdded | MaintainerRemoved
 
@@ -934,6 +907,7 @@ data NotificationGroup
 getNotificationEmails
   :: ServerEnv
   -> UserDetailsFeature
+  -> (UserId -> IO (Maybe NotifyPref))
   -> Users.Users
   -> (Map UserId EmailContent, Map (UserId, PackageId) EmailContent)
   -> [(UserId, Notification)]
@@ -941,12 +915,14 @@ getNotificationEmails
 getNotificationEmails
   ServerEnv{serverBaseURI}
   UserDetailsFeature{queryUserDetails}
+  queryGetUserNotifyPref
   allUsers
   (generalEmails, dependencyUpdateEmails)
   notifications = do
     let userIds = Set.fromList $ map fst notifications
     let userIds' = Set.fromList . Map.keys $ generalEmails <> Map.mapKeys fst dependencyUpdateEmails
     userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails (userIds <> userIds')
+    userIdToNotifyPref <- Map.mapMaybe id <$> fromSetM queryGetUserNotifyPref userIds
 
     pure $
       let emails =
@@ -959,7 +935,7 @@ getNotificationEmails
                 . Map.mapWithKey (\(_, pkg) emailContent -> (emailContent, DependencyNotification pkg))
                 $ dependencyUpdateEmails
               , flip mapMaybe notifications $ \(uid, notif) ->
-                  fmap (uid,) $ renderNotification notif
+                  fmap (uid,) $ renderNotification userIdToNotifyPref uid notif
               ]
       in flip mapMaybe (Map.toList emails) $ \((uid, group), emailContent) ->
           case uid `Map.lookup` userIdToDetails of
@@ -1016,8 +992,8 @@ getNotificationEmails
 
     {----- Render notifications -----}
 
-    renderNotification :: Notification -> Maybe (EmailContent, NotificationGroup)
-    renderNotification = \case
+    renderNotification :: Map UserId NotifyPref -> UserId -> Notification -> Maybe (EmailContent, NotificationGroup)
+    renderNotification userIdToNotifyPref uid = \case
       NotifyNewVersion{..} ->
         generalNotification $
           renderNotifyNewVersion
@@ -1042,6 +1018,17 @@ getNotificationEmails
             notifyPackageName
             notifyAddedTags
             notifyDeletedTags
+      NotifyDependencyUpdate{..} ->
+        case uid `Map.lookup` userIdToNotifyPref of
+          Nothing -> Nothing
+          Just notifyPref ->
+            Just
+              ( renderNotifyDependencyUpdate
+                  notifyPref
+                  notifyPackageId
+                  notifyWatchedPackages
+              , DependencyNotification notifyPackageId
+              )
       where
         generalNotification emailContent = Just (emailContent, GeneralNotification)
 
@@ -1073,6 +1060,32 @@ getNotificationEmails
           ]
       where
         showTags = emailContentIntercalate ", " . map emailContentDisplay . Set.toList
+
+    renderNotifyDependencyUpdate NotifyPref{..} dep revDeps =
+      let depName = emailContentDisplay (packageName dep)
+          depVersion = emailContentDisplay (packageVersion dep)
+      in
+        foldMap EmailContentParagraph
+          [ "The dependency " <> renderPkgLink dep <> " has been uploaded or revised."
+          , case notifyDependencyTriggerBounds of
+              Always ->
+                "You have requested to be notified for each upload or revision \
+                \of a dependency."
+              _ ->
+                "You have requested to be notified when a dependency isn't \
+                \accepted by any of your maintained packages."
+          , case notifyDependencyTriggerBounds of
+              Always ->
+                "These are your packages that depend on " <> depName <> ":"
+              BoundsOutOfRange ->
+                "These are your packages that require " <> depName
+                <> " but don't accept " <> depVersion <> ":"
+              NewIncompatibility ->
+                "The following packages require " <> depName
+                <> " but don't accept " <> depVersion
+                <> " (they do accept the second-highest version):"
+          ]
+        <> EmailContentList (map renderPkgLink revDeps)
 
     {----- Rendering helpers -----}
 
