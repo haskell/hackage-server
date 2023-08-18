@@ -6,22 +6,27 @@ Content-Type: multipart/alternative; boundary="YIYrWcf3to"
 
 --YIYrWcf3to
 Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
 
-Package metadata revision(s), base-4.18.0.0 (https://hackage.haskell.org/package/base-4.18.0.0):
+Package metadata revision(s), base-4=2E18=2E0=2E0 (https://hackage=2Ehaskel=
+l=2Eorg/package/base-4=2E18=2E0=2E0):
 
 * user-actor [Fri Jan  3 00:00:00 UTC 2020]
 * user-actor [Thu Jan  2 00:00:00 UTC 2020]
 
 You can adjust your notification preferences at
-https://hackage.haskell.org/user/user-watcher/notify (https://hackage.haskell.org/user/user-watcher/notify)
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify (https://hackage=
+=2Ehaskell=2Eorg/user/user-watcher/notify)
 
 
 --YIYrWcf3to
 Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
 
 
 <p>
-Package metadata revision(s), <a href="https://hackage.haskell.org/package/base-4.18.0.0">base-4.18.0.0</a>:
+Package metadata revision(s), <a href=3D"https://hackage=2Ehaskell=2Eorg/pa=
+ckage/base-4=2E18=2E0=2E0">base-4=2E18=2E0=2E0</a>:
 </p>
 <ul>
   <li>user-actor [Fri Jan  3 00:00:00 UTC 2020]</li>
@@ -29,6 +34,7 @@ Package metadata revision(s), <a href="https://hackage.haskell.org/package/base-
 </ul>
 <p>
 You can adjust your notification preferences at
-<br /><a href="https://hackage.haskell.org/user/user-watcher/notify">https://hackage.haskell.org/user/user-watcher/notify</a>
+<br /><a href=3D"https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify">=
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify</a>
 </p>
 --YIYrWcf3to--

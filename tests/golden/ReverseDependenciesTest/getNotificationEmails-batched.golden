@@ -6,25 +6,30 @@ Content-Type: multipart/alternative; boundary="YIYrWcf3to"
 
 --YIYrWcf3to
 Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
 
 Pending tag proposal for base:
 
 * Additions: newtag
 * Deletions: oldtag
 
-Package doc build for base-4.18.0.0 (https://hackage.haskell.org/package/base-4.18.0.0):
-Build successful.
+Package doc build for base-4=2E18=2E0=2E0 (https://hackage=2Ehaskell=2Eorg/=
+package/base-4=2E18=2E0=2E0):
+Build successful=2E
 
-Package metadata revision(s), base-4.18.0.0 (https://hackage.haskell.org/package/base-4.18.0.0):
+Package metadata revision(s), base-4=2E18=2E0=2E0 (https://hackage=2Ehaskel=
+l=2Eorg/package/base-4=2E18=2E0=2E0):
 
 * user-actor [Wed Jan  1 00:00:00 UTC 2020]
 
 You can adjust your notification preferences at
-https://hackage.haskell.org/user/user-watcher/notify (https://hackage.haskell.org/user/user-watcher/notify)
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify (https://hackage=
+=2Ehaskell=2Eorg/user/user-watcher/notify)
 
 
 --YIYrWcf3to
 Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
 
 
 <p>
@@ -35,17 +40,20 @@ Pending tag proposal for base:
   <li>Deletions: oldtag</li>
 </ul>
 <p>
-Package doc build for <a href="https://hackage.haskell.org/package/base-4.18.0.0">base-4.18.0.0</a>:
-<br />Build successful.
+Package doc build for <a href=3D"https://hackage=2Ehaskell=2Eorg/package/ba=
+se-4=2E18=2E0=2E0">base-4=2E18=2E0=2E0</a>:
+<br />Build successful=2E
 </p>
 <p>
-Package metadata revision(s), <a href="https://hackage.haskell.org/package/base-4.18.0.0">base-4.18.0.0</a>:
+Package metadata revision(s), <a href=3D"https://hackage=2Ehaskell=2Eorg/pa=
+ckage/base-4=2E18=2E0=2E0">base-4=2E18=2E0=2E0</a>:
 </p>
 <ul>
   <li>user-actor [Wed Jan  1 00:00:00 UTC 2020]</li>
 </ul>
 <p>
 You can adjust your notification preferences at
-<br /><a href="https://hackage.haskell.org/user/user-watcher/notify">https://hackage.haskell.org/user/user-watcher/notify</a>
+<br /><a href=3D"https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify">=
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify</a>
 </p>
 --YIYrWcf3to--

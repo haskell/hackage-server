@@ -858,7 +858,8 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
       -- TODO: if we need any configuration of sendmail stuff, has to go here
       renderSendMail email
 
-      -- delay sending out emails, because ???
+      -- delay sending out emails, to avoid spamming people if we accidentally
+      -- send out too many emails
       threadDelay 250000
 
 data Notification

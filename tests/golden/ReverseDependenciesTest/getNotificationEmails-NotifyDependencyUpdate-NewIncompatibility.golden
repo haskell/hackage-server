@@ -6,37 +6,48 @@ Content-Type: multipart/alternative; boundary="YIYrWcf3to"
 
 --YIYrWcf3to
 Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
 
-The dependency base-4.18.0.0 (https://hackage.haskell.org/package/base-4.18.0.0) has been uploaded or revised.
+The dependency base-4=2E18=2E0=2E0 (https://hackage=2Ehaskell=2Eorg/package=
+/base-4=2E18=2E0=2E0) has been uploaded or revised=2E
 
-You have requested to be notified when a dependency isn't accepted by any of your maintained packages.
+You have requested to be notified when a dependency isn't accepted by any o=
+f your maintained packages=2E
 
-The following packages require base but don't accept 4.18.0.0 (they do accept the second-highest version):
+The following packages require base but don't accept 4=2E18=2E0=2E0 (they d=
+o accept the second-highest version):
 
-* mtl-2.3 (https://hackage.haskell.org/package/mtl-2.3)
+* mtl-2=2E3 (https://hackage=2Ehaskell=2Eorg/package/mtl-2=2E3)
 
 You can adjust your notification preferences at
-https://hackage.haskell.org/user/user-watcher/notify (https://hackage.haskell.org/user/user-watcher/notify)
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify (https://hackage=
+=2Ehaskell=2Eorg/user/user-watcher/notify)
 
 
 --YIYrWcf3to
 Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
 
 
 <p>
-The dependency <a href="https://hackage.haskell.org/package/base-4.18.0.0">base-4.18.0.0</a> has been uploaded or revised.
+The dependency <a href=3D"https://hackage=2Ehaskell=2Eorg/package/base-4=2E=
+18=2E0=2E0">base-4=2E18=2E0=2E0</a> has been uploaded or revised=2E
 </p>
 <p>
-You have requested to be notified when a dependency isn't accepted by any of your maintained packages.
+You have requested to be notified when a dependency isn't accepted by any o=
+f your maintained packages=2E
 </p>
 <p>
-The following packages require base but don't accept 4.18.0.0 (they do accept the second-highest version):
+The following packages require base but don't accept 4=2E18=2E0=2E0 (they d=
+o accept the second-highest version):
 </p>
 <ul>
-  <li><a href="https://hackage.haskell.org/package/mtl-2.3">mtl-2.3</a></li>
+  <li><a href=3D"https://hackage=2Ehaskell=2Eorg/package/mtl-2=2E3">mtl-2=
+=2E3</a></li>
 </ul>
 <p>
 You can adjust your notification preferences at
-<br /><a href="https://hackage.haskell.org/user/user-watcher/notify">https://hackage.haskell.org/user/user-watcher/notify</a>
+<br /><a href=3D"https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify">=
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify</a>
 </p>
 --YIYrWcf3to--
