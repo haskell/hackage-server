@@ -695,8 +695,7 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
         groupActionNotifications <- concatMapM (genGroupUploadList notifyPrefs) groupActions
 
         docReports <- collectDocReport trimLastTime now
-        docReportNotifications <- foldM (genDocReportList notifyPrefs) Map.empty docReports
-        let docReportEmails = foldMap describeDocReport <$> docReportNotifications
+        docReportNotifications <- concatMapM (genDocReportList notifyPrefs) docReports
 
         tagProposals <- collectTagProposals
         tagProposalNotifications <- concatMapM (genTagProposalList notifyPrefs) tagProposals
@@ -708,13 +707,14 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
         emails <-
           getNotificationEmails serverEnv userDetailsFeature queryGetUserNotifyPref users
             ( foldr1 (Map.unionWith (<>))
-              [ docReportEmails
+              [
               ]
             , mempty
             ) $
             concat
               [ revisionUploadNotifications
               , groupActionNotifications
+              , docReportNotifications
               , tagProposalNotifications
               , dependencyUpdateNotifications
               ]
@@ -817,14 +817,18 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
               }
         _ -> pure []
 
-    genDocReportList notifyPrefs mp pkgDoc = do
-        let addNotification uid m =
-                if not (notifyOptOut npref) && notifyDocBuilderReport npref
-                then Map.insertWith (++) uid [pkgDoc] m
-                else m
-                    where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
-        maintainers <- queryUserGroup $ maintainersGroup (packageName . pkgInfoId . fst $ pkgDoc)
-        return $ foldr addNotification mp (toList maintainers)
+    genDocReportList notifyPrefs (pkg, success) = do
+      maintainers <- queryUserGroup $ maintainersGroup (packageName $ pkgInfoId pkg)
+      pure . flip mapMaybe (toList maintainers) $ \uid ->
+        fmap (uid,) $ do
+          let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+          guard $ not notifyOptOut
+          guard notifyDocBuilderReport
+          Just
+            NotifyDocsBuild
+              { notifyPackageId = pkgInfoId pkg
+              , notifyBuildSuccess = success
+              }
 
     genTagProposalList notifyPrefs (pkg, (addedTags, deletedTags)) = do
       maintainers <- queryUserGroup $ maintainersGroup pkg
@@ -849,13 +853,6 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
       Map.toList . fmap toNotif
         <$> getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pkg
 
-    describeDocReport (pkg, success) =
-      EmailContentParagraph $
-        "Package doc build for " <> emailContentDisplay (packageName pkg) <> ":" <> EmailContentSoftBreak <>
-          if success
-            then "Build successful."
-            else "Build failed."
-
     sendNotifyEmailAndDelay :: Mail -> IO ()
     sendNotifyEmailAndDelay email = do
       -- TODO: if we need any configuration of sendmail stuff, has to go here
@@ -879,6 +876,10 @@ data Notification
       , notifyPackageName :: PackageName
       , notifyReason :: Text
       , notifyUpdatedAt :: UTCTime
+      }
+  | NotifyDocsBuild
+      { notifyPackageId :: PackageId
+      , notifyBuildSuccess :: Bool
       }
   | NotifyUpdateTags
       { notifyPackageName :: PackageName
@@ -1012,6 +1013,11 @@ getNotificationEmails
             notifyPackageName
             notifyReason
             notifyUpdatedAt
+      NotifyDocsBuild{..} ->
+        generalNotification $
+          renderNotifyDocsBuild
+            notifyPackageId
+            notifyBuildSuccess
       NotifyUpdateTags{..} ->
         generalNotification $
           renderNotifyUpdateTags
@@ -1051,6 +1057,13 @@ getNotificationEmails
                 renderUser userSubject <> " removed from maintainers for " <> renderPackageName pkg
           , "Reason: " <> EmailContentText reason
           ]
+
+    renderNotifyDocsBuild pkg success =
+      EmailContentParagraph $
+        "Package doc build for " <> renderPkgLink pkg <> ":" <> EmailContentSoftBreak
+        <> if success
+            then "Build successful."
+            else "Build failed."
 
     renderNotifyUpdateTags pkg addedTags deletedTags =
       EmailContentParagraph ("Pending tag proposal for " <> emailContentDisplay pkg <> ":")
