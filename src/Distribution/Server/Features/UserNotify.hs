@@ -686,8 +686,7 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
         users <- queryGetUserDb
 
         revisionsAndUploads <- collectRevisionsAndUploads trimLastTime now
-        revisionUploadNotifications <- foldM (genRevUploadList notifyPrefs) Map.empty revisionsAndUploads
-        let revisionUploadEmails = foldMap (describeRevision users trimLastTime now) <$> revisionUploadNotifications
+        revisionUploadNotifications <- concatMapM (genRevUploadList notifyPrefs trimLastTime now) revisionsAndUploads
 
         groupActions <- collectAdminActions trimLastTime now
         groupActionNotifications <- foldM (genGroupUploadList notifyPrefs) Map.empty groupActions
@@ -709,13 +708,15 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
         emails <-
           getNotificationEmails serverEnv userDetailsFeature users
             ( foldr1 (Map.unionWith (<>))
-              [ revisionUploadEmails
-              , groupActionEmails
+              [ groupActionEmails
               , docReportEmails
               , tagProposalEmails
               ]
             , dependencyEmails
-            )
+            ) $
+            concat
+              [ revisionUploadNotifications
+              ]
         mapM_ sendNotifyEmailAndDelay emails
 
         updateState notifyState (SetNotifyTime now)
@@ -762,25 +763,39 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
         writeMemState tagProposalLog Map.empty
         pure $ Map.toList logs
 
-    genRevUploadList notifyPrefs mp pkg = do
+    genRevUploadList notifyPrefs earlier now pkg = do
          pkgIndex <- queryGetPackageIndex
          let actor = pkgLatestUploadUser pkg
              isRevision = pkgNumRevisions pkg > 1
              pkgName = packageName . pkgInfoId $ pkg
              mbLatest = listToMaybe . take 1 . reverse $ PackageIndex.lookupPackageName pkgIndex pkgName
              isLatestVersion = maybe False (\x -> pkgInfoId pkg == pkgInfoId x) mbLatest
-             addNotification uid m =
-                if not (notifyOptOut npref) &&
-                  (isRevision &&
-                     ( notifyRevisionRange npref == NotifyAllVersions ||
-                     ((notifyRevisionRange npref == NotifyNewestVersion) && isLatestVersion))
-                   ||
-                   not isRevision && notifyUpload npref)
-                then Map.insertWith (++) uid [pkg] m
-                else m
-                    where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
          maintainers <- queryUserGroup $ maintainersGroup (packageName . pkgInfoId $ pkg)
-         return $ foldr addNotification mp (toList (delete actor maintainers))
+         pure . flip mapMaybe (toList maintainers) $ \uid ->
+          fmap (uid,) $ do
+            let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+            guard $ uid /= actor
+            guard $ not notifyOptOut
+            if isRevision
+              then do
+                guard $
+                  notifyRevisionRange == NotifyAllVersions ||
+                  (notifyRevisionRange == NotifyNewestVersion && isLatestVersion)
+                Just
+                  NotifyNewRevision
+                    { notifyPackageId = pkgInfoId pkg
+                    , notifyRevisions =
+                        filter (\(t, _) -> earlier < t && t <= now)
+                          . map snd
+                          . Vec.toList
+                          $ pkgMetadataRevisions pkg
+                    }
+              else do
+                guard notifyUpload
+                Just
+                  NotifyNewVersion
+                    { notifyPackageInfo = pkg
+                    }
 
     genGroupUploadList notifyPrefs mp ga =
         let (actor,gdesc) = case ga of (_,uid,Admin_GroupAddUser _ gd,_) -> (uid, gd)
@@ -816,18 +831,6 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
     genDependencyUpdateList idx revIdx pid =
       Map.mapKeys (, pid) <$>
         getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pid
-
-    describeRevision users earlier now pkg
-      | pkgNumRevisions pkg <= 1 =
-          EmailContentParagraph $
-            "Package upload, " <> renderPkgLink (pkgInfoId pkg) <> ", by " <>
-            formatTimeUser users (pkgLatestUploadTime pkg) (pkgLatestUploadUser pkg)
-      | otherwise =
-          EmailContentParagraph ("Package metadata revision(s), " <> renderPkgLink (pkgInfoId pkg) <> ":")
-          <> EmailContentList (map (uncurry (formatTimeUser users) . snd) recentRevs)
-        where
-           revs = reverse $ Vec.toList (pkgMetadataRevisions pkg)
-           recentRevs = filter ((\x -> x > earlier && x <= now) . fst . snd) revs
 
     describeGroupAction users (time, uid, act, reason) =
       fmap
@@ -906,6 +909,15 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
       -- delay sending out emails, because ???
       threadDelay 250000
 
+data Notification
+  = NotifyNewVersion
+      { notifyPackageInfo :: PkgInfo
+      }
+  | NotifyNewRevision
+      { notifyPackageId :: PackageId
+      , notifyRevisions :: [UploadInfo]
+      }
+
 -- | Notifications in the same group are batched in the same email.
 --
 -- TODO: How often do multiple notifications come in at once? Maybe it's
@@ -921,14 +933,17 @@ getNotificationEmails
   -> UserDetailsFeature
   -> Users.Users
   -> (Map UserId EmailContent, Map (UserId, PackageId) EmailContent)
+  -> [(UserId, Notification)]
   -> IO [Mail]
 getNotificationEmails
   ServerEnv{serverBaseURI}
   UserDetailsFeature{queryUserDetails}
   allUsers
-  (generalEmails, dependencyUpdateEmails) = do
-    let userIds = Set.fromList . Map.keys $ generalEmails <> Map.mapKeys fst dependencyUpdateEmails
-    userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails userIds
+  (generalEmails, dependencyUpdateEmails)
+  notifications = do
+    let userIds = Set.fromList $ map fst notifications
+    let userIds' = Set.fromList . Map.keys $ generalEmails <> Map.mapKeys fst dependencyUpdateEmails
+    userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails (userIds <> userIds')
 
     pure $
       let emails =
@@ -940,6 +955,8 @@ getNotificationEmails
                 . Map.mapKeys fst
                 . Map.mapWithKey (\(_, pkg) emailContent -> (emailContent, DependencyNotification pkg))
                 $ dependencyUpdateEmails
+              , flip mapMaybe notifications $ \(uid, notif) ->
+                  fmap (uid,) $ renderNotification notif
               ]
       in flip mapMaybe (Map.toList emails) $ \((uid, group), emailContent) ->
           case uid `Map.lookup` userIdToDetails of
@@ -994,7 +1011,50 @@ getNotificationEmails
                     ]
               }
 
+    {----- Render notifications -----}
+
+    renderNotification :: Notification -> Maybe (EmailContent, NotificationGroup)
+    renderNotification = \case
+      NotifyNewVersion{..} ->
+        generalNotification $
+          renderNotifyNewVersion
+            notifyPackageInfo
+      NotifyNewRevision{..} ->
+        generalNotification $
+          renderNotifyNewRevision
+            notifyPackageId
+            notifyRevisions
+      where
+        generalNotification emailContent = Just (emailContent, GeneralNotification)
+
+    renderNotifyNewVersion pkg =
+      EmailContentParagraph $
+        "Package upload, " <> renderPkgLink (pkgInfoId pkg) <> ", by " <>
+        renderUserTime (pkgLatestUploadUser pkg) (pkgLatestUploadTime pkg)
+
+    renderNotifyNewRevision pkg revs =
+      EmailContentParagraph ("Package metadata revision(s), " <> renderPkgLink pkg <> ":")
+      <> EmailContentList (map (uncurry $ flip renderUserTime) $ sortOn (Down . fst) revs)
+
+    {----- Rendering helpers -----}
+
+    renderPkgLink pkg =
+      EmailContentLink
+        (T.pack $ display pkg)
+        serverBaseURI
+          { uriPath = "/package/" <> display (packageName pkg) <> "-" <> display (packageVersion pkg)
+          }
+
+    renderUser = emailContentDisplay . Users.userIdToName allUsers
+
+    renderTime = emailContentStr . formatTime defaultTimeLocale "%c"
+
+    renderUserTime u t = renderUser u <> " [" <> renderTime t <> "]"
+
 {----- Utilities -----}
 
 fromSetM :: Monad m => (k -> m v) -> Set k -> m (Map k v)
 fromSetM f = traverse id . Map.fromSet f
+
+concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
+concatMapM f = fmap concat . mapM f
