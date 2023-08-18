@@ -699,8 +699,7 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
         let docReportEmails = foldMap describeDocReport <$> docReportNotifications
 
         tagProposals <- collectTagProposals
-        tagProposalNotifications <- foldM (genTagProposalList notifyPrefs) Map.empty tagProposals
-        let tagProposalEmails = foldMap describeTagProposal <$> tagProposalNotifications
+        tagProposalNotifications <- concatMapM (genTagProposalList notifyPrefs) tagProposals
 
         idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
@@ -711,13 +710,13 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
           getNotificationEmails serverEnv userDetailsFeature users
             ( foldr1 (Map.unionWith (<>))
               [ docReportEmails
-              , tagProposalEmails
               ]
             , dependencyEmails
             ) $
             concat
               [ revisionUploadNotifications
               , groupActionNotifications
+              , tagProposalNotifications
               ]
         mapM_ sendNotifyEmailAndDelay emails
 
@@ -834,14 +833,19 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
         maintainers <- queryUserGroup $ maintainersGroup (packageName . pkgInfoId . fst $ pkgDoc)
         return $ foldr addNotification mp (toList maintainers)
 
-    genTagProposalList notifyPrefs mp pkgTags = do
-        let addNotification uid m =
-                if not (notifyOptOut npref) && notifyPendingTags npref
-                then Map.insertWith (++) uid [pkgTags] m
-                else m
-                    where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
-        maintainers <- queryUserGroup $ maintainersGroup (fst pkgTags)
-        return $ foldr addNotification mp (toList maintainers)
+    genTagProposalList notifyPrefs (pkg, (addedTags, deletedTags)) = do
+      maintainers <- queryUserGroup $ maintainersGroup pkg
+      pure . flip mapMaybe (toList maintainers) $ \uid ->
+        fmap (uid,) $ do
+          let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+          guard $ not notifyOptOut
+          guard notifyPendingTags
+          Just
+            NotifyUpdateTags
+              { notifyPackageName = pkg
+              , notifyAddedTags = addedTags
+              , notifyDeletedTags = deletedTags
+              }
 
     genDependencyUpdateList idx revIdx pid =
       Map.mapKeys (, pid) <$>
@@ -853,15 +857,6 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
           if success
             then "Build successful."
             else "Build failed."
-
-    describeTagProposal (pkgName, (addTags, delTags)) =
-      EmailContentParagraph ("Pending tag proposal for " <> emailContentDisplay pkgName <> ":")
-      <> EmailContentList
-          [ "Additions: " <> showTags addTags
-          , "Deletions: " <> showTags delTags
-          ]
-      where
-        showTags = emailContentIntercalate ", " . map emailContentDisplay . Set.toList
 
     describeDependencyUpdate (uId, dep) revDeps = do
       mPrefs <- queryGetUserNotifyPref uId
@@ -917,6 +912,11 @@ data Notification
       , notifyPackageName :: PackageName
       , notifyReason :: Text
       , notifyUpdatedAt :: UTCTime
+      }
+  | NotifyUpdateTags
+      { notifyPackageName :: PackageName
+      , notifyAddedTags :: Set Tag
+      , notifyDeletedTags :: Set Tag
       }
 
 data NotifyMaintainerUpdateType = MaintainerAdded | MaintainerRemoved
@@ -1036,6 +1036,12 @@ getNotificationEmails
             notifyPackageName
             notifyReason
             notifyUpdatedAt
+      NotifyUpdateTags{..} ->
+        generalNotification $
+          renderNotifyUpdateTags
+            notifyPackageName
+            notifyAddedTags
+            notifyDeletedTags
       where
         generalNotification emailContent = Just (emailContent, GeneralNotification)
 
@@ -1059,6 +1065,14 @@ getNotificationEmails
           , "Reason: " <> EmailContentText reason
           ]
 
+    renderNotifyUpdateTags pkg addedTags deletedTags =
+      EmailContentParagraph ("Pending tag proposal for " <> emailContentDisplay pkg <> ":")
+      <> EmailContentList
+          [ "Additions: " <> showTags addedTags
+          , "Deletions: " <> showTags deletedTags
+          ]
+      where
+        showTags = emailContentIntercalate ", " . map emailContentDisplay . Set.toList
 
     {----- Rendering helpers -----}
 
