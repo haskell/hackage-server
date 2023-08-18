@@ -707,10 +707,10 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
 
         idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
-        dependencyUpdateNotifications <- concatMapM (genDependencyUpdateList idx revIdx . pkgInfoToPkgId) revisionsAndUploads
+        dependencyUpdateNotifications <- concatMapM (genDependencyUpdateList notifyPrefs idx revIdx . pkgInfoToPkgId) revisionsAndUploads
 
         emails <-
-          getNotificationEmails serverEnv userDetailsFeature queryGetUserNotifyPref users $
+          getNotificationEmails serverEnv userDetailsFeature users $
             concat
               [ revisionUploadNotifications
               , groupActionNotifications
@@ -844,13 +844,16 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
               , notifyDeletedTags = deletedTags
               }
 
-    genDependencyUpdateList idx revIdx pkg = do
-      let toNotif watchedPkgs =
+    genDependencyUpdateList notifyPrefs idx revIdx pkg = do
+      let toNotif uid watchedPkgs =
             NotifyDependencyUpdate
               { notifyPackageId = pkg
               , notifyWatchedPackages = watchedPkgs
+              , notifyTriggerBounds =
+                  notifyDependencyTriggerBounds $
+                    fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
               }
-      Map.toList . fmap toNotif
+      Map.toList . Map.mapWithKey toNotif
         <$> getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pkg
 
     sendNotifyEmailAndDelay :: Mail -> IO ()
@@ -892,6 +895,7 @@ data Notification
         -- ^ Dependency that was updated
       , notifyWatchedPackages :: [PackageId]
         -- ^ Packages maintained by user that depend on updated dep
+      , notifyTriggerBounds :: NotifyTriggerBounds
       }
   deriving (Show)
 
@@ -911,24 +915,19 @@ data NotificationGroup
 getNotificationEmails
   :: ServerEnv
   -> UserDetailsFeature
-  -> (UserId -> IO (Maybe NotifyPref))
   -> Users.Users
   -> [(UserId, Notification)]
   -> IO [Mail]
 getNotificationEmails
   ServerEnv{serverBaseURI}
   UserDetailsFeature{queryUserDetails}
-  queryGetUserNotifyPref
   allUsers
   notifications = do
     let userIds = Set.fromList $ map fst notifications
     userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails userIds
-    userIdToNotifyPref <- Map.mapMaybe id <$> fromSetM queryGetUserNotifyPref userIds
 
     pure $
-      let emails =
-            groupNotifications . flip mapMaybe notifications $ \(uid, notif) ->
-              fmap (uid,) $ renderNotification userIdToNotifyPref uid notif
+      let emails = groupNotifications $ map (fmap renderNotification) notifications
       in flip mapMaybe (Map.toList emails) $ \((uid, group), emailContent) ->
           case uid `Map.lookup` userIdToDetails of
             Nothing -> Nothing
@@ -984,8 +983,8 @@ getNotificationEmails
 
     {----- Render notifications -----}
 
-    renderNotification :: Map UserId NotifyPref -> UserId -> Notification -> Maybe (EmailContent, NotificationGroup)
-    renderNotification userIdToNotifyPref uid = \case
+    renderNotification :: Notification -> (EmailContent, NotificationGroup)
+    renderNotification = \case
       NotifyNewVersion{..} ->
         generalNotification $
           renderNotifyNewVersion
@@ -1016,18 +1015,14 @@ getNotificationEmails
             notifyAddedTags
             notifyDeletedTags
       NotifyDependencyUpdate{..} ->
-        case uid `Map.lookup` userIdToNotifyPref of
-          Nothing -> Nothing
-          Just notifyPref ->
-            Just
-              ( renderNotifyDependencyUpdate
-                  notifyPref
-                  notifyPackageId
-                  notifyWatchedPackages
-              , DependencyNotification notifyPackageId
-              )
+        ( renderNotifyDependencyUpdate
+            notifyTriggerBounds
+            notifyPackageId
+            notifyWatchedPackages
+        , DependencyNotification notifyPackageId
+        )
       where
-        generalNotification emailContent = Just (emailContent, GeneralNotification)
+        generalNotification = (, GeneralNotification)
 
     renderNotifyNewVersion pkg =
       EmailContentParagraph $
@@ -1065,20 +1060,20 @@ getNotificationEmails
       where
         showTags = emailContentIntercalate ", " . map emailContentDisplay . Set.toList
 
-    renderNotifyDependencyUpdate NotifyPref{..} dep revDeps =
+    renderNotifyDependencyUpdate triggerBounds dep revDeps =
       let depName = emailContentDisplay (packageName dep)
           depVersion = emailContentDisplay (packageVersion dep)
       in
         foldMap EmailContentParagraph
           [ "The dependency " <> renderPkgLink dep <> " has been uploaded or revised."
-          , case notifyDependencyTriggerBounds of
+          , case triggerBounds of
               Always ->
                 "You have requested to be notified for each upload or revision \
                 \of a dependency."
               _ ->
                 "You have requested to be notified when a dependency isn't \
                 \accepted by any of your maintained packages."
-          , case notifyDependencyTriggerBounds of
+          , case triggerBounds of
               Always ->
                 "These are your packages that depend on " <> depName <> ":"
               BoundsOutOfRange ->
