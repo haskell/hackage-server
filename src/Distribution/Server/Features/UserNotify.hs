@@ -705,12 +705,7 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
         dependencyUpdateNotifications <- concatMapM (genDependencyUpdateList idx revIdx . pkgInfoToPkgId) revisionsAndUploads
 
         emails <-
-          getNotificationEmails serverEnv userDetailsFeature queryGetUserNotifyPref users
-            ( foldr1 (Map.unionWith (<>))
-              [
-              ]
-            , mempty
-            ) $
+          getNotificationEmails serverEnv userDetailsFeature queryGetUserNotifyPref users $
             concat
               [ revisionUploadNotifications
               , groupActionNotifications
@@ -910,7 +905,6 @@ getNotificationEmails
   -> UserDetailsFeature
   -> (UserId -> IO (Maybe NotifyPref))
   -> Users.Users
-  -> (Map UserId EmailContent, Map (UserId, PackageId) EmailContent)
   -> [(UserId, Notification)]
   -> IO [Mail]
 getNotificationEmails
@@ -918,26 +912,15 @@ getNotificationEmails
   UserDetailsFeature{queryUserDetails}
   queryGetUserNotifyPref
   allUsers
-  (generalEmails, dependencyUpdateEmails)
   notifications = do
     let userIds = Set.fromList $ map fst notifications
-    let userIds' = Set.fromList . Map.keys $ generalEmails <> Map.mapKeys fst dependencyUpdateEmails
-    userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails (userIds <> userIds')
+    userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails userIds
     userIdToNotifyPref <- Map.mapMaybe id <$> fromSetM queryGetUserNotifyPref userIds
 
     pure $
       let emails =
-            groupNotifications . concat $
-              [ Map.toList
-                . fmap (, GeneralNotification)
-                $ generalEmails
-              , Map.toList
-                . Map.mapKeys fst
-                . Map.mapWithKey (\(_, pkg) emailContent -> (emailContent, DependencyNotification pkg))
-                $ dependencyUpdateEmails
-              , flip mapMaybe notifications $ \(uid, notif) ->
-                  fmap (uid,) $ renderNotification userIdToNotifyPref uid notif
-              ]
+            groupNotifications . flip mapMaybe notifications $ \(uid, notif) ->
+              fmap (uid,) $ renderNotification userIdToNotifyPref uid notif
       in flip mapMaybe (Map.toList emails) $ \((uid, group), emailContent) ->
           case uid `Map.lookup` userIdToDetails of
             Nothing -> Nothing
