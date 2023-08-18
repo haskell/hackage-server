@@ -80,7 +80,10 @@ import Text.XHtml hiding (base, text, (</>))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Encoding as TL
 import qualified Data.Vector as Vec
 
 -- A feature to manage notifications to users when package metadata, etc is updated.
@@ -689,8 +692,7 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
         revisionUploadNotifications <- concatMapM (genRevUploadList notifyPrefs trimLastTime now) revisionsAndUploads
 
         groupActions <- collectAdminActions trimLastTime now
-        groupActionNotifications <- foldM (genGroupUploadList notifyPrefs) Map.empty groupActions
-        let groupActionEmails = mconcat . mapMaybe (describeGroupAction users) <$> groupActionNotifications
+        groupActionNotifications <- concatMapM (genGroupUploadList notifyPrefs) groupActions
 
         docReports <- collectDocReport trimLastTime now
         docReportNotifications <- foldM (genDocReportList notifyPrefs) Map.empty docReports
@@ -708,14 +710,14 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
         emails <-
           getNotificationEmails serverEnv userDetailsFeature users
             ( foldr1 (Map.unionWith (<>))
-              [ groupActionEmails
-              , docReportEmails
+              [ docReportEmails
               , tagProposalEmails
               ]
             , dependencyEmails
             ) $
             concat
               [ revisionUploadNotifications
+              , groupActionNotifications
               ]
         mapM_ sendNotifyEmailAndDelay emails
 
@@ -727,11 +729,6 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
         serverBaseURI
           { uriPath = "/package/" <> display (packageName pkg) <> "-" <> display (packageVersion pkg)
           }
-
-    formatTimeUser users t u =
-      EmailContentText . T.pack $
-        display (Users.userIdToName users u) ++ " [" ++
-        (formatTime defaultTimeLocale "%c" t) ++ "]"
 
     collectRevisionsAndUploads earlier now = do
         pkgIndex <- queryGetPackageIndex
@@ -797,18 +794,36 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
                     { notifyPackageInfo = pkg
                     }
 
-    genGroupUploadList notifyPrefs mp ga =
-        let (actor,gdesc) = case ga of (_,uid,Admin_GroupAddUser _ gd,_) -> (uid, gd)
-                                       (_,uid,Admin_GroupDelUser _ gd,_) -> (uid, gd)
-            addNotification uid m = if not (notifyOptOut npref) && notifyMaintainerGroup npref
-                                      then Map.insertWith (++) uid [ga] m
-                                      else m
-                where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
-        in case gdesc of
-           (MaintainerGroup pkg) -> do
-              maintainers <- queryUserGroup $ maintainersGroup (mkPackageName $ BS.unpack pkg)
-              return $ foldr addNotification mp (toList (delete actor maintainers))
-           _ -> return mp
+    genGroupUploadList notifyPrefs groupAction =
+      let notifyAllMaintainers actor pkg notif = do
+            maintainers <- queryUserGroup $ maintainersGroup (mkPackageName $ BS.unpack pkg)
+            pure . flip mapMaybe (toList maintainers) $ \uid -> do
+              let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+              guard $ uid /= actor
+              guard $ not notifyOptOut
+              Just (uid, notif)
+      in case groupAction of
+        (time, userActor, Admin_GroupAddUser userSubject (MaintainerGroup pkg), reason) ->
+          notifyAllMaintainers userActor pkg $
+            NotifyMaintainerUpdate
+              { notifyMaintainerUpdateType = MaintainerAdded
+              , notifyUserActor = userActor
+              , notifyUserSubject = userSubject
+              , notifyPackageName = mkPackageName $ BS.unpack pkg
+              , notifyReason = TL.toStrict $ TL.decodeUtf8 reason
+              , notifyUpdatedAt = time
+              }
+        (time, userActor, Admin_GroupDelUser userSubject (MaintainerGroup pkg), reason) ->
+          notifyAllMaintainers userActor pkg $
+            NotifyMaintainerUpdate
+              { notifyMaintainerUpdateType = MaintainerRemoved
+              , notifyUserActor = userActor
+              , notifyUserSubject = userSubject
+              , notifyPackageName = mkPackageName $ BS.unpack pkg
+              , notifyReason = TL.toStrict $ TL.decodeUtf8 reason
+              , notifyUpdatedAt = time
+              }
+        _ -> pure []
 
     genDocReportList notifyPrefs mp pkgDoc = do
         let addNotification uid m =
@@ -831,28 +846,6 @@ userNotifyFeature serverEnv@ServerEnv{serverBaseURI, serverCron}
     genDependencyUpdateList idx revIdx pid =
       Map.mapKeys (, pid) <$>
         getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pid
-
-    describeGroupAction users (time, uid, act, reason) =
-      fmap
-        ( \message ->
-            EmailContentParagraph ("Group modified by " <> formatTimeUser users time uid <> ":")
-            <> EmailContentList
-                [ message
-                , "Reason: " <> emailContentLBS reason
-                ]
-        )
-        $ case act of
-            (Admin_GroupAddUser tn (MaintainerGroup pkg)) ->
-              Just $
-                emailContentDisplay (Users.userIdToName users tn)
-                  <> " added to maintainers for "
-                  <> emailContentLBS pkg
-            (Admin_GroupDelUser tn (MaintainerGroup pkg)) ->
-              Just $
-                emailContentDisplay (Users.userIdToName users tn)
-                  <> " removed from maintainers for "
-                  <> emailContentLBS pkg
-            _ -> Nothing
 
     describeDocReport (pkg, success) =
       EmailContentParagraph $
@@ -917,6 +910,16 @@ data Notification
       { notifyPackageId :: PackageId
       , notifyRevisions :: [UploadInfo]
       }
+  | NotifyMaintainerUpdate
+      { notifyMaintainerUpdateType :: NotifyMaintainerUpdateType
+      , notifyUserActor :: UserId
+      , notifyUserSubject :: UserId
+      , notifyPackageName :: PackageName
+      , notifyReason :: Text
+      , notifyUpdatedAt :: UTCTime
+      }
+
+data NotifyMaintainerUpdateType = MaintainerAdded | MaintainerRemoved
 
 -- | Notifications in the same group are batched in the same email.
 --
@@ -1024,6 +1027,15 @@ getNotificationEmails
           renderNotifyNewRevision
             notifyPackageId
             notifyRevisions
+      NotifyMaintainerUpdate{..} ->
+        generalNotification $
+          renderNotifyMaintainerUpdate
+            notifyMaintainerUpdateType
+            notifyUserActor
+            notifyUserSubject
+            notifyPackageName
+            notifyReason
+            notifyUpdatedAt
       where
         generalNotification emailContent = Just (emailContent, GeneralNotification)
 
@@ -1036,7 +1048,21 @@ getNotificationEmails
       EmailContentParagraph ("Package metadata revision(s), " <> renderPkgLink pkg <> ":")
       <> EmailContentList (map (uncurry $ flip renderUserTime) $ sortOn (Down . fst) revs)
 
+    renderNotifyMaintainerUpdate updateType userActor userSubject pkg reason time =
+      EmailContentParagraph ("Group modified by " <> renderUserTime userActor time <> ":")
+      <> EmailContentList
+          [ case updateType of
+              MaintainerAdded ->
+                renderUser userSubject <> " added to maintainers for " <> renderPackageName pkg
+              MaintainerRemoved ->
+                renderUser userSubject <> " removed from maintainers for " <> renderPackageName pkg
+          , "Reason: " <> EmailContentText reason
+          ]
+
+
     {----- Rendering helpers -----}
+
+    renderPackageName = emailContentStr . unPackageName
 
     renderPkgLink pkg =
       EmailContentLink
