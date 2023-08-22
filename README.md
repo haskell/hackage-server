@@ -7,25 +7,81 @@ This is the `hackage-server` code. This is what powers <http://hackage.haskell.o
 
 ## Installing dependencies
 
-`hackage-server` depends on `libgd` and `zlib`. You'll also need `libbrotli-dev` for enabling tests.
+`hackage-server` depends on `libgd`, `zlib`, and other system libraries. You'll also need `libbrotli-dev` for enabling tests.
 
-### [`nix develop`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-develop.html)
+You can use the Nix package manager to provide these dependencies, or install them manually.
 
-If you have the [Nix package manager](https://nixos.org/) installed, the easiest way to run `hackage-server` is by using `nix develop`. It should be unnecessary to install any dependencies manually. In this repository:
+### Using the [Nix package manager](https://nixos.org/) and provided [Nix Flake](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html)
+
+If you have the Nix package manager installed, you can build and run `hackage-server` without manually installing any dependencies.
+
+This uses `flake.nix`, implemented with [`srid/haskell-flake`](https://github.com/srid/haskell-flake).
+
+There are at least three ways to use this `flake.nix`. Clone this repository, enter the repository directory, then choose one of these options:
+
+#### [`nix develop`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-develop.html)
 
     nix develop
 
     (in develop shell)
-    $ cabal v2-run -- hackage-server init
+    $ cabal v2-run -- hackage-server init --static-dir=datafiles
 
-    $ cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
+    $ cabal v2-run -- hackage-server run --static-dir=datafiles --base-uri=http://127.0.0.1:8080
     hackage-server: Ready! Point your browser at http://127.0.0.1:8080
 
-`flake.nix` is provided; it uses [`srid/haskell-flake`](https://github.com/srid/haskell-flake).
+Note the `init` command will create a new folder `state` in your working directory.
 
 If you have [direnv](https://direnv.net/), `direnv allow` will load this `nix develop` shell automatically.
 
-`nix build` will build a `hackage-server` executable in `result/`. The Hackage dependencies are provided by the inputs specified in `flake.nix`. Because some of these inputs are unpublished commits on GitHub, this build should not be considered authoritative.
+#### [`nix build`](https://nixos.org/manual/nix/stable/command-ref/nix-build.html)
+
+    nix build
+
+This will produce a `hackage-server` executable in `result/`.
+
+For this executable, Hackage dependencies are not pulled from Hackage directly like usual. Hackage dependencies are provided by the [Nixpkgs](https://search.nixos.org/packages) [`haskell-updates`](https://github.com/NixOS/nixpkgs/tree/haskell-updates) branch, and a few [overrides in `flake.nix`](https://zero-to-flakes.com/haskell-flake/dependency#using-hackage-versions).
+
+#### [`nix run`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-run)
+
+`nix run` is more convenient to use than `nix build`.
+
+As with `nix build`, Hackage dependencies are not pulled from Hackage directly like usual. See caveat above.
+
+List the available [Flake Apps](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-run#apps) with [`nix flake show`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake-show.html):
+
+    $ nix flake show
+    ...
+    ├───apps
+    ...
+    │   │   ├───hackage-build: app
+    │   │   ├───hackage-import: app
+    │   │   ├───hackage-mirror: app
+    │   │   └───hackage-server: app
+    ...
+
+Run the `hackage-server` App:
+
+    nix run .#hackage-server -- init --static-dir=datafiles
+
+    nix run .#hackage-server -- run --static-dir=datafiles --base-uri=http://127.0.0.1:8080
+    
+The `.` refers to the `flake.nix` in your working directory. `#hackage-server` refers to the App specified in that `flake.nix`.
+
+`hackage-server` is the default App, so those commands can be shortened:
+
+    nix run . -- init --static-dir=datafiles
+
+    nix run . -- run --static-dir=datafiles --base-uri=http://127.0.0.1:8080
+
+##### Not working
+
+Please note this App *cannot* be run [directly from GitHub](https://determinate.systems/posts/nix-run) like this:
+
+    nix run github:haskell/hackage-server -- init --static-dir=datafiles
+
+    nix run github:haskell/hackage-server -- run --static-dir=datafiles --base-uri=http://127.0.0.1:8080
+
+because `hackage-server` expects the directories `state` and `datafiles` to exist in the working directory.
 
 ### Manually
 
