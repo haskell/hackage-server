@@ -34,14 +34,14 @@
               # Setting to null should remove this tool from defaults.
               ghcid = null;
               haskell-language-server = null;
-
               inherit (pkgs)
                 cabal-install
                 ghc
 
-                glibc
-                icu67
-                zlib
+                # https://github.com/haskell/hackage-server/pull/1219#issuecomment-1597140858
+                # glibc
+                # icu67
+                # zlib
                 openssl
                 cryptodev
                 pkg-config
