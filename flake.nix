@@ -22,6 +22,7 @@
           settings = {
             hackage-server.check = false;
             heist.check = false;
+            threads.check = false;
           };
           packages = {
             Cabal.source = "3.10.1.0";
