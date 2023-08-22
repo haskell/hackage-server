@@ -22,6 +22,7 @@
           settings = {
             hackage-server.check = false;
             heist.check = false;
+            threads.check = false;
           };
           packages = {
             Cabal.source = "3.10.1.0";
@@ -32,7 +33,6 @@
           devShell = {
             tools = hp: {
               # Setting to null should remove this tool from defaults.
-              ghcid = null;
               haskell-language-server = null;
               inherit (pkgs)
                 cabal-install
