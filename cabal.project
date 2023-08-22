@@ -1,5 +1,5 @@
 packages:
-         .
+  .
 
 -- This comment moved below "packages" to fix parsing of this file
 -- by flake.nix
