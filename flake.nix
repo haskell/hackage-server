@@ -32,7 +32,6 @@
           devShell = {
             tools = hp: {
               # Setting to null should remove this tool from defaults.
-              ghcid = null;
               haskell-language-server = null;
               inherit (pkgs)
                 cabal-install
