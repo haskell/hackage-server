@@ -30,6 +30,5 @@ jobs:
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: nix build
 
-    # allow error until Flake check is improved
-    - continue-on-error: true
+    - continue-on-error: false
       run: nix flake check
