@@ -40,10 +40,10 @@
 
                 # https://github.com/haskell/hackage-server/pull/1219#issuecomment-1597140858
                 # glibc
-                # icu67
-                # zlib
+                icu67
+                zlib
                 openssl
-                cryptodev
+                # cryptodev
                 pkg-config
                 brotli
 
