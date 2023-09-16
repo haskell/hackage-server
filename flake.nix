@@ -23,9 +23,6 @@
             hackage-server.check = false;
             heist.check = false;
             fourmolu.check = false;
-            threads.check = false;
-            hls-cabal-plugin.check = false;
-            hls-fourmolu-plugin.check = false;
             hw-prim.jailbreak = true;
             hw-hspec-hedgehog.jailbreak = true;
             hw-fingertree.jailbreak = true;
