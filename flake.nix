@@ -22,18 +22,29 @@
           settings = {
             hackage-server.check = false;
             heist.check = false;
+            fourmolu.check = false;
             threads.check = false;
+            hls-cabal-plugin.check = false;
+            hls-fourmolu-plugin.check = false;
+            hw-prim.jailbreak = true;
+            hw-hspec-hedgehog.jailbreak = true;
+            hw-fingertree.jailbreak = true;
           };
           packages = {
             Cabal.source = "3.10.1.0";
             Cabal-syntax.source = "3.10.1.0";
             attoparsec-aeson.source = "2.1.0.0";
-            hedgehog.source = "1.3";
+            hedgehog.source = "1.4";
+            ormolu.source = "0.7.2.0";
+            fourmolu.source = "0.13.1.0";
+            tasty-hedgehog.source = "1.4.0.2";
+            ghc-lib-parser.source = "9.6.2.20230523";
+            ghc-lib-parser-ex.source = "9.6.0.2";
+            hlint.source = "3.6.1";
+            stylish-haskell.source = "0.14.5.0";
           };
           devShell = {
             tools = hp: {
-              # Setting to null should remove this tool from defaults.
-              haskell-language-server = null;
               inherit (pkgs)
                 cabal-install
                 ghc
