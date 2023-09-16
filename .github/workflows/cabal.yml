@@ -19,7 +19,7 @@ jobs:
         os: [ubuntu-latest]
     name: Cabal with GHC ${{ matrix.ghc }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Haskell
         uses: haskell-actions/setup@v2
         with:
@@ -46,7 +46,7 @@ jobs:
   #       os: [ubuntu-latest]
   #   name: Cabal with GHC ${{ matrix.ghc }} and mtl >= 2.3.1
   #   steps:
-  #     - uses: actions/checkout@v3
+  #     - uses: actions/checkout@v4
   #     - name: Setup Haskell
   #       uses: haskell/actions/setup@v2
   #       with:
