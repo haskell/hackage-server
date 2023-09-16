@@ -70,7 +70,7 @@
                 expat
               ;
             };
-            hlsCheck.enable = false;
+            hlsCheck.enable = true;
           };
         };
       };
