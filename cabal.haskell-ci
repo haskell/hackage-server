@@ -1,4 +1,4 @@
-branches: master ci*
+branches: master
 
 installed: +all -Cabal -Cabal-syntax -text -parsec -process
 
