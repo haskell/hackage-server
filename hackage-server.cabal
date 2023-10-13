@@ -28,8 +28,9 @@ license:      BSD-3-Clause
 license-file: LICENSE
 
 tested-with:
-  GHC == 9.6.2
-  GHC == 9.4.5
+  GHC == 9.8.1
+  GHC == 9.6.3
+  GHC == 9.4.7
   GHC == 9.2.8
   GHC == 9.0.2
   GHC == 8.10.7
@@ -130,8 +131,8 @@ common defaults
     , array                  >= 0.5   && < 0.6
     , base                   >= 4.13  && < 4.20
     , binary                 >= 0.8   && < 0.9
-    , bytestring             >= 0.10  && < 0.12
-    , containers            ^>= 0.6.0
+    , bytestring             >= 0.10  && < 0.13
+    , containers             >= 0.6.0 && < 0.8
     , deepseq                >= 1.4   && < 1.6
     , directory              >= 1.3   && < 1.4
     , filepath               >= 1.4   && < 1.5
@@ -139,7 +140,7 @@ common defaults
         -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , pretty                 >= 1.1   && < 1.2
     , process                >= 1.6   && < 1.7
-    , text                  ^>= 1.2.5.0 || ^>= 2.0
+    , text                  ^>= 1.2.5.0 || >= 2.0 && < 2.2
     , time                   >= 1.9   && < 1.13
     , transformers           >= 0.5   && < 0.7
     , unix                   >= 2.7   && < 2.9
@@ -450,7 +451,7 @@ library lib-server
     , stm                   ^>= 2.5.0
     , stringsearch          ^>= 0.3.6.6
     , tagged                ^>= 0.8.5
-    , xhtml                 ^>= 3000.2
+    , xhtml                 ^>= 3000.2.0.0
     , xmlgen                ^>= 0.6
     , xss-sanitize          ^>= 0.3.6
 
@@ -579,12 +580,12 @@ test-suite ReverseDependenciesTest
   main-is: ReverseDependenciesTest.hs
   build-tool-depends: hackage-server:hackage-server
   build-depends:
-    , tasty        ^>= 1.4
+    , tasty        ^>= 1.5
     , tasty-golden ^>= 2.3
     , tasty-hedgehog ^>= 1.4
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
-    , hedgehog     ^>= 1.3
+    , hedgehog     ^>= 1.4
     , exceptions
     , bimap
     , mime-mail
@@ -649,7 +650,7 @@ test-suite PackageTests
   build-depends:
     -- version constraints inherited from lib-server
     -- component-specific dependencies
-    , tasty        ^>= 1.4
+    , tasty        ^>= 1.5
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
 
@@ -667,7 +668,7 @@ test-suite HashTests
     , cryptohash-sha256
     , safecopy
       -- component-specific dependencies
-    , tasty       ^>= 1.4
+    , tasty       ^>= 1.5
     , tasty-hunit ^>= 0.10
 
 test-suite DocTests
