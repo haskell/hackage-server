@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingStrategies #-}
-module Distribution.Server.Features.Vouch where
+module Distribution.Server.Features.Vouch (VouchError(..), VouchSuccess(..), initVouchFeature, judgeVouch) where
 
 import Control.Monad (when, join)
 import Control.Monad.Except (runExceptT, throwError)
@@ -91,23 +91,32 @@ instance IsHackageFeature VouchFeature where
   getFeatureInterface = vouchFeatureInterface
 
 requiredCountOfVouches :: Int
-requiredCountOfVouches = 3
+requiredCountOfVouches = 2
 
 isWithinLastMonth :: UTCTime -> (UserId, UTCTime) -> Bool
 isWithinLastMonth now (_, vouchTime) =
-  addUTCTime (30 * nominalDay) vouchTime < now
+  addUTCTime (30 * nominalDay) vouchTime >= now
 
-data Err
+data VouchError
   = NotAnUploader
   | You'reTooNew
   | VoucheeAlreadyUploader
   | AlreadySufficientlyVouched
   | YouAlreadyVouched
+  deriving stock (Show, Eq)
 
-data Success = AddVouchComplete | AddVouchIncomplete
+data VouchSuccess = AddVouchComplete | AddVouchIncomplete Int
+  deriving stock (Show, Eq)
 
-judge :: Group.UserIdSet -> UTCTime -> UserId -> [(UserId, UTCTime)] -> [(UserId, UTCTime)] -> UserId -> Either Err (Either Err Success)
-judge ugroup now vouchee vouchersForVoucher existingVouchers voucher = runExceptT $ do
+judgeVouch
+  :: Group.UserIdSet
+  -> UTCTime
+  -> UserId
+  -> [(UserId, UTCTime)]
+  -> [(UserId, UTCTime)]
+  -> UserId
+  -> Either VouchError VouchSuccess
+judgeVouch ugroup now vouchee vouchersForVoucher existingVouchers voucher = join . runExceptT $ do
   when (not (voucher `Group.member` ugroup)) $
     throwError NotAnUploader
   -- You can only vouch for non-uploaders, so if this list has items, the user is uploader because of these vouches.
@@ -116,33 +125,35 @@ judge ugroup now vouchee vouchersForVoucher existingVouchers voucher = runExcept
     throwError You'reTooNew
   when (vouchee `Group.member` ugroup) $
     throwError VoucheeAlreadyUploader
-  when (length existingVouchers >= 3) $
+  when (length existingVouchers >= requiredCountOfVouches) $
     throwError AlreadySufficientlyVouched
   when (voucher `elem` map fst existingVouchers) $
     throwError YouAlreadyVouched
   pure $
     if length existingVouchers == requiredCountOfVouches - 1
        then AddVouchComplete
-       else AddVouchIncomplete
+       else
+         let stillRequired = requiredCountOfVouches - length existingVouchers - 1
+          in AddVouchIncomplete stillRequired
 
 renderToLBS :: (UserId -> ServerPartE UserInfo) -> [(UserId, UTCTime)] -> ServerPartE TemplateAttr
 renderToLBS lookupUserInfo vouches = do
-  rendered <- traverse renderVouchers vouches
+  rendered <- traverse (renderVouchers lookupUserInfo) vouches
   pure $
     templateUnescaped "vouches" $
       if null rendered
          then LBS.pack "Nobody has vouched yet."
          else LBS.intercalate mempty rendered
-  where
-  renderVouchers :: (UserId, UTCTime) -> ServerPartE LBS.ByteString
-  renderVouchers (uid, timestamp) = do
-    info <- lookupUserInfo uid
-    let UserName name = userName info
-        -- We don't need to show millisecond precision
-        -- So we truncate it off here
-        truncated = truncate $ utctDayTime timestamp
-        newUTCTime = timestamp {utctDayTime = secondsToDiffTime truncated}
-    pure . toUTF8LBS . prettyHtmlFragment . li . stringToHtml $ name <> " vouched on " <> formatShow iso8601Format newUTCTime
+
+renderVouchers :: (UserId -> ServerPartE UserInfo) -> (UserId, UTCTime) -> ServerPartE LBS.ByteString
+renderVouchers lookupUserInfo (uid, timestamp) = do
+  info <- lookupUserInfo uid
+  let UserName name = userName info
+      -- We don't need to show millisecond precision
+      -- So we truncate it off here
+      truncated = truncate $ utctDayTime timestamp
+      newUTCTime = timestamp {utctDayTime = secondsToDiffTime truncated}
+  pure . toUTF8LBS . prettyHtmlFragment . li . stringToHtml $ name <> " vouched on " <> formatShow iso8601Format newUTCTime
 
 initVouchFeature :: ServerEnv -> IO (UserFeature -> UploadFeature -> IO VouchFeature)
 initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
@@ -170,7 +181,7 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
         vouchee <- lookupUserName =<< userNameInPath dpath
         vouchersForVoucher <- queryState vouchState $ GetVouchesFor voucher
         existingVouchers <- queryState vouchState $ GetVouchesFor vouchee
-        case join $ judge ugroup now vouchee vouchersForVoucher existingVouchers voucher of
+        case judgeVouch ugroup now vouchee vouchersForVoucher existingVouchers voucher of
           Left NotAnUploader ->
             errBadRequest "Not an uploader" [MText "You must be an uploader yourself to vouch for other users."]
           Left You'reTooNew ->
@@ -191,8 +202,7 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
                   [ "msg" $= "Added vouch. User is now an uploader!"
                   , param
                   ]
-              AddVouchIncomplete -> do
-                let stillRequired = requiredCountOfVouches - length existingVouchers - 1
+              AddVouchIncomplete stillRequired ->
                 pure . toResponse $ vouchTemplate
                   [ "msg" $=
                          "Added vouch. User still needs "

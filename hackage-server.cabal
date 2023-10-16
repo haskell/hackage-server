@@ -574,6 +574,14 @@ test-suite HighLevelTest
     , io-streams      ^>= 1.5.0.1
     , http-io-streams ^>= 0.1.6.1
 
+test-suite VouchTest
+  import: test-defaults
+  type: exitcode-stdio-1.0
+  main-is: VouchTest.hs
+  build-depends:
+    , tasty        ^>= 1.4
+    , tasty-hunit  ^>= 0.10
+
 test-suite ReverseDependenciesTest
   import: test-defaults
   type: exitcode-stdio-1.0
