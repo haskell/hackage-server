@@ -24,7 +24,7 @@ module Distribution.Server.Features.Core (
 
 -- stdlib
 import qualified Codec.Compression.GZip                             as GZip
-import           Data.Aeson                                         (Value (..))
+import           Data.Aeson                                         (Value (..), toJSON)
 import qualified Data.Aeson.Key                                     as Key
 import qualified Data.Aeson.KeyMap                                  as KeyMap
 import           Data.ByteString.Lazy                               (ByteString)
@@ -40,6 +40,7 @@ import           Distribution.Server.Prelude
 import           Distribution.Server.Features.Core.Backup
 import           Distribution.Server.Features.Core.State
 import           Distribution.Server.Features.Security.Migration
+import           Distribution.Server.Features.Security.SHA256       (sha256)
 import           Distribution.Server.Features.Users
 import           Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BlobStorage          as BlobStorage
@@ -728,12 +729,15 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       pkginfo <- packageInPath dpath >>= lookupPackageId
       users   <- queryGetUserDb
       let revisions = pkgMetadataRevisions pkginfo
-          revisionToObj rev (_, (utime, uid)) =
-            let uname = userIdToName users uid in
+          revisionToObj rev (cabalFileText, (utime, uid)) =
+            let uname = userIdToName users uid
+                hash = sha256 (cabalFileByteString cabalFileText)
+            in
             Object $ KeyMap.fromList
               [ (Key.fromString "number", Number (fromIntegral rev))
               , (Key.fromString "user", String (Text.pack (display uname)))
               , (Key.fromString "time", String (Text.pack (formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime)))
+              , (Key.fromString "sha256", toJSON hash)
               ]
           revisionsJson = Array $ Vec.imap revisionToObj revisions
       return (toResponse revisionsJson)
