@@ -212,7 +212,7 @@
               <th id=arrow-description><a href="javascript: sort('description')">Description</a></th>
               <th id=arrow-tags><a href="javascript: sort('tags')">Tags</a></th>
               <th id=arrow-lastUpload><a href="javascript: sort('lastUpload')">Last U/L</a></th>
-              <th id=arrow-lastVersion><a href="javascript: sort('lastVersion')">Last Version</a></th>
+              <th id=arrow-referenceVersion><a href="javascript: sort('referenceVersion')">Reference Version</a></th>
               <th id=arrow-maintainers><a href="javascript: sort('maintainers')">Maintainers</a></th>
             </tr>
           </thead>

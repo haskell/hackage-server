@@ -52,7 +52,7 @@ htmlUtilities CoreFeature{coreResource}
                          , td $ toHtml $ itemDesc item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
                          , td $ toHtml $ formatTime defaultTimeLocale "%F" (itemLastUpload item)
-                         , td $ toHtml $ itemLastVersion item
+                         , td $ toHtml $ itemReferenceVersion item
                          , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
                          ]
         where
