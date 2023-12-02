@@ -52,6 +52,7 @@ import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.Users
+import Distribution.Server.Features.Vouch
 
 import Distribution.Server.Util.Email
 
@@ -437,6 +438,7 @@ initUserNotifyFeature :: ServerEnv
                           -> ReportsFeature
                           -> TagsFeature
                           -> ReverseFeature
+                          -> VouchFeature
                           -> IO UserNotifyFeature)
 initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
@@ -448,10 +450,10 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                    [serverTemplatesDir, serverTemplatesDir </> "UserNotify"]
                    [ "user-notify-form.html" ]
 
-    return $ \users core uploadfeature adminlog userdetails reports tags revers -> do
+    return $ \users core uploadfeature adminlog userdetails reports tags revers vouch -> do
       let feature = userNotifyFeature env
                       users core uploadfeature adminlog userdetails reports tags
-                      revers notifyState templates
+                      revers vouch notifyState templates
       return feature
 
 data InRange = InRange | OutOfRange
@@ -582,6 +584,7 @@ userNotifyFeature :: ServerEnv
                   -> ReportsFeature
                   -> TagsFeature
                   -> ReverseFeature
+                  -> VouchFeature
                   -> StateComponent AcidState NotifyData
                   -> Templates
                   -> UserNotifyFeature
@@ -594,6 +597,7 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
                   ReportsFeature{..}
                   TagsFeature{..}
                   ReverseFeature{queryReverseIndex}
+                  VouchFeature{drainQueuedNotifications}
                   notifyState templates
   = UserNotifyFeature {..}
 
@@ -709,6 +713,8 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
         revIdx <- liftIO queryReverseIndex
         dependencyUpdateNotifications <- concatMapM (genDependencyUpdateList notifyPrefs idx revIdx . pkgInfoToPkgId) revisionsAndUploads
 
+        vouchNotifications <- fmap (, NotifyVouchingCompleted) <$> drainQueuedNotifications
+
         emails <-
           getNotificationEmails serverEnv userDetailsFeature users $
             concat
@@ -717,6 +723,7 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
               , docReportNotifications
               , tagProposalNotifications
               , dependencyUpdateNotifications
+              , vouchNotifications
               ]
         mapM_ sendNotifyEmailAndDelay emails
 
@@ -897,6 +904,7 @@ data Notification
         -- ^ Packages maintained by user that depend on updated dep
       , notifyTriggerBounds :: NotifyTriggerBounds
       }
+  | NotifyVouchingCompleted
   deriving (Show)
 
 data NotifyMaintainerUpdateType = MaintainerAdded | MaintainerRemoved
@@ -1021,6 +1029,10 @@ getNotificationEmails
             notifyWatchedPackages
         , DependencyNotification notifyPackageId
         )
+      NotifyVouchingCompleted ->
+        generalNotification
+          renderNotifyVouchingCompleted
+
       where
         generalNotification = (, GeneralNotification)
 
@@ -1085,6 +1097,13 @@ getNotificationEmails
                 <> " (they do accept the second-highest version):"
           ]
         <> EmailContentList (map renderPkgLink revDeps)
+
+    renderNotifyVouchingCompleted =
+      EmailContentParagraph
+        "You have received all necessary vouches. \
+        \You have been added the the 'uploaders' group. \
+        \You can now upload packages to Hackage. \
+        \Note that packages cannot be deleted, so be careful."
 
     {----- Rendering helpers -----}
 

@@ -347,6 +347,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                         tagsFeature
                         tarIndexCacheFeature
 
+    vouchFeature <- mkVouchFeature
+                      usersFeature
+                      uploadFeature
+
     userNotifyFeature <- mkUserNotifyFeature
                            usersFeature
                            coreFeature
@@ -356,15 +360,12 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                            reportsCoreFeature
                            tagsFeature
                            reverseFeature
+                           vouchFeature
 
     packageFeedFeature <- mkPackageFeedFeature
                             coreFeature
                             usersFeature
                             tarIndexCacheFeature
-
-    vouchFeature <- mkVouchFeature
-                      usersFeature
-                      uploadFeature
 
     browseFeature <- mkBrowseFeature
                        coreFeature
