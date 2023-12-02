@@ -152,7 +152,7 @@ renderToLBS lookupUserInfo vouches = do
   pure $
     templateUnescaped "vouches" $
       if null rendered
-         then LBS.pack "Nobody has vouched yet."
+         then LBS.pack "Nobody has endorsed yet."
          else LBS.intercalate mempty rendered
 
 renderVouchers :: (UserId -> ServerPartE UserInfo) -> (UserId, UTCTime) -> ServerPartE LBS.ByteString
@@ -181,6 +181,7 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
         param <- renderToLBS lookupUserInfo vouches
         pure . toResponse $ vouchTemplate
           [ "msg" $= ""
+          , "requiredNumber" $= show requiredCountOfVouches
           , param
           ]
       handlePostVouch :: DynamicPath -> ServerPartE Response
@@ -193,15 +194,15 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
         existingVouchers <- queryState vouchState $ GetVouchesFor vouchee
         case judgeVouch ugroup now vouchee vouchersForVoucher existingVouchers voucher of
           Left NotAnUploader ->
-            errBadRequest "Not an uploader" [MText "You must be an uploader yourself to vouch for other users."]
+            errBadRequest "Not an uploader" [MText "You must be an uploader yourself to endorse other users."]
           Left You'reTooNew ->
-            errBadRequest "You're too new" [MText "The latest of the vouches for your user must be at least 30 days old."]
+            errBadRequest "You're too new" [MText "The latest of the endorsements for your user must be at least 30 days old."]
           Left VoucheeAlreadyUploader ->
-            errBadRequest "Vouchee already uploader" [MText "You can't vouch for this user, since they are already an uploader."]
+            errBadRequest "Endorsee already uploader" [MText "You can't endorse this user, since they are already an uploader."]
           Left AlreadySufficientlyVouched ->
-            errBadRequest "Already sufficiently vouched" [MText "There are already a sufficient number of vouches for this user."]
+            errBadRequest "Already sufficiently endorsed" [MText "There are already a sufficient number of endorsements for this user."]
           Left YouAlreadyVouched ->
-            errBadRequest "Already vouched" [MText "You have already vouched for this user."]
+            errBadRequest "Already endorsed" [MText "You have already endorsed this user."]
           Right result -> do
             updateState vouchState $ PutVouch vouchee (voucher, now)
             param <- renderToLBS lookupUserInfo $ existingVouchers ++ [(voucher, now)]
@@ -216,26 +217,26 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
 
                 liftIO $ Group.addUserToGroup uploadersGroup vouchee
                 pure . toResponse $ vouchTemplate
-                  [ "msg" $= "Added vouch. User is now an uploader!"
+                  [ "msg" $= "Added endorsement. User is now an uploader!"
                   , param
                   ]
               AddVouchIncomplete stillRequired ->
                 pure . toResponse $ vouchTemplate
                   [ "msg" $=
-                         "Added vouch. User still needs "
+                         "Added endorsement. User still needs "
                       <> show stillRequired
-                      <> if stillRequired == 1 then " vouch" else " vouches"
+                      <> if stillRequired == 1 then " endorsement" else " endorsements"
                       <> " to become uploader."
                   , param
                   ]
     return $ VouchFeature {
       vouchFeatureInterface =
-        (emptyHackageFeature "vouch")
-          { featureDesc = "Vouching for users getting upload permission."
+        (emptyHackageFeature "endorse")
+          { featureDesc = "Endorsing users such that they get upload permission."
           , featureResources =
-            [(resourceAt "/user/:username/vouch")
-              { resourceDesc = [(GET, "list people vouching")
-                               ,(POST, "vouch for user")
+            [(resourceAt "/user/:username/endorse")
+              { resourceDesc = [(GET, "list people endorsing")
+                               ,(POST, "endorse for user")
                                ]
               , resourceGet = [("html", handleGetVouches)]
               , resourcePost = [("html", handlePostVouch)]

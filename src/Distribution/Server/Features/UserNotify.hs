@@ -1100,7 +1100,7 @@ getNotificationEmails
 
     renderNotifyVouchingCompleted =
       EmailContentParagraph
-        "You have received all necessary vouches. \
+        "You have received all necessary endorsements. \
         \You have been added the the 'uploaders' group. \
         \You can now upload packages to Hackage. \
         \Note that packages cannot be deleted, so be careful."
