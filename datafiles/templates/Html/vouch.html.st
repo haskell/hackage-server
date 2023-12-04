@@ -18,9 +18,7 @@ $hackagePageHeader()$
 </form>
 
 <p>Endorsing cannot be undone! When the user has $requiredNumber$ endorsements, the user
-can upload packages. Note that users are, to a certain degree, held accountable
-for the actions of the users they endorse. Only endorse people you know.</p>
-
+will be added to the uploaders group, and allowed to upload packages. Only endorse people who you trust to upload packages responsibly.</p>
 <ul>
   $vouches$
 </ul>
