@@ -580,7 +580,7 @@ test-suite VouchTest
   type: exitcode-stdio-1.0
   main-is: VouchTest.hs
   build-depends:
-    , tasty        ^>= 1.4
+    , tasty        ^>= 1.5
     , tasty-hunit  ^>= 0.10
 
 test-suite ReverseDependenciesTest
