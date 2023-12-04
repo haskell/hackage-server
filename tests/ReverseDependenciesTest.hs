@@ -422,6 +422,8 @@ getNotificationEmailsTests =
               , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
               , notifyTriggerBounds = BoundsOutOfRange
               }
+    , testGolden "Render NotifyVouchingCompleted" "getNotificationEmails-NotifyVouchingCompleted.golden" $
+        fmap renderMail $ getNotificationEmailMocked userWatcher NotifyVouchingCompleted
     , testGolden "Render general notifications in single batched email" "getNotificationEmails-batched.golden" $ do
         emails <-
           getNotificationEmailsMocked . map (userWatcher,) $
@@ -455,6 +457,7 @@ getNotificationEmailsTests =
       NotifyDocsBuild{} -> ()
       NotifyUpdateTags{} -> ()
       NotifyDependencyUpdate{} -> ()
+      NotifyVouchingCompleted{} -> ()
 
     isGeneral = \case
       NotifyNewVersion{} -> True
@@ -463,6 +466,7 @@ getNotificationEmailsTests =
       NotifyDocsBuild{} -> True
       NotifyUpdateTags{} -> True
       NotifyDependencyUpdate{} -> False
+      NotifyVouchingCompleted{} -> True
 
     -- userWatcher = user getting the notification
     -- userActor   = user that did the action
@@ -539,6 +543,7 @@ getNotificationEmailsTests =
             <$> genPackageId
             <*> Gen.list (Range.linear 1 10) genPackageId
             <*> Gen.element [Always, NewIncompatibility, BoundsOutOfRange]
+        , pure NotifyVouchingCompleted
         ]
 
     genPackageName = mkPackageName <$> Gen.string (Range.linear 1 30) Gen.unicode
