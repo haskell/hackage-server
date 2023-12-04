@@ -23,7 +23,7 @@ jobs:
         extra_nix_config: |
           trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hackage-server.cachix.org-1:iw0iRh6+gsFIrxROFaAt5gKNgIHejKjIfyRdbpPYevY=
           substituters = https://hydra.iohk.io https://cache.nixos.org/ https://hackage-server.cachix.org/
-    - uses: cachix/cachix-action@v12
+    - uses: cachix/cachix-action@v13
       with:
         # https://nix.dev/tutorials/continuous-integration-github-actions#setting-up-github-actions
         name: hackage-server
