@@ -218,6 +218,7 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
                 liftIO $ Group.addUserToGroup uploadersGroup vouchee
                 pure . toResponse $ vouchTemplate
                   [ "msg" $= "Added endorsement. User is now an uploader!"
+                  , "requiredNumber" $= show requiredCountOfVouches                  
                   , param
                   ]
               AddVouchIncomplete stillRequired ->
