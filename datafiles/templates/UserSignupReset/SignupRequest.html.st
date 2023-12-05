@@ -58,12 +58,18 @@ such people choose a name (and username) that looks at home among a collection
 of real names; we will be unwilling to add Kittenlover97 to the package
 uploader group.
 
-<p class="registration-email">
-After your account is created, you cannot upload until you
-<b>contact the hackage trustees</b> at hackage-trustees@haskell.org and
-<b>send an email</b> (including your login username) requesting to be added to the uploader group.
-(This measure is unfortunately necessary to prevent spam accounts).
-</p>
+<p class="registration-email"> After your account is created, you
+cannot upload until you are added to the uploaders group. You can be
+added to the uploaders group by asking two confirmed uploaders to
+endorse you (information will be provided in the email).
+
+<br><br>
+
+Alternately, you can <b>contact the hackage trustees</b> at
+hackage-trustees@haskell.org and <b>send an email</b> (including your
+login username and the package you intend to upload) requesting to be
+added to the uploader group.  (This measure is unfortunately necessary
+to prevent spam accounts).</p>
 
 <p><input type="submit" value="Request account">
 
@@ -112,7 +118,7 @@ var hash = document.getElementById("hash");
 
 function changeCaptcha() {
   var xmlHttp = new XMLHttpRequest();
-  xmlHttp.onreadystatechange = function() { 
+  xmlHttp.onreadystatechange = function() {
       if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
         var res = JSON.parse(xmlHttp.responseText);
         if (typeof res == "object" && typeof res.timestamp == "string" && typeof res.hash == "string" && typeof res.base64image == "string") {

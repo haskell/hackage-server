@@ -14,7 +14,10 @@ $hackagePageHeader()$
 <p>An email has been sent to <b>$useremail$</b>
 
 <p>The email will contain a link to a page where
-you can set your password and activate your account.
+  you can set your password and activate your account.
+
+<p>It will also contain information on how to be authorized
+  as a hackage uploader.
 
 <p>Note that these activation links do eventually expire,
 so don't leave it too long!

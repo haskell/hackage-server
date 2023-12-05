@@ -491,6 +491,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
                                    uriPath = "/users/register-request/"
                                           ++ renderNonce nonce
                                  }
+              , "endorselink" $- serverBaseURI {uriPath = "/user/" ++ username ++ "/endorse"
               , "serverhost"  $= serverBaseURI
               ]
             Just ourHost = uriAuthority serverBaseURI
