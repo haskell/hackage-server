@@ -4,7 +4,9 @@ module Main (main) where
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
+import Data.Function (on)
 import Data.List
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Version
 import Network.Browser
 import System.Directory
@@ -118,10 +120,14 @@ mirrorOnce verbosity opts
                 | null (selectedPkgs opts) = pkgsMissingFromDest
                 | otherwise                = subsetIndex (selectedPkgs opts)
                                                          pkgsMissingFromDest
-              pkgsToMirror' = filter (\(PkgIndexInfo pkg _ _ _) ->
-                                         pkg `Set.notMember` missingPkgs
-                                      && pkg `Set.notMember` unmirrorablePkgs )
-                                     pkgsToMirror
+              byPkgId cmp = on cmp (\(PkgIndexInfo pkg _ _ _) -> pkg)
+              pkgsToMirror'
+                -- Remove any duplicates in the index from metadata revisions
+                = map NonEmpty.head . NonEmpty.groupBy (byPkgId (==)) . sortBy (byPkgId compare)
+                $ filter (\(PkgIndexInfo pkg _ _ _) ->
+                             pkg `Set.notMember` missingPkgs
+                          && pkg `Set.notMember` unmirrorablePkgs)
+                         pkgsToMirror
               mirrorCount   = length pkgsToMirror'
               ignoreCount   = length pkgsToMirror - mirrorCount
 

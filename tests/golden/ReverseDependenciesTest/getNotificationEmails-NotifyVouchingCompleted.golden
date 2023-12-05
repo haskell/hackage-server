@@ -1,0 +1,35 @@
+From: =?utf-8?Q?Hackage_website?= <noreply@hackage.haskell.org>
+To: =?utf-8?Q?user-watcher?= <user-watcher@example.com>
+Subject: [Hackage] Maintainer Notifications
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="YIYrWcf3to"
+
+--YIYrWcf3to
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+You have received all necessary endorsements=2E You have been added the the=
+ 'uploaders' group=2E You can now upload packages to Hackage=2E Note that p=
+ackages cannot be deleted, so be careful=2E
+
+You can adjust your notification preferences at
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify (https://hackage=
+=2Ehaskell=2Eorg/user/user-watcher/notify)
+
+
+--YIYrWcf3to
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+
+<p>
+You have received all necessary endorsements=2E You have been added the the=
+ 'uploaders' group=2E You can now upload packages to Hackage=2E Note that p=
+ackages cannot be deleted, so be careful=2E
+</p>
+<p>
+You can adjust your notification preferences at
+<br /><a href=3D"https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify">=
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify</a>
+</p>
+--YIYrWcf3to--

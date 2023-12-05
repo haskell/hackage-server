@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts, BangPatterns, TypeFamilies #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -119,6 +120,9 @@ instance SafeCopy VersionRange where
 instance SafeCopy OS where
     errorTypeName _ = "OS"
 
+#if !MIN_VERSION_Cabal_syntax(3,11,0)
+    putCopy (OtherOS "haiku") = contain $ putWord8 18
+#endif
     putCopy (OtherOS s) = contain $ putWord8 0 >> safePut s
     putCopy Linux       = contain $ putWord8 1
     putCopy Windows     = contain $ putWord8 2
@@ -137,6 +141,9 @@ instance SafeCopy OS where
     putCopy Hurd        = contain $ putWord8 15
     putCopy Android     = contain $ putWord8 16
     putCopy Wasi        = contain $ putWord8 17
+#if MIN_VERSION_Cabal_syntax(3,11,0)
+    putCopy Haiku       = contain $ putWord8 18
+#endif
 
     getCopy = contain $ do
       tag <- getWord8
@@ -159,6 +166,11 @@ instance SafeCopy OS where
         15 -> return Hurd
         16 -> return Android
         17 -> return Wasi
+#if MIN_VERSION_Cabal_syntax(3,11,0)
+        18 -> return Haiku
+#else
+        18 -> return $ OtherOS "haiku"
+#endif
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
@@ -382,7 +394,13 @@ instance Arbitrary OS where
   arbitrary = oneof [ pure OtherOS <*> vectorOf 3 (choose ('A', 'Z'))
                     , pure Linux, pure Windows, pure OSX, pure FreeBSD
                     , pure OpenBSD, pure NetBSD, pure Solaris, pure AIX
-                    , pure HPUX, pure IRIX, pure HaLVM, pure IOS ]
+                    , pure HPUX, pure IRIX, pure HaLVM, pure IOS
+#if MIN_VERSION_Cabal_syntax(3,11,0)
+                    , pure Haiku
+#else
+                    , pure $ OtherOS "haiku"
+#endif
+                    ]
 
 instance Arbitrary FlagName where
   arbitrary = mkFlagName <$> vectorOf 4 (choose ('a', 'z'))

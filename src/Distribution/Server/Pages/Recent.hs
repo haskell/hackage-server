@@ -241,7 +241,7 @@ releaseItem users hostURI pkgInfo =
     title = display (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
     body  = fromShortText $ synopsis (packageDescription (pkgDesc pkgInfo))
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
-         ++ if null body then "" else "<p>" ++ body
+         ++ if null body then "" else "<p>" ++ body ++ "</p>"
     user = Users.userIdToName users userId
 
     (time, userId) = pkgOriginalUploadInfo pkgInfo
@@ -261,7 +261,7 @@ revisionItem users hostURI pkgInfo =
     title = display (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
     body  = "Revision #" ++ show revision
     desc  = "<i>Revised by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
-         ++ if null body then "" else "<p>" ++ body
+         ++ if null body then "" else "<p>" ++ body ++ "</p>"
     user = Users.userIdToName users userId
     revision = pkgNumRevisions pkgInfo - 1
 

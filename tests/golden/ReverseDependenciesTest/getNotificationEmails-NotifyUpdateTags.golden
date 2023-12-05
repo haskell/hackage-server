@@ -1,0 +1,38 @@
+From: =?utf-8?Q?Hackage_website?= <noreply@hackage.haskell.org>
+To: =?utf-8?Q?user-watcher?= <user-watcher@example.com>
+Subject: [Hackage] Maintainer Notifications
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="YIYrWcf3to"
+
+--YIYrWcf3to
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Pending tag proposal for base:
+
+* Additions: bsd3, library, prelude
+* Deletions: bad, example, foo
+
+You can adjust your notification preferences at
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify (https://hackage=
+=2Ehaskell=2Eorg/user/user-watcher/notify)
+
+
+--YIYrWcf3to
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+
+<p>
+Pending tag proposal for base:
+</p>
+<ul>
+  <li>Additions: bsd3, library, prelude</li>
+  <li>Deletions: bad, example, foo</li>
+</ul>
+<p>
+You can adjust your notification preferences at
+<br /><a href=3D"https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify">=
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify</a>
+</p>
+--YIYrWcf3to--

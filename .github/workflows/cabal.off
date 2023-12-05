@@ -1,0 +1,60 @@
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+name: Cabal
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ['9.8', '9.6', '9.4', '9.2']
+        cabal: ['latest']
+        os: [ubuntu-latest]
+    name: Cabal with GHC ${{ matrix.ghc }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+      - name: Install dependencies
+        run: sudo apt install -y libbrotli-dev libgd-dev
+      - name: Build
+        run: cabal build all --enable-tests
+      - name: Test
+        run: cabal test all --enable-tests
+      - name: Haddock
+        run: cabal haddock all
+
+  ## Andreas, 2023-08-03: mtl-2.3 is covered by GHC 9.6
+  #
+  # build_with_mtl_2_3:
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       ghc: ['9.4.4']
+  #       cabal: ['3.8.1.0']
+  #       os: [ubuntu-latest]
+  #   name: Cabal with GHC ${{ matrix.ghc }} and mtl >= 2.3.1
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Setup Haskell
+  #       uses: haskell/actions/setup@v2
+  #       with:
+  #         ghc-version: ${{ matrix.ghc }}
+  #         cabal-version: ${{ matrix.cabal }}
+  #     - name: Install dependencies
+  #       run: sudo apt install -y libbrotli-dev libgd-dev
+  #     - name: Build dependencies with mtl >= 2.3.1
+  #       # 2022-12-30: 'transformers >= 0.6' is needed because of happstack-server
+  #       run: cabal build all --disable-tests --dependencies-only -O0 --constraint 'mtl >= 2.3.1' --constraint 'transformers >= 0.6' --allow-newer='Cabal:mtl' --allow-newer='Cabal:transformers'
+  #     - name: Build with mtl >= 2.3.1
+  #       # 2022-12-30: 'transformers >= 0.6' is needed because of happstack-server
+  #       run: cabal build all --disable-tests -O0 --constraint 'mtl >= 2.3.1' --constraint 'transformers >= 0.6' --allow-newer='Cabal:mtl' --allow-newer='Cabal:transformers'
