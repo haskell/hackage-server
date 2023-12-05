@@ -1,0 +1,34 @@
+From: =?utf-8?Q?Hackage_website?= <noreply@hackage.haskell.org>
+To: =?utf-8?Q?user-watcher?= <user-watcher@example.com>
+Subject: [Hackage] Maintainer Notifications
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="YIYrWcf3to"
+
+--YIYrWcf3to
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Package upload, base-4=2E18=2E0=2E0 (https://hackage=2Ehaskell=2Eorg/packag=
+e/base-4=2E18=2E0=2E0), by user-actor [Wed Jan  1 00:00:00 UTC 2020]
+
+You can adjust your notification preferences at
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify (https://hackage=
+=2Ehaskell=2Eorg/user/user-watcher/notify)
+
+
+--YIYrWcf3to
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+
+<p>
+Package upload, <a href=3D"https://hackage=2Ehaskell=2Eorg/package/base-4=
+=2E18=2E0=2E0">base-4=2E18=2E0=2E0</a>, by user-actor [Wed Jan  1 00:00:00 =
+UTC 2020]
+</p>
+<p>
+You can adjust your notification preferences at
+<br /><a href=3D"https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify">=
+https://hackage=2Ehaskell=2Eorg/user/user-watcher/notify</a>
+</p>
+--YIYrWcf3to--

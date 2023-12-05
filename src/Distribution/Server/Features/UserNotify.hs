@@ -2,20 +2,26 @@
              TypeFamilies, TemplateHaskell,
              RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns,
              DefaultSignatures, OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 module Distribution.Server.Features.UserNotify (
     NotifyData(..),
     NotifyPref(..),
-    NotifyRevisionRange,
+    NotifyRevisionRange(..),
     NotifyTriggerBounds(..),
     UserNotifyFeature(..),
     defaultNotifyPrefs,
-    dependencyReleaseEmails,
+    getUserNotificationsOnRelease,
     importNotifyPref,
     initUserNotifyFeature,
     notifyDataToCSV,
+
+    -- * getNotificationEmails
+    Notification(..),
+    NotifyMaintainerUpdateType(..),
+    getNotificationEmails,
   ) where
 
 import Prelude hiding (lookup)
@@ -46,8 +52,13 @@ import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.Users
+import Distribution.Server.Features.Vouch
 
+import Distribution.Server.Util.Email
+
+import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Control.Concurrent (threadDelay)
@@ -58,26 +69,27 @@ import Data.Bifunctor (Bifunctor(second))
 import Data.Bimap (lookup, lookupR)
 import Data.Graph (Vertex)
 import Data.Hashable (Hashable(..))
-import Data.List (maximumBy, sortBy)
-import Data.List (intercalate)
+import Data.List (maximumBy, sortOn)
 import Data.Maybe (fromJust, fromMaybe, listToMaybe, mapMaybe, maybeToList)
-import Data.Ord (comparing)
+import Data.Ord (Down(..), comparing)
 import Data.SafeCopy (Migrate(migrate), MigrateFrom, base, deriveSafeCopy, extension)
 import Data.Time (UTCTime(..), addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
 import Data.Time.Format.Internal (buildTime)
 import Data.Typeable (Typeable)
 import Distribution.Text (display)
 import Network.Mail.Mime
-import Network.URI(uriAuthority, uriRegName, uriToString)
+import Network.URI (uriAuthority, uriPath, uriRegName)
 import Text.CSV (CSV, Record)
 import Text.PrettyPrint hiding ((<>))
 import Text.XHtml hiding (base, text, (</>))
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
-import qualified Data.ByteString.Char8 as BSS
 import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Encoding as TL
 import qualified Data.Vector as Vec
 
 -- A feature to manage notifications to users when package metadata, etc is updated.
@@ -426,6 +438,7 @@ initUserNotifyFeature :: ServerEnv
                           -> ReportsFeature
                           -> TagsFeature
                           -> ReverseFeature
+                          -> VouchFeature
                           -> IO UserNotifyFeature)
 initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
@@ -437,32 +450,34 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                    [serverTemplatesDir, serverTemplatesDir </> "UserNotify"]
                    [ "user-notify-form.html" ]
 
-    return $ \users core uploadfeature adminlog userdetails reports tags revers -> do
+    return $ \users core uploadfeature adminlog userdetails reports tags revers vouch -> do
       let feature = userNotifyFeature env
                       users core uploadfeature adminlog userdetails reports tags
-                      revers notifyState templates
+                      revers vouch notifyState templates
       return feature
 
 data InRange = InRange | OutOfRange
 
--- | Get the release notification emails when a new package has been released.
---   The new package (PackageIdentifier) must already be in the indexes.
---   The keys in the returned map are the new packages. The values are the revDeps.
-dependencyReleaseEmails
+-- | Get the users to notify when a new package has been released.
+--   The new package (PackageId) must already be in the indexes.
+--   The keys in the returned map are the user to notify, and the values are
+--   the packages the user maintains that depend on the new package (i.e. the
+--   reverse dependencies of the new package).
+getUserNotificationsOnRelease
   :: forall m. Monad m
   => (PackageName -> m UserIdSet)
   -> PackageIndex.PackageIndex PkgInfo
   -> ReverseIndex
   -> (UserId -> m (Maybe NotifyPref))
-  -> PackageIdentifier
-  -> m (Map.Map (UserId, PackageId) [PackageId])
-dependencyReleaseEmails _ index _ _ pkgId
+  -> PackageId
+  -> m (Map.Map UserId [PackageId])
+getUserNotificationsOnRelease _ index _ _ pkgId
   | let versionsForNewRelease = packageVersion <$> PackageIndex.lookupPackageName index (pkgName pkgId)
   , pkgVersion pkgId /= maximum versionsForNewRelease
   -- If e.g. a minor bugfix release is made for an old release series, never notify maintainers.
   -- Only start checking if the new version is the highest.
   = pure mempty
-dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref pkgId =
+getUserNotificationsOnRelease userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref pkgId =
   case lookup (pkgName pkgId) nodemap :: Maybe NodeId of
     Nothing -> pure mempty
     Just foundPackage -> do
@@ -473,8 +488,8 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
         revDepNames = mapMaybe (`lookupR` nodemap) (Set.toList vertices)
       toNotify <- traverse maintainersToNotify revDepNames
       pure $
-        Map.fromList
-          [ ( (maintainerId, pkgId), [ packageId latestRevDep ] )
+        Map.fromListWith (++)
+          [ (maintainerId, [packageId latestRevDep])
           | (ids, latestRevDep) <- toNotify
           , maintainerId <- ids
           ]
@@ -505,7 +520,7 @@ dependencyReleaseEmails userSetIdForPackage index (ReverseIndex revs nodemap dep
           case notifyDependencyTriggerBounds of
             NewIncompatibility -> do
               let allNewUploadPkgInfos = PackageIndex.lookupPackageName index (pkgName pkgId)
-                  sortedByVersionDesc = sortBy (flip $ comparing packageVersion) allNewUploadPkgInfos
+                  sortedByVersionDesc = sortOn (Down . packageVersion) allNewUploadPkgInfos
                   mSecondHighest =
                     case sortedByVersionDesc of
                       _:b:_ -> Just b
@@ -569,18 +584,20 @@ userNotifyFeature :: ServerEnv
                   -> ReportsFeature
                   -> TagsFeature
                   -> ReverseFeature
+                  -> VouchFeature
                   -> StateComponent AcidState NotifyData
                   -> Templates
                   -> UserNotifyFeature
-userNotifyFeature ServerEnv{serverBaseURI, serverCron}
+userNotifyFeature serverEnv@ServerEnv{serverCron}
                   UserFeature{..}
                   CoreFeature{..}
                   UploadFeature{..}
                   AdminLogFeature{..}
-                  UserDetailsFeature{..}
+                  userDetailsFeature@UserDetailsFeature{..}
                   ReportsFeature{..}
                   TagsFeature{..}
                   ReverseFeature{queryReverseIndex}
+                  VouchFeature{drainQueuedNotifications}
                   notifyState templates
   = UserNotifyFeature {..}
 
@@ -681,74 +698,36 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         users <- queryGetUserDb
 
         revisionsAndUploads <- collectRevisionsAndUploads trimLastTime now
-        revisionUploadNotifications <- foldM (genRevUploadList notifyPrefs) Map.empty revisionsAndUploads
-        let revisionUploadEmails = map (describeRevision users trimLastTime now) <$> revisionUploadNotifications
+        revisionUploadNotifications <- concatMapM (genRevUploadList notifyPrefs trimLastTime now) revisionsAndUploads
 
         groupActions <- collectAdminActions trimLastTime now
-        groupActionNotifications <- foldM (genGroupUploadList notifyPrefs) Map.empty groupActions
-        let groupActionEmails = mapMaybe (describeGroupAction users) <$> groupActionNotifications
+        groupActionNotifications <- concatMapM (genGroupUploadList notifyPrefs) groupActions
 
         docReports <- collectDocReport trimLastTime now
-        docReportNotifications <- foldM (genDocReportList notifyPrefs) Map.empty docReports
-        let docReportEmails = map describeDocReport <$> docReportNotifications
+        docReportNotifications <- concatMapM (genDocReportList notifyPrefs) docReports
 
         tagProposals <- collectTagProposals
-        tagProposalNotifications <- foldM (genTagProposalList notifyPrefs) Map.empty tagProposals
-        let tagProposalEmails = map describeTagProposal <$> tagProposalNotifications
+        tagProposalNotifications <- concatMapM (genTagProposalList notifyPrefs) tagProposals
 
         idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
-        let
-          genEmails :: PackageIdentifier -> IO (Map.Map (UserId, PackageId) [PackageId])
-          genEmails =
-            dependencyReleaseEmails (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref
-        dependencyEmailMaps <- traverse (genEmails . pkgInfoToPkgId) revisionsAndUploads
-        let
-          dependencyEmailMap :: Map.Map (UserId, PackageId) [PackageId]
-          dependencyEmailMap = Map.unionsWith (++) dependencyEmailMaps
-          emailText :: MonadIO m => (UserId, PackageId) -> [PackageId] -> m [String]
-          emailText (uId, dep) revDeps = do
-            mPrefs <- queryGetUserNotifyPref uId
-            pure $
-              case mPrefs of
-              Nothing -> []
-              Just NotifyPref{notifyDependencyTriggerBounds} ->
-                [ "The dependency " <> display dep <> " has been updated."
-                ] ++
-                  case notifyDependencyTriggerBounds of
-                    Always ->
-                      [ "You have requested to be notified for each upload/revision of a dependency. \
-                        \These are your packages that depend on " <> display dep <> ":"
-                      ]
-                    outOfRangeOption ->
-                      [ "You have requested to be notified when a dependency isn't accepted by any of \
-                        \your maintained packages."
-                      ] ++
-                        case outOfRangeOption of
-                          NewIncompatibility ->
-                            [ "The following packages did accept the second highest version of "
-                              <> display (packageName dep) <> "."
-                            ]
-                          _ ->
-                            []
-                        ++
-                      [ "These are your packages that require " <> display (packageName dep) <> " but don't accept " <> display (packageVersion dep) <> ":"
-                      ]
-                  ++ map display revDeps
-        dependencyEmailTextMaps <- Map.mapKeys fst <$> Map.traverseWithKey emailText dependencyEmailMap
+        dependencyUpdateNotifications <- concatMapM (genDependencyUpdateList notifyPrefs idx revIdx . pkgInfoToPkgId) revisionsAndUploads
 
-        -- Concat the constituent email parts such that only one email is sent per user
-        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ foldr1 (Map.unionWith (++)) $ [revisionUploadEmails, groupActionEmails, docReportEmails, tagProposalEmails]
+        vouchNotifications <- fmap (, NotifyVouchingCompleted) <$> drainQueuedNotifications
 
-        -- Dependency email notifications consist of multiple paragraphs, so it would be confusing if concatenated.
-        -- So they're sent independently.
-        mapM_ (sendNotifyEmailAndDelay users) . Map.toList $ dependencyEmailTextMaps
+        emails <-
+          getNotificationEmails serverEnv userDetailsFeature users $
+            concat
+              [ revisionUploadNotifications
+              , groupActionNotifications
+              , docReportNotifications
+              , tagProposalNotifications
+              , dependencyUpdateNotifications
+              , vouchNotifications
+              ]
+        mapM_ sendNotifyEmailAndDelay emails
 
         updateState notifyState (SetNotifyTime now)
-
-    formatTimeUser users t u =
-        display (Users.userIdToName users u) ++ " [" ++
-        (formatTime defaultTimeLocale "%c" t) ++ "]"
 
     collectRevisionsAndUploads earlier now = do
         pkgIndex <- queryGetPackageIndex
@@ -780,122 +759,373 @@ userNotifyFeature ServerEnv{serverBaseURI, serverCron}
         writeMemState tagProposalLog Map.empty
         pure $ Map.toList logs
 
-    genRevUploadList notifyPrefs mp pkg = do
+    genRevUploadList notifyPrefs earlier now pkg = do
          pkgIndex <- queryGetPackageIndex
          let actor = pkgLatestUploadUser pkg
              isRevision = pkgNumRevisions pkg > 1
              pkgName = packageName . pkgInfoId $ pkg
              mbLatest = listToMaybe . take 1 . reverse $ PackageIndex.lookupPackageName pkgIndex pkgName
              isLatestVersion = maybe False (\x -> pkgInfoId pkg == pkgInfoId x) mbLatest
-             addNotification uid m =
-                if not (notifyOptOut npref) &&
-                  (isRevision &&
-                     ( notifyRevisionRange npref == NotifyAllVersions ||
-                     ((notifyRevisionRange npref == NotifyNewestVersion) && isLatestVersion))
-                   ||
-                   not isRevision && notifyUpload npref)
-                then Map.insertWith (++) uid [pkg] m
-                else m
-                    where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
          maintainers <- queryUserGroup $ maintainersGroup (packageName . pkgInfoId $ pkg)
-         return $ foldr addNotification mp (toList (delete actor maintainers))
+         pure . flip mapMaybe (toList maintainers) $ \uid ->
+          fmap (uid,) $ do
+            let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+            guard $ uid /= actor
+            guard $ not notifyOptOut
+            if isRevision
+              then do
+                guard $
+                  notifyRevisionRange == NotifyAllVersions ||
+                  (notifyRevisionRange == NotifyNewestVersion && isLatestVersion)
+                Just
+                  NotifyNewRevision
+                    { notifyPackageId = pkgInfoId pkg
+                    , notifyRevisions =
+                        filter (\(t, _) -> earlier < t && t <= now)
+                          . map snd
+                          . Vec.toList
+                          $ pkgMetadataRevisions pkg
+                    }
+              else do
+                guard notifyUpload
+                Just
+                  NotifyNewVersion
+                    { notifyPackageInfo = pkg
+                    }
 
-    genGroupUploadList notifyPrefs mp ga =
-        let (actor,gdesc) = case ga of (_,uid,Admin_GroupAddUser _ gd,_) -> (uid, gd)
-                                       (_,uid,Admin_GroupDelUser _ gd,_) -> (uid, gd)
-            addNotification uid m = if not (notifyOptOut npref) && notifyMaintainerGroup npref
-                                      then Map.insertWith (++) uid [ga] m
-                                      else m
-                where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
-        in case gdesc of
-           (MaintainerGroup pkg) -> do
-              maintainers <- queryUserGroup $ maintainersGroup (mkPackageName $ BS.unpack pkg)
-              return $ foldr addNotification mp (toList (delete actor maintainers))
-           _ -> return mp
+    genGroupUploadList notifyPrefs groupAction =
+      let notifyAllMaintainers actor pkg notif = do
+            maintainers <- queryUserGroup $ maintainersGroup (mkPackageName $ BS.unpack pkg)
+            pure . flip mapMaybe (toList maintainers) $ \uid -> do
+              let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+              guard $ uid /= actor
+              guard $ not notifyOptOut
+              Just (uid, notif)
+      in case groupAction of
+        (time, userActor, Admin_GroupAddUser userSubject (MaintainerGroup pkg), reason) ->
+          notifyAllMaintainers userActor pkg $
+            NotifyMaintainerUpdate
+              { notifyMaintainerUpdateType = MaintainerAdded
+              , notifyUserActor = userActor
+              , notifyUserSubject = userSubject
+              , notifyPackageName = mkPackageName $ BS.unpack pkg
+              , notifyReason = TL.toStrict $ TL.decodeUtf8 reason
+              , notifyUpdatedAt = time
+              }
+        (time, userActor, Admin_GroupDelUser userSubject (MaintainerGroup pkg), reason) ->
+          notifyAllMaintainers userActor pkg $
+            NotifyMaintainerUpdate
+              { notifyMaintainerUpdateType = MaintainerRemoved
+              , notifyUserActor = userActor
+              , notifyUserSubject = userSubject
+              , notifyPackageName = mkPackageName $ BS.unpack pkg
+              , notifyReason = TL.toStrict $ TL.decodeUtf8 reason
+              , notifyUpdatedAt = time
+              }
+        _ -> pure []
 
-    genDocReportList notifyPrefs mp pkgDoc = do
-        let addNotification uid m =
-                if not (notifyOptOut npref) && notifyDocBuilderReport npref
-                then Map.insertWith (++) uid [pkgDoc] m
-                else m
-                    where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
-        maintainers <- queryUserGroup $ maintainersGroup (packageName . pkgInfoId . fst $ pkgDoc)
-        return $ foldr addNotification mp (toList maintainers)
+    genDocReportList notifyPrefs (pkg, success) = do
+      maintainers <- queryUserGroup $ maintainersGroup (packageName $ pkgInfoId pkg)
+      pure . flip mapMaybe (toList maintainers) $ \uid ->
+        fmap (uid,) $ do
+          let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+          guard $ not notifyOptOut
+          guard notifyDocBuilderReport
+          Just
+            NotifyDocsBuild
+              { notifyPackageId = pkgInfoId pkg
+              , notifyBuildSuccess = success
+              }
 
-    genTagProposalList notifyPrefs mp pkgTags = do
-        let addNotification uid m =
-                if not (notifyOptOut npref) && notifyPendingTags npref
-                then Map.insertWith (++) uid [pkgTags] m
-                else m
-                    where npref = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
-        maintainers <- queryUserGroup $ maintainersGroup (fst pkgTags)
-        return $ foldr addNotification mp (toList maintainers)
+    genTagProposalList notifyPrefs (pkg, (addedTags, deletedTags)) = do
+      maintainers <- queryUserGroup $ maintainersGroup pkg
+      pure . flip mapMaybe (toList maintainers) $ \uid ->
+        fmap (uid,) $ do
+          let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+          guard $ not notifyOptOut
+          guard notifyPendingTags
+          Just
+            NotifyUpdateTags
+              { notifyPackageName = pkg
+              , notifyAddedTags = addedTags
+              , notifyDeletedTags = deletedTags
+              }
 
-    describeRevision users earlier now pkg =
-          if pkgNumRevisions pkg <= 1
-            then "Package upload, " ++ display (packageName pkg) ++ ", by " ++
-                 formatTimeUser users  (pkgLatestUploadTime pkg) (pkgLatestUploadUser pkg)
-            else "Package metadata revision(s), " ++ display (packageName pkg) ++ ":\n" ++
-                  unlines (map (uncurry (formatTimeUser users) . snd) recentRevs)
-        where
-           revs = reverse $ Vec.toList (pkgMetadataRevisions pkg)
-           recentRevs = filter ((\x -> x > earlier && x <= now) . fst . snd) revs
+    genDependencyUpdateList notifyPrefs idx revIdx pkg = do
+      let toNotif uid watchedPkgs =
+            NotifyDependencyUpdate
+              { notifyPackageId = pkg
+              , notifyWatchedPackages = watchedPkgs
+              , notifyTriggerBounds =
+                  notifyDependencyTriggerBounds $
+                    fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+              }
+      Map.toList . Map.mapWithKey toNotif
+        <$> getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pkg
 
-    describeGroupAction users (time, uid, act, descr) =
-       case act of
-            (Admin_GroupAddUser tn (MaintainerGroup pkg)) -> Just $
-                    "Group modified by " ++ formatTimeUser users time uid ++ ":\n" ++
-                    display (Users.userIdToName users tn) ++ " added to maintainers for " ++ BS.unpack pkg ++
-                    "\n" ++ "reason: " ++ BS.unpack descr
-            (Admin_GroupDelUser tn (MaintainerGroup pkg)) -> Just $
-                    "Group modified by " ++ formatTimeUser users time uid ++ ":\n" ++
-                    display (Users.userIdToName users tn) ++ " removed from maintainers for " ++ BS.unpack pkg ++
-                    "\n" ++ "reason: " ++ BS.unpack descr
-            _ -> Nothing
+    sendNotifyEmailAndDelay :: Mail -> IO ()
+    sendNotifyEmailAndDelay email = do
+      -- TODO: if we need any configuration of sendmail stuff, has to go here
+      renderSendMail email
 
-    describeDocReport (pkg, doc) =
-      "Package doc build for " ++ display (packageName pkg) ++ ":\n" ++
-        if doc
-          then "Build successful."
-          else "Build failed."
+      -- delay sending out emails, to avoid spamming people if we accidentally
+      -- send out too many emails
+      threadDelay 250000
 
-    describeTagProposal (pkgName, (addTags, delTags)) =
-      "Pending tag propasal for " ++ display pkgName ++ ":\n" ++
-        "Addition: " ++ showTags addTags ++ "\n" ++
-        "Deletion: " ++ showTags delTags
+data Notification
+  = NotifyNewVersion
+      { notifyPackageInfo :: PkgInfo
+      }
+  | NotifyNewRevision
+      { notifyPackageId :: PackageId
+      , notifyRevisions :: [UploadInfo]
+      }
+  | NotifyMaintainerUpdate
+      { notifyMaintainerUpdateType :: NotifyMaintainerUpdateType
+      , notifyUserActor :: UserId
+      , notifyUserSubject :: UserId
+      , notifyPackageName :: PackageName
+      , notifyReason :: Text
+      , notifyUpdatedAt :: UTCTime
+      }
+  | NotifyDocsBuild
+      { notifyPackageId :: PackageId
+      , notifyBuildSuccess :: Bool
+      }
+  | NotifyUpdateTags
+      { notifyPackageName :: PackageName
+      , notifyAddedTags :: Set Tag
+      , notifyDeletedTags :: Set Tag
+      }
+  | NotifyDependencyUpdate
+      { notifyPackageId :: PackageId
+        -- ^ Dependency that was updated
+      , notifyWatchedPackages :: [PackageId]
+        -- ^ Packages maintained by user that depend on updated dep
+      , notifyTriggerBounds :: NotifyTriggerBounds
+      }
+  | NotifyVouchingCompleted
+  deriving (Show)
+
+data NotifyMaintainerUpdateType = MaintainerAdded | MaintainerRemoved
+  deriving (Show)
+
+-- | Notifications in the same group are batched in the same email.
+--
+-- TODO: How often do multiple notifications come in at once? Maybe it's
+-- fine to just send one email per notification.
+data NotificationGroup
+  = GeneralNotification
+  | DependencyNotification PackageId
+  deriving (Eq, Ord)
+
+-- | Get all the emails to send for the given notifications.
+getNotificationEmails
+  :: ServerEnv
+  -> UserDetailsFeature
+  -> Users.Users
+  -> [(UserId, Notification)]
+  -> IO [Mail]
+getNotificationEmails
+  ServerEnv{serverBaseURI}
+  UserDetailsFeature{queryUserDetails}
+  allUsers
+  notifications = do
+    let userIds = Set.fromList $ map fst notifications
+    userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails userIds
+
+    pure $
+      let emails = groupNotifications $ map (fmap renderNotification) notifications
+      in flip mapMaybe (Map.toList emails) $ \((uid, group), emailContent) ->
+          case uid `Map.lookup` userIdToDetails of
+            Nothing -> Nothing
+            Just AccountDetails{..} -> Just $
+              Mail
+                { mailFrom =
+                    Address
+                      { addressName = Just "Hackage website"
+                      , addressEmail = "noreply@" <> hostname
+                      }
+                , mailTo =
+                    [ Address
+                        { addressName = Just accountName
+                        , addressEmail = accountContactEmail
+                        }
+                    ]
+                , mailCc = []
+                , mailBcc = []
+                , mailHeaders =
+                    [ ("Subject", "[Hackage] " <> getEmailSubject group)
+                    ]
+                , mailParts =
+                    [ fromEmailContent $ emailContent <> updatePreferencesText uid
+                    ]
+                }
+  where
+    groupNotifications :: [(UserId, (EmailContent, NotificationGroup))] -> Map (UserId, NotificationGroup) EmailContent
+    groupNotifications =
+      Map.fromListWith (<>)
+        . map (\(uid, (emailContent, group)) -> ((uid, group), emailContent))
+
+    getEmailSubject = \case
+      GeneralNotification -> "Maintainer Notifications"
+      DependencyNotification pkg -> "Dependency Update: " <> T.pack (display pkg)
+
+    hostname =
+      case uriAuthority serverBaseURI of
+        Just auth -> T.pack $ uriRegName auth
+        Nothing -> error $ "Could not get hostname from serverBaseURI: " <> show serverBaseURI
+
+    updatePreferencesText uid =
+      EmailContentParagraph $
+        "You can adjust your notification preferences at" <> EmailContentSoftBreak
+        <> emailContentUrl
+            serverBaseURI
+              { uriPath =
+                  concatMap ("/" <>)
+                    [ "user"
+                    , display $ Users.userIdToName allUsers uid
+                    , "notify"
+                    ]
+              }
+
+    {----- Render notifications -----}
+
+    renderNotification :: Notification -> (EmailContent, NotificationGroup)
+    renderNotification = \case
+      NotifyNewVersion{..} ->
+        generalNotification $
+          renderNotifyNewVersion
+            notifyPackageInfo
+      NotifyNewRevision{..} ->
+        generalNotification $
+          renderNotifyNewRevision
+            notifyPackageId
+            notifyRevisions
+      NotifyMaintainerUpdate{..} ->
+        generalNotification $
+          renderNotifyMaintainerUpdate
+            notifyMaintainerUpdateType
+            notifyUserActor
+            notifyUserSubject
+            notifyPackageName
+            notifyReason
+            notifyUpdatedAt
+      NotifyDocsBuild{..} ->
+        generalNotification $
+          renderNotifyDocsBuild
+            notifyPackageId
+            notifyBuildSuccess
+      NotifyUpdateTags{..} ->
+        generalNotification $
+          renderNotifyUpdateTags
+            notifyPackageName
+            notifyAddedTags
+            notifyDeletedTags
+      NotifyDependencyUpdate{..} ->
+        ( renderNotifyDependencyUpdate
+            notifyTriggerBounds
+            notifyPackageId
+            notifyWatchedPackages
+        , DependencyNotification notifyPackageId
+        )
+      NotifyVouchingCompleted ->
+        generalNotification
+          renderNotifyVouchingCompleted
+
       where
-        showTags = intercalate ", " . map display . Set.toList
+        generalNotification = (, GeneralNotification)
 
-    sendNotifyEmailAndDelay :: Users.Users -> (UserId, [String]) -> IO ()
-    sendNotifyEmailAndDelay users (uid, ebody) = do
-        mudetails <- queryUserDetails uid
-        case mudetails of
-             Nothing -> return ()
-             Just (AccountDetails{accountContactEmail=eml, accountName=aname})-> do
-                 let mailFrom = Address (Just (T.pack "Hackage website"))
-                                    (T.pack ("noreply@" ++ uriRegName ourHost))
-                     mail     = (emptyMail mailFrom) {
-                       mailTo      = [Address (Just aname) eml],
-                       mailHeaders = [(BSS.pack "Subject",
-                                       T.pack "[Hackage] Maintainer Notifications")],
-                       mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
-                                             None DefaultDisposition []
-                                             (PartContent $ BS.pack $
-                                                   intercalate "\n\n" ebody
-                                                <> "\n\n"
-                                                <> adjustmentLinkParagraph
-                                             )
-                                     ]]
-                     }
-                     Just ourHost = uriAuthority serverBaseURI
+    renderNotifyNewVersion pkg =
+      EmailContentParagraph $
+        "Package upload, " <> renderPkgLink (pkgInfoId pkg) <> ", by " <>
+        renderUserTime (pkgLatestUploadUser pkg) (pkgLatestUploadTime pkg)
 
-                 renderSendMail mail --TODO: if we need any configuration of
-                                     -- sendmail stuff, has to go here
-                 threadDelay 250000
+    renderNotifyNewRevision pkg revs =
+      EmailContentParagraph ("Package metadata revision(s), " <> renderPkgLink pkg <> ":")
+      <> EmailContentList (map (uncurry $ flip renderUserTime) $ sortOn (Down . fst) revs)
+
+    renderNotifyMaintainerUpdate updateType userActor userSubject pkg reason time =
+      EmailContentParagraph ("Group modified by " <> renderUserTime userActor time <> ":")
+      <> EmailContentList
+          [ case updateType of
+              MaintainerAdded ->
+                renderUser userSubject <> " added to maintainers for " <> renderPackageName pkg
+              MaintainerRemoved ->
+                renderUser userSubject <> " removed from maintainers for " <> renderPackageName pkg
+          , "Reason: " <> EmailContentText reason
+          ]
+
+    renderNotifyDocsBuild pkg success =
+      EmailContentParagraph $
+        "Package doc build for " <> renderPkgLink pkg <> ":" <> EmailContentSoftBreak
+        <> if success
+            then "Build successful."
+            else "Build failed."
+
+    renderNotifyUpdateTags pkg addedTags deletedTags =
+      EmailContentParagraph ("Pending tag proposal for " <> emailContentDisplay pkg <> ":")
+      <> EmailContentList
+          [ "Additions: " <> showTags addedTags
+          , "Deletions: " <> showTags deletedTags
+          ]
       where
-        adjustmentLinkParagraph =
-          "You can adjust your notification preferences at\n"
-          <> uriToString id serverBaseURI ""
-          <> "/user/"
-          <> display (Users.userIdToName users uid)
-          <> "/notify"
+        showTags = emailContentIntercalate ", " . map emailContentDisplay . Set.toList
+
+    renderNotifyDependencyUpdate triggerBounds dep revDeps =
+      let depName = emailContentDisplay (packageName dep)
+          depVersion = emailContentDisplay (packageVersion dep)
+      in
+        foldMap EmailContentParagraph
+          [ "The dependency " <> renderPkgLink dep <> " has been uploaded or revised."
+          , case triggerBounds of
+              Always ->
+                "You have requested to be notified for each upload or revision \
+                \of a dependency."
+              _ ->
+                "You have requested to be notified when a dependency isn't \
+                \accepted by any of your maintained packages."
+          , case triggerBounds of
+              Always ->
+                "These are your packages that depend on " <> depName <> ":"
+              BoundsOutOfRange ->
+                "These are your packages that require " <> depName
+                <> " but don't accept " <> depVersion <> ":"
+              NewIncompatibility ->
+                "The following packages require " <> depName
+                <> " but don't accept " <> depVersion
+                <> " (they do accept the second-highest version):"
+          ]
+        <> EmailContentList (map renderPkgLink revDeps)
+
+    renderNotifyVouchingCompleted =
+      EmailContentParagraph
+        "You have received all necessary endorsements. \
+        \You have been added the the 'uploaders' group. \
+        \You can now upload packages to Hackage. \
+        \Note that packages cannot be deleted, so be careful."
+
+    {----- Rendering helpers -----}
+
+    renderPackageName = emailContentStr . unPackageName
+
+    renderPkgLink pkg =
+      EmailContentLink
+        (T.pack $ display pkg)
+        serverBaseURI
+          { uriPath = "/package/" <> display (packageName pkg) <> "-" <> display (packageVersion pkg)
+          }
+
+    renderUser = emailContentDisplay . Users.userIdToName allUsers
+
+    renderTime = emailContentStr . formatTime defaultTimeLocale "%c"
+
+    renderUserTime u t = renderUser u <> " [" <> renderTime t <> "]"
+
+{----- Utilities -----}
+
+fromSetM :: Monad m => (k -> m v) -> Set k -> m (Map k v)
+fromSetM f = traverse id . Map.fromSet f
+
+concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
+concatMapM f = fmap concat . mapM f

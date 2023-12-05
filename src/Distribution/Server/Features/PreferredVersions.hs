@@ -55,6 +55,7 @@ data VersionsFeature = VersionsFeature {
     versionsResource :: VersionsResource,
     deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
     putDeprecated :: PackageName -> ServerPartE Bool,
+    updatePreferredHook :: Hook (PackageName, PreferredInfo) (),
     putPreferred  :: PackageName -> ServerPartE (),
     updateDeprecatedTags :: IO (),
 
@@ -101,12 +102,14 @@ initVersionsFeature :: ServerEnv
 initVersionsFeature env@ServerEnv{serverStateDir} = do
     preferredState <- preferredStateComponent False serverStateDir
     deprecatedHook <- newHook
+    updatePreferredHook <- newHook
 
     return $ \core upload tags user -> do
 
       let feature = versionsFeature env
                                     core upload tags user
                                     preferredState deprecatedHook
+                                    updatePreferredHook
       return feature
 
 preferredStateComponent :: Bool -> FilePath -> IO (StateComponent AcidState PreferredVersions)
@@ -130,6 +133,7 @@ versionsFeature :: ServerEnv
                 -> UserFeature
                 -> StateComponent AcidState PreferredVersions
                 -> Hook (PackageName, Maybe [PackageName]) ()
+                -> Hook (PackageName, PreferredInfo) ()
                 -> VersionsFeature
 versionsFeature ServerEnv{ serverVerbosity = verbosity }
                 CoreFeature{..}
@@ -138,6 +142,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
                 UserFeature{ guardAuthorised_ }
                 preferredState
                 deprecatedHook
+                updatePreferredHook
   = VersionsFeature{..}
   where
     versionsFeatureInterface = (emptyHackageFeature "versions") {
@@ -315,6 +320,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
       (prefs, deprs) <- lookPrefRangeDeprecatedVersions pkgs
 
       prefinfo <- updateState preferredState (SetPreferredInfo pkgname prefs deprs)
+      runHook_ updatePreferredHook (pkgname, prefinfo { deprecatedVersions = deprs }) -- It seems they are not set
       updateIndexPackagePreferredVersions pkgname prefinfo
       where
         lookPrefRangeDeprecatedVersions pkgs = do

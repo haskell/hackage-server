@@ -29,6 +29,7 @@ import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.Pretty (prettyShow)
+import Distribution.Types.Version (Version)
 import Distribution.Utils.ShortText (fromShortText)
 
 import Control.Concurrent
@@ -89,8 +90,8 @@ data PackageItem = PackageItem {
     itemLastUpload :: !UTCTime,
     -- Hotness = recent downloads + stars + 2 * no rev deps
     itemHotness :: !Float,
-    -- Last version
-    itemLastVersion :: !String
+    -- Reference version (non-deprecated highest numbered version)
+    itemReferenceVersion :: !String
 }
 
 instance MemSize PackageItem where
@@ -98,8 +99,24 @@ instance MemSize PackageItem where
 
 
 emptyPackageItem :: PackageName -> PackageItem
-emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" []
-                                   0 0 0 False 0 0 0 (UTCTime (toEnum 0) 0) 0 ""
+emptyPackageItem pkg =
+  PackageItem {
+      itemName = pkg,
+      itemTags = Set.empty,
+      itemDeprecated = Nothing,
+      itemDesc = "",
+      itemMaintainer = [],
+      itemVotes = 0,
+      itemDownloads = 0,
+      itemRevDepsCount = 0,
+      itemHasLibrary = False,
+      itemNumExecutables = 0,
+      itemNumTests = 0,
+      itemNumBenchmarks = 0,
+      itemLastUpload = UTCTime (toEnum 0) 0,
+      itemHotness = 0,
+      itemReferenceVersion = ""
+  }
 
 
 initListFeature :: ServerEnv
@@ -134,10 +151,14 @@ initListFeature _env = do
 
       registerHookJust packageChangeHook isPackageAdd $ \pkg -> do
         let pkgname = packageName . packageId $ pkg
-        modifyItem pkgname $ \x -> x
-          {itemLastUpload = fst (pkgOriginalUploadInfo pkg)
-          ,itemLastVersion = prettyShow $ pkgVersion $ pkgInfoId pkg
-          }
+        prefsinfo <- queryGetPreferredInfo pkgname
+        index <- queryGetPackageIndex
+        let allVersions = packageVersion <$> PackageIndex.lookupPackageName index pkgname
+        modifyItem pkgname $ \x ->
+            updateReferenceVersion prefsinfo allVersions $
+              x
+                { itemLastUpload = fst (pkgOriginalUploadInfo pkg)
+                }
         runHook_ itemUpdate (Set.singleton pkgname)
 
       registerHook groupChangedHook $ \(gd,_,_,_,_) ->
@@ -173,6 +194,11 @@ initListFeature _env = do
       registerHook deprecatedHook $ \(pkgname, mpkgs) -> do
           modifyItem pkgname (updateDeprecation mpkgs)
           runHook_ itemUpdate (Set.singleton pkgname)
+
+      registerHook updatePreferredHook $ \(pkgname, prefsinfo) -> do
+          index <- queryGetPackageIndex
+          let allVersions = packageVersion <$> PackageIndex.lookupPackageName index pkgname
+          modifyItem pkgname $ updateReferenceVersion prefsinfo allVersions
 
       return feature
 
@@ -265,8 +291,9 @@ listFeature CoreFeature{..}
         votes <- pkgNumScore pkgname
         deprs <- queryGetDeprecatedFor pkgname
         maintainers <- queryUserGroup (maintainersGroup pkgname)
+        prefsinfo <- queryGetPreferredInfo pkgname
 
-        return $ (,) pkgname $ (updateDescriptionItem desc $ emptyPackageItem pkgname) {
+        return $ (,) pkgname . updateReferenceVersion prefsinfo [pkgVersion (pkgInfoId pkg)] $ (updateDescriptionItem desc $ emptyPackageItem pkgname) {
             itemTags       = tags
           , itemMaintainer = map (userIdToName users) (UserIdSet.toList maintainers)
           , itemDeprecated = deprs
@@ -275,7 +302,6 @@ listFeature CoreFeature{..}
           , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
           , itemRevDepsCount = intRevDirectCount
           , itemHotness = votes + fromIntegral (cmFind pkgname downs) + fromIntegral intRevDirectCount * 2
-          , itemLastVersion = prettyShow $ pkgVersion $ pkgInfoId pkg
           }
 
     ------------------------------
@@ -328,6 +354,17 @@ updateDeprecation pkgs item =
     item {
         itemDeprecated = pkgs
     }
+
+updateReferenceVersion :: PreferredInfo -> [Version] -> PackageItem -> PackageItem
+updateReferenceVersion prefsinfo allVersions item =
+    item {
+        itemReferenceVersion =
+          case nonDeprecatedVersion of
+            [] -> ""
+            xs -> prettyShow $ maximum xs
+    }
+  where
+    nonDeprecatedVersion = filter (`notElem` deprecatedVersions prefsinfo) allVersions
 
 updateReverseItem :: Int -> PackageItem -> PackageItem
 updateReverseItem revDirectCount item =

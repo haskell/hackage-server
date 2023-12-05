@@ -1,35 +1,82 @@
 {-# LANGUAGE OverloadedStrings, NamedFieldPuns, TypeApplications, ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 module Main where
 
+import           Control.Monad (guard)
 import           Control.Monad.IO.Class (liftIO)
+import qualified Control.Monad.Trans.State as State
 import qualified Data.Array as Arr
 import qualified Data.Bimap as Bimap
+import qualified Data.ByteString.Lazy as Lazy (ByteString)
+import qualified Data.ByteString.Lazy as ByteStringL
 import           Data.Foldable (for_)
 import           Data.Functor.Identity (Identity(..))
 import           Data.List (partition, foldl')
 import qualified Data.Map as Map
+import           Data.Maybe (fromJust)
 import qualified Data.Set as Set
+import qualified Data.Time as Time
+import           Data.Vector (Vector)
+import qualified Data.Vector as Vector
+import qualified Network.Mail.Mime as Mail
+import           Network.URI (parseURI)
+import           System.Random (mkStdGen)
 
 import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, packageName)
 import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), VersionStatus(NormalVersion), PreferredInfo(..))
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
-import Distribution.Server.Features.UserNotify (NotifyData(..), NotifyPref(..), NotifyRevisionRange, NotifyTriggerBounds(..), defaultNotifyPrefs, dependencyReleaseEmails, importNotifyPref, notifyDataToCSV)
+import Distribution.Server.Features.Tags (Tag(..))
+import Distribution.Server.Features.UserDetails (AccountDetails(..), UserDetailsFeature(..))
+import Distribution.Server.Features.UserNotify
+  ( Notification(..)
+  , NotifyMaintainerUpdateType(..)
+  , NotifyData(..)
+  , NotifyPref(..)
+  , NotifyRevisionRange(..)
+  , NotifyTriggerBounds(..)
+  , defaultNotifyPrefs
+  , getNotificationEmails
+  , getUserNotificationsOnRelease
+  , importNotifyPref
+  , notifyDataToCSV
+  )
 import Distribution.Server.Framework.BackupRestore (runRestore)
 import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
+import Distribution.Server.Framework.ServerEnv (ServerEnv(..))
 import Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Server.Packages.Types (PkgInfo(..))
-import Distribution.Server.Users.Types (UserId(..))
+import Distribution.Server.Packages.Types (CabalFileText(..), PkgInfo(..))
+import Distribution.Server.Users.Types
+  ( PasswdHash(..)
+  , UserAuth(..)
+  , UserId(..)
+  , UserName(..)
+  )
 import Distribution.Server.Users.UserIdSet as UserIdSet
+import qualified Distribution.Server.Users.Users as Users
 import Distribution.Version (mkVersion, version0)
 
-import Test.Tasty (TestTree, defaultMain, testGroup)
+import Test.Tasty (TestName, TestTree, defaultMain, testGroup)
+import Test.Tasty.Golden (goldenVsString)
+import Test.Tasty.Hedgehog (testProperty)
 import Test.Tasty.HUnit
 
 import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Gen as Gen
-import           Hedgehog ((===), Group(Group), MonadGen, Property, PropertyT, checkSequential, forAll, property)
+import           Hedgehog
+  ( (===)
+  , Group(Group)
+  , MonadGen
+  , Property
+  , PropertyT
+  , Range
+  , checkSequential
+  , forAll
+  , property
+  , withTests
+  )
 
 import RevDepCommon (Package(..), TestPackage(..), mkPackage, mkPackageWithCabalFileSuffix, packToPkgInfo)
 
@@ -54,6 +101,14 @@ newBaseReleased =
   [ mkPackage "base" [4,14] []
   , mkPackage "base" [4,15] []
   , mkPackage "mtl" [2,3] ["base < 4.15"]
+  ]
+
+newBaseReleasedMultiple :: [PkgInfo]
+newBaseReleasedMultiple =
+  [ mkPackage "base" [4,14] []
+  , mkPackage "base" [4,15] []
+  , mkPackage "mtl" [2,3] ["base < 4.15"]
+  , mkPackage "mtl2" [2,3] ["base < 4.15"]
   ]
 
 newVersionOfOldBase :: [PkgInfo]
@@ -104,6 +159,17 @@ allTests = testGroup "ReverseDependenciesTest"
       res <- revPackageName "mtl"
       let ref = Map.fromList [("beeline", (version0, Just NormalVersion))]
       assertEqual "reverse dependencies must be [beeline]" ref res
+  , testCase "with set [beeline->mtl, beeline2->mtl] and querying for mtl, we get [beeline, beeline2]" $ do
+      let pkgs =
+            [ mkPackage "base" [4,15] []
+            , mkPackage "mtl" [2,3] ["base"]
+            , mkPackage "beeline" [0] ["mtl"]
+            , mkPackage "beeline2" [0] ["mtl"]
+            ]
+      ReverseFeature{revPackageName} <- mkRevFeat pkgs
+      res <- revPackageName "mtl"
+      let ref = Map.fromList [("beeline", (version0, Just NormalVersion)), ("beeline2", (version0, Just NormalVersion))]
+      assertEqual "reverse dependencies must be [beeline, beeline2]" ref res
   , testCase "revPackageName selects only the version with an actual dependency, even if it is not the newest" $ do
       let pkgs =
             [ mkPackage "base" [4,15] []
@@ -167,7 +233,7 @@ allTests = testGroup "ReverseDependenciesTest"
       ReverseFeature{revDisplayInfo} <- mkRevFeat mtlBeelineLens
       res <- revDisplayInfo
       assertEqual "beeline preferred is old" (PreferredInfo [] [] Nothing, [mkVersion [0]]) (res "beeline")
-  , testCase "dependencyReleaseEmails sends notification" $ do
+  , testCase "getUserNotificationsOnRelease sends notification" $ do
       let userSetIdForPackage arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
                                   | otherwise = error "should only get user ids for mtl"
           notifyPref triggerBounds =
@@ -178,9 +244,9 @@ allTests = testGroup "ReverseDependenciesTest"
               }
           pref triggerBounds (UserId 0) = Identity (Just $ notifyPref triggerBounds)
           pref _ _ = error "should only get preferences for UserId 0"
-          refNotification base = Map.fromList
+          userNotification = Map.fromList
             [
-              ( (UserId 0, base)
+              ( UserId 0
               , [PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])]
               )
             ]
@@ -189,33 +255,51 @@ allTests = testGroup "ReverseDependenciesTest"
           base4_15 = PackageIdentifier "base" (mkVersion [4,15])
           base4_16 = PackageIdentifier "base" (mkVersion [4,16])
           runWithPref preferences index pkg = runIdentity $
-            dependencyReleaseEmails userSetIdForPackage index (constructReverseIndex index) preferences pkg
+            getUserNotificationsOnRelease userSetIdForPackage index (constructReverseIndex index) preferences pkg
+          runWithPrefAlsoMtl2 preferences index pkg = runIdentity $
+            getUserNotificationsOnRelease userSet index (constructReverseIndex index) preferences pkg
+              where
+              userSet arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
+                          | arg == mkPackageName "mtl2" = Identity (UserIdSet.fromList [UserId 0])
+                          | otherwise = error "should only get user ids for mtl and mtl2"
       assertEqual
-        "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when there are packages, but none are behind"
+        "getUserNotificationsOnRelease(trigger=NewIncompatibility) shouldn't generate a notification when there are packages, but none are behind"
         mempty
         (runWithPref (pref NewIncompatibility) (PackageIndex.fromList twoPackagesWithNoDepsOutOfRange) base4_14)
       assertEqual
-        "dependencyReleaseEmails(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
-        (refNotification base4_15)
+        "getUserNotificationsOnRelease(trigger=NewIncompatibility) should generate a notification when package is a single base version behind"
+        userNotification
         (runWithPref (pref NewIncompatibility) (PackageIndex.fromList newBaseReleased) base4_15)
       assertEqual
-        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is a single base version behind"
-        (refNotification base4_15)
+        "getUserNotificationsOnRelease(trigger=NewIncompatibility) should generate a notification for two packages that are a single base version behind"
+        (Just $
+           Set.fromList
+             [ PackageIdentifier (mkPackageName "mtl") (mkVersion [2,3])
+             , PackageIdentifier (mkPackageName "mtl2") (mkVersion [2,3])
+             ]
+        )
+        ( fmap Set.fromList
+          . Map.lookup (UserId 0)
+          $ runWithPrefAlsoMtl2 (pref NewIncompatibility) (PackageIndex.fromList newBaseReleasedMultiple) base4_15
+        )
+      assertEqual
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) should generate a notification when package is a single base version behind"
+        userNotification
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newBaseReleased) base4_15)
       assertEqual
-        "dependencyReleaseEmails(trigger=NewIncompatibility) shouldn't generate a notification when package is two base versions behind"
+        "getUserNotificationsOnRelease(trigger=NewIncompatibility) shouldn't generate a notification when package is two base versions behind"
         mempty
         (runWithPref (pref NewIncompatibility) (PackageIndex.fromList twoNewBasesReleased) base4_16)
       assertEqual
-        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
-        (refNotification base4_16)
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) should generate a notification when package is two base versions behind"
+        userNotification
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList twoNewBasesReleased) base4_16)
       assertEqual
-        "dependencyReleaseEmails(trigger=BoundsOutOfRange) shouldn't generate a notification when the new package is for an old release series"
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) shouldn't generate a notification when the new package is for an old release series"
         mempty
         (runWithPref (pref BoundsOutOfRange) (PackageIndex.fromList newVersionOfOldBase) base4_14_1)
       assertEqual
-        "dependencyReleaseEmails(trigger=BoundsOutOfRange) should only generate a notification when the new version is forbidden across all branches"
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) should only generate a notification when the new version is forbidden across all branches"
         mempty -- The two branches below should get OR'd and therefore the dependency is not out of bounds
         (runWithPref
           (pref BoundsOutOfRange)
@@ -230,10 +314,250 @@ allTests = testGroup "ReverseDependenciesTest"
                 \    build-depends: base >= 4.15 && < 4.16"
             ])
           base4_15)
+  , getNotificationEmailsTests
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests
       assertEqual "hedgehog test pass" True res
   ]
+
+getNotificationEmailsTests :: TestTree
+getNotificationEmailsTests =
+  testGroup "getNotificationEmails"
+    [ testProperty "All general notifications batched in one email" . withTests 30 . property $ do
+        notifs <- forAll $ Gen.list (Range.linear 1 10) $ Gen.filterT isGeneral genNotification
+        emails <- liftIO $ getNotificationEmailsMocked $ map (userWatcher,) notifs
+        length emails === 1
+    , testGolden "Render NotifyNewVersion" "getNotificationEmails-NotifyNewVersion.golden" $
+        fmap renderMail . getNotificationEmailMocked userWatcher $
+          NotifyNewVersion
+            { notifyPackageInfo =
+                PkgInfo
+                  { pkgInfoId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+                  , pkgMetadataRevisions = Vector.singleton (CabalFileText "", (timestamp, userActor))
+                  , pkgTarballRevisions = mempty
+                  }
+            }
+    , testGolden "Render NotifyNewRevision" "getNotificationEmails-NotifyNewRevision.golden" $ do
+        let mkRev rev = (CabalFileText "", (rev, userActor))
+            rev0 = (0 * Time.nominalDay) `Time.addUTCTime` timestamp
+            rev1 = (1 * Time.nominalDay) `Time.addUTCTime` timestamp
+            rev2 = (2 * Time.nominalDay) `Time.addUTCTime` timestamp
+        fmap renderMail . getNotificationEmailMocked userWatcher $
+          NotifyNewRevision
+            { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+            , notifyRevisions = map (, userActor) [rev1, rev2]
+            }
+    , testGolden "Render NotifyMaintainerUpdate-MaintainerAdded" "getNotificationEmails-NotifyMaintainerUpdate-MaintainerAdded.golden" $
+        fmap renderMail . getNotificationEmailMocked userWatcher $
+          NotifyMaintainerUpdate
+            { notifyMaintainerUpdateType = MaintainerAdded
+            , notifyUserActor = userActor
+            , notifyUserSubject = userSubject
+            , notifyPackageName = "base"
+            , notifyReason = "User is cool"
+            , notifyUpdatedAt = timestamp
+            }
+    , testGolden "Render NotifyMaintainerUpdate-MaintainerRemoved" "getNotificationEmails-NotifyMaintainerUpdate-MaintainerRemoved.golden" $
+        fmap renderMail . getNotificationEmailMocked userWatcher $
+          NotifyMaintainerUpdate
+            { notifyMaintainerUpdateType = MaintainerRemoved
+            , notifyUserActor = userActor
+            , notifyUserSubject = userSubject
+            , notifyPackageName = "base"
+            , notifyReason = "User is no longer cool"
+            , notifyUpdatedAt = timestamp
+            }
+    , testGolden "Render NotifyDocsBuild-success" "getNotificationEmails-NotifyDocsBuild-success.golden" $
+        fmap renderMail . getNotificationEmailMocked userWatcher $
+          NotifyDocsBuild
+            { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+            , notifyBuildSuccess = True
+            }
+    , testGolden "Render NotifyDocsBuild-failure" "getNotificationEmails-NotifyDocsBuild-failure.golden" $
+        fmap renderMail . getNotificationEmailMocked userWatcher $
+          NotifyDocsBuild
+            { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+            , notifyBuildSuccess = False
+            }
+    , testGolden "Render NotifyUpdateTags" "getNotificationEmails-NotifyUpdateTags.golden" $
+        fmap renderMail . getNotificationEmailMocked userWatcher $
+          NotifyUpdateTags
+            { notifyPackageName = "base"
+            , notifyAddedTags = Set.fromList . map Tag $ ["bsd3", "library", "prelude"]
+            , notifyDeletedTags = Set.fromList . map Tag $ ["example", "bad", "foo"]
+            }
+    , testGolden "Render NotifyDependencyUpdate-Always" "getNotificationEmails-NotifyDependencyUpdate-Always.golden" $
+        fmap renderMail
+          . getNotificationEmail
+              testServerEnv
+              testUserDetailsFeature
+              allUsers
+              userWatcher
+          $ NotifyDependencyUpdate
+              { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+              , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
+              , notifyTriggerBounds = Always
+              }
+    , testGolden "Render NotifyDependencyUpdate-NewIncompatibility" "getNotificationEmails-NotifyDependencyUpdate-NewIncompatibility.golden" $
+        fmap renderMail
+          . getNotificationEmail
+              testServerEnv
+              testUserDetailsFeature
+              allUsers
+              userWatcher
+          $ NotifyDependencyUpdate
+              { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+              , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
+              , notifyTriggerBounds = NewIncompatibility
+              }
+    , testGolden "Render NotifyDependencyUpdate-BoundsOutOfRange" "getNotificationEmails-NotifyDependencyUpdate-BoundsOutOfRange.golden" $
+        fmap renderMail
+          . getNotificationEmail
+              testServerEnv
+              testUserDetailsFeature
+              allUsers
+              userWatcher
+          $ NotifyDependencyUpdate
+              { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+              , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
+              , notifyTriggerBounds = BoundsOutOfRange
+              }
+    , testGolden "Render NotifyVouchingCompleted" "getNotificationEmails-NotifyVouchingCompleted.golden" $
+        fmap renderMail $ getNotificationEmailMocked userWatcher NotifyVouchingCompleted
+    , testGolden "Render general notifications in single batched email" "getNotificationEmails-batched.golden" $ do
+        emails <-
+          getNotificationEmailsMocked . map (userWatcher,) $
+            [ NotifyNewRevision
+                { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+                , notifyRevisions = [(timestamp, userActor)]
+                }
+            , NotifyDocsBuild
+                { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
+                , notifyBuildSuccess = True
+                }
+            , NotifyUpdateTags
+                { notifyPackageName = "base"
+                , notifyAddedTags = Set.fromList [Tag "newtag"]
+                , notifyDeletedTags = Set.fromList [Tag "oldtag"]
+                }
+            ]
+        case emails of
+          [email] -> pure $ renderMail email
+          _ -> error $ "Emails were not batched: " ++ show emails
+    ]
+  where
+    -- If adding a new constructor here, make sure to do the following:
+    --   * update genNotification
+    --   * add a golden test above
+    --   * add the golden file to hackage-server.cabal
+    _allNotificationTypes = \case
+      NotifyNewVersion{} -> ()
+      NotifyNewRevision{} -> ()
+      NotifyMaintainerUpdate{} -> ()
+      NotifyDocsBuild{} -> ()
+      NotifyUpdateTags{} -> ()
+      NotifyDependencyUpdate{} -> ()
+      NotifyVouchingCompleted{} -> ()
+
+    isGeneral = \case
+      NotifyNewVersion{} -> True
+      NotifyNewRevision{} -> True
+      NotifyMaintainerUpdate{} -> True
+      NotifyDocsBuild{} -> True
+      NotifyUpdateTags{} -> True
+      NotifyDependencyUpdate{} -> False
+      NotifyVouchingCompleted{} -> True
+
+    -- userWatcher = user getting the notification
+    -- userActor   = user that did the action
+    -- userSubject = user the action is about
+    ((userWatcher, userActor, userSubject), allUsers) =
+      (`State.runState` Users.emptyUsers) $ do
+        let addUser name = State.StateT $ \users0 ->
+              case Users.addUserEnabled (UserName name) (UserAuth $ PasswdHash "") users0 of
+                Right (users1, uid) -> pure (uid, users1)
+                Left _ -> error $ "Got duplicate username: " <> name
+        (,,)
+          <$> addUser "user-watcher"
+          <*> addUser "user-actor"
+          <*> addUser "user-subject"
+
+    getNotificationEmail env details users uid notif =
+      getNotificationEmails env details users [(uid, notif)] >>= \case
+        [email] -> pure email
+        _ -> error "Did not get exactly one email"
+
+    testServerEnv =
+      ServerEnv
+        { serverBaseURI = fromJust $ parseURI "https://hackage.haskell.org"
+        }
+    testUserDetailsFeature =
+      UserDetailsFeature
+        { queryUserDetails = \uid ->
+            pure $ do
+              guard $ uid == userWatcher
+              Just
+                AccountDetails
+                  { accountName = "user-watcher"
+                  , accountContactEmail = "user-watcher@example.com"
+                  , accountKind = Nothing
+                  , accountAdminNotes = ""
+                  }
+        }
+    getNotificationEmailsMocked =
+      getNotificationEmails
+        testServerEnv
+        testUserDetailsFeature
+        allUsers
+    getNotificationEmailMocked =
+      getNotificationEmail
+        testServerEnv
+        testUserDetailsFeature
+        allUsers
+
+    renderMail = fst . Mail.renderMail (mkStdGen 0)
+    timestamp = Time.UTCTime (Time.fromGregorian 2020 1 1) 0
+
+    genNotification =
+      Gen.choice
+        [ NotifyNewVersion
+            <$> genPkgInfo
+        , NotifyNewRevision
+            <$> genPackageId
+            <*> Gen.list (Range.linear 1 5) genUploadInfo
+        , NotifyMaintainerUpdate
+            <$> Gen.element [MaintainerAdded, MaintainerRemoved]
+            <*> genNonExistentUserId
+            <*> genNonExistentUserId
+            <*> genPackageName
+            <*> Gen.text (Range.linear 1 20) Gen.unicode
+            <*> genUTCTime
+        , NotifyDocsBuild
+            <$> genPackageId
+            <*> Gen.bool
+        , NotifyUpdateTags
+            <$> genPackageName
+            <*> Gen.set (Range.linear 1 5) genTag
+            <*> Gen.set (Range.linear 1 5) genTag
+        , NotifyDependencyUpdate
+            <$> genPackageId
+            <*> Gen.list (Range.linear 1 10) genPackageId
+            <*> Gen.element [Always, NewIncompatibility, BoundsOutOfRange]
+        , pure NotifyVouchingCompleted
+        ]
+
+    genPackageName = mkPackageName <$> Gen.string (Range.linear 1 30) Gen.unicode
+    genVersion = mkVersion <$> Gen.list (Range.linear 1 4) (Gen.int $ Range.linear 0 50)
+    genPackageId = PackageIdentifier <$> genPackageName <*> genVersion
+    genCabalFileText = CabalFileText . ByteStringL.fromStrict <$> Gen.utf8 (Range.linear 0 50000) Gen.unicode
+    genNonExistentUserId = UserId <$> Gen.int (Range.linear (-1000) (-1))
+    genUploadInfo = (,) <$> genUTCTime <*> genNonExistentUserId
+    genTag = Tag <$> Gen.string (Range.linear 1 10) Gen.unicode
+    genPkgInfo =
+      PkgInfo
+        <$> genPackageId
+        <*> genVec (Range.linear 1 5) ((,) <$> genCabalFileText <*> genUploadInfo)
+        <*> pure Vector.empty -- ignoring pkgTarballRevisions for now
 
 genPacks :: PropertyT IO [Package TestPackage]
 genPacks = do
@@ -339,5 +663,26 @@ hedgehogTests =
     , ("prop_csvBackupRoundtrips", prop_csvBackupRoundtrips)
     ]
 
+testGolden :: TestName -> FilePath -> IO Lazy.ByteString -> TestTree
+testGolden name fp = goldenVsString name ("tests/golden/ReverseDependenciesTest/" <> fp)
+
 main :: IO ()
 main = defaultMain allTests
+
+{----- Utilities -----}
+
+genUTCTime :: MonadGen m => m Time.UTCTime
+genUTCTime =
+  Time.UTCTime
+    <$> genDay
+    <*> genDiffTime
+  where
+    genDay =
+      Time.fromGregorian
+        <$> Gen.integral (Range.linear 0 3000)
+        <*> Gen.int (Range.linear 1 12)
+        <*> Gen.int (Range.linear 1 31)
+    genDiffTime = realToFrac <$> Gen.double (Range.linearFrac 0 86400)
+
+genVec :: MonadGen m => Range Int -> m a -> m (Vector a)
+genVec r = fmap Vector.fromList . Gen.list r

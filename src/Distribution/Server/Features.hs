@@ -51,6 +51,7 @@ import Distribution.Server.Features.Votes               (initVotesFeature)
 import Distribution.Server.Features.Sitemap             (initSitemapFeature)
 import Distribution.Server.Features.UserNotify          (initUserNotifyFeature)
 import Distribution.Server.Features.PackageFeed         (initPackageFeedFeature)
+import Distribution.Server.Features.Vouch               (initVouchFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -159,6 +160,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initUserNotifyFeature env
     mkPackageFeedFeature    <- logStartup "package feed" $
                                initPackageFeedFeature env
+    mkVouchFeature          <- logStartup "vouch" $
+                               initVouchFeature env
     mkBrowseFeature         <- logStartup "browse" $
                                initBrowseFeature env
     mkPackageJSONFeature    <- logStartup "package info JSON" $
@@ -344,6 +347,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                         tagsFeature
                         tarIndexCacheFeature
 
+    vouchFeature <- mkVouchFeature
+                      usersFeature
+                      uploadFeature
+
     userNotifyFeature <- mkUserNotifyFeature
                            usersFeature
                            coreFeature
@@ -353,6 +360,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                            reportsCoreFeature
                            tagsFeature
                            reverseFeature
+                           vouchFeature
 
     packageFeedFeature <- mkPackageFeedFeature
                             coreFeature
@@ -415,6 +423,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface userNotifyFeature
          , getFeatureInterface packageFeedFeature
          , getFeatureInterface packageInfoJSONFeature
+         , getFeatureInterface vouchFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures

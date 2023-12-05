@@ -27,7 +27,8 @@ import Control.Monad
 import Data.Maybe
 import Network.HTTP hiding (user)
 import Network.HTTP.Auth
-import Data.Aeson (Result(..), Value(..), FromJSON(..), (.:), fromJSON, json')
+import Data.Aeson (Result(..), Value(..), FromJSON(..), (.:), fromJSON)
+import Data.Aeson.Parser (json')
 import System.Exit (die)
 
 import qualified Network.Http.Client as HC
