@@ -27,6 +27,7 @@ module Distribution.Server.Framework.Templating (
     utcTimeTemplateVal,
     templateEnumDesriptor,
     templateUnescaped,
+    mockTemplates,
     ToSElem(..),
   ) where
 
@@ -143,6 +144,9 @@ data Templates = TemplatesNormalMode !(IORef RawTemplateGroup)
                | TemplatesDesignMode [FilePath] [String]
 
 data TemplatesMode = NormalMode | DesignMode
+
+mockTemplates :: [FilePath] -> [String] -> Templates
+mockTemplates = TemplatesDesignMode
 
 loadTemplates :: TemplatesMode -> [FilePath] -> [String] -> IO Templates
 loadTemplates templateMode templateDirs expectedTemplates = do
