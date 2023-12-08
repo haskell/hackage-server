@@ -48,6 +48,7 @@ import Distribution.Server.Framework.MemState (newMemStateWHNF)
 import Distribution.Server.Framework.ServerEnv (ServerEnv(..))
 import Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (CabalFileText(..), PkgInfo(..))
+import Distribution.Server.Framework.Templating
 import Distribution.Server.Users.Types
   ( PasswdHash(..)
   , UserAuth(..)
@@ -483,7 +484,7 @@ getNotificationEmailsTests =
           <*> addUser "user-subject"
 
     getNotificationEmail env details users uid notif =
-      getNotificationEmails env details users [(uid, notif)] >>= \case
+      getNotificationEmails env details users (mockTemplates ["datafiles/templates/UserNotify"] ["endorsements-complete.txt"]) [(uid, notif)] >>= \case
         [email] -> pure email
         _ -> error "Did not get exactly one email"
 
@@ -509,6 +510,7 @@ getNotificationEmailsTests =
         testServerEnv
         testUserDetailsFeature
         allUsers
+        (mockTemplates ["datafiles/templates/UserNotify"] ["endorsements-complete.txt"])
     getNotificationEmailMocked =
       getNotificationEmail
         testServerEnv
