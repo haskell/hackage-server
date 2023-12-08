@@ -92,6 +92,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
 import qualified Data.Vector as Vec
 
+
 -- A feature to manage notifications to users when package metadata, etc is updated.
 
 {-
@@ -448,7 +449,7 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "UserNotify"]
-                   [ "user-notify-form.html" ]
+                   [ "user-notify-form.html", "endorsements-complete.txt" ]
 
     return $ \users core uploadfeature adminlog userdetails reports tags revers vouch -> do
       let feature = userNotifyFeature env
@@ -716,7 +717,7 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
         vouchNotifications <- fmap (, NotifyVouchingCompleted) <$> drainQueuedNotifications
 
         emails <-
-          getNotificationEmails serverEnv userDetailsFeature users $
+          getNotificationEmails serverEnv userDetailsFeature users templates $
             concat
               [ revisionUploadNotifications
               , groupActionNotifications
@@ -924,18 +925,20 @@ getNotificationEmails
   :: ServerEnv
   -> UserDetailsFeature
   -> Users.Users
+  -> Templates
   -> [(UserId, Notification)]
   -> IO [Mail]
 getNotificationEmails
   ServerEnv{serverBaseURI}
   UserDetailsFeature{queryUserDetails}
   allUsers
+  templates
   notifications = do
     let userIds = Set.fromList $ map fst notifications
     userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails userIds
-
+    vouchTemplate <- renderTemplate . ($ []) <$> getTemplate templates "endorsements-complete.txt"
     pure $
-      let emails = groupNotifications $ map (fmap renderNotification) notifications
+      let emails = groupNotifications $ map (fmap (renderNotification vouchTemplate)) notifications
       in flip mapMaybe (Map.toList emails) $ \((uid, group), emailContent) ->
           case uid `Map.lookup` userIdToDetails of
             Nothing -> Nothing
@@ -991,8 +994,8 @@ getNotificationEmails
 
     {----- Render notifications -----}
 
-    renderNotification :: Notification -> (EmailContent, NotificationGroup)
-    renderNotification = \case
+    renderNotification :: BS.ByteString -> Notification -> (EmailContent, NotificationGroup)
+    renderNotification vouchTemplate = \case
       NotifyNewVersion{..} ->
         generalNotification $
           renderNotifyNewVersion
@@ -1031,7 +1034,7 @@ getNotificationEmails
         )
       NotifyVouchingCompleted ->
         generalNotification
-          renderNotifyVouchingCompleted
+          (EmailContentParagraph . EmailContentText . T.pack $ BS.unpack vouchTemplate)
 
       where
         generalNotification = (, GeneralNotification)
@@ -1097,13 +1100,6 @@ getNotificationEmails
                 <> " (they do accept the second-highest version):"
           ]
         <> EmailContentList (map renderPkgLink revDeps)
-
-    renderNotifyVouchingCompleted =
-      EmailContentParagraph
-        "You have received all necessary endorsements. \
-        \You have been added the the 'uploaders' group. \
-        \You can now upload packages to Hackage. \
-        \Note that packages cannot be deleted, so be careful."
 
     {----- Rendering helpers -----}
 
