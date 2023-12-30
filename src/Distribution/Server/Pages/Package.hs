@@ -34,9 +34,10 @@ import Distribution.Utils.ShortText (fromShortText, ShortText)
 import Text.XHtml.Strict hiding (p, name, title, content)
 import qualified Text.XHtml.Strict
 
-import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe, catMaybes)
+import Data.Bool (bool)
+import Data.Maybe               (fromMaybe, isJust, mapMaybe, catMaybes)
 import Data.List                (intersperse, intercalate, partition)
-import Control.Arrow            (second)
+import Control.Arrow            (second, Arrow (..))
 import System.FilePath.Posix    ((</>), (<.>))
 
 import qualified Documentation.Haddock.Markup as Haddock
@@ -152,15 +153,19 @@ renderPackageFlags render docURL =
         whenNotNull xs a = if null xs then [] else a
 
 moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Maybe PackageId -> Bool -> [Html]
-moduleSection render mdocIndex docURL mPkgId quickNav =
-    maybeToList $ fmap msect (rendModules render mdocIndex)
-  where msect ModSigIndex{ modIndex = m, sigIndex = s } = toHtml $
+moduleSection render mdocIndex docURL mPkgId quickNav = case renderedModules of
+  [(LMainLibName, mods)] -> [msect mods]
+  renderedLibs -> concatMap renderNamedLib renderedLibs
+
+  where msect (ModSigIndex{ modIndex = m, sigIndex = s }) =
+          let heading = bool h3 h2 containsSubLibraries in
+          toHtml $
             (if not (null s)
-                then [ h2 << "Signatures"
+                then [ heading << "Signatures"
                      , renderModuleForest docURL s ]
                 else []) ++
             (if not (null m)
-                then [ h2 << "Modules"] ++
+                then [ heading << "Modules"] ++
                      [renderDocIndexLink] ++
                      [renderModuleForest docURL m ]
                 else [])
@@ -183,6 +188,18 @@ moduleSection render mdocIndex docURL mPkgId quickNav =
             concatLinks []     = Nothing
             concatLinks [h]    = Just h
             concatLinks (h:hs) = (h +++) . ("] [" +++) <$> concatLinks hs
+
+        renderNamedLib :: (LibraryName, ModSigIndex) -> [Html]
+        renderNamedLib (name, mods) =
+          [ h2 << ("library " ++ rendLibName render name)
+          , thediv ! [theclass "lib-contents"] << msect mods
+          ]
+
+        containsSubLibraries :: Bool
+        containsSubLibraries = map fst renderedModules == [LMainLibName]
+
+        renderedModules :: [(LibraryName, ModSigIndex)]
+        renderedModules = rendModules render mdocIndex
 
 tabulate :: [(String, Html)] -> Html
 tabulate items = table ! [theclass "properties"] <<
@@ -223,11 +240,8 @@ renderDetailedDependencies pkgRender =
     tabulate $ map (second (fromMaybe noDeps . render)) targets
   where
     targets :: [(String, DependencyTree)]
-    targets = maybeToList library
-        ++ rendSublibraryDeps pkgRender
+    targets = (first (rendLibName pkgRender) <$> rendLibraryDeps pkgRender)
         ++ rendExecutableDeps pkgRender
-      where
-        library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
 
     noDeps = list [toHtml "No dependencies"]
 
