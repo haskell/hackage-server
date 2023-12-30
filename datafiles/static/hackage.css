@@ -1146,6 +1146,14 @@ a.deprecated[href]:visited {
     color: #61B01E;
 }
 
+.lib-contents {
+  margin-left: 20px;
+}
+
+.lib-contents > h3 {
+  margin: 0.7em 0;
+}
+
 /* Paginator */
 #paginatorContainer {
   display: flex;
