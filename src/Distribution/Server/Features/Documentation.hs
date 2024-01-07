@@ -27,6 +27,7 @@ import Distribution.Server.Features.BuildReports.BuildReport (PkgDetails(..), Bu
 import Data.TarIndex (TarIndex)
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Check as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
 
 import Distribution.Text
 import Distribution.Package
@@ -448,17 +449,20 @@ documentationFeature name
 checkDocTarball :: PackageId -> BSL.ByteString -> Either String ()
 checkDocTarball pkgid =
      checkEntries
-   . fmapErr (either id show) . Tar.checkTarbomb (display pkgid ++ "-docs")
-   . fmapErr (either id show) . Tar.checkSecurity
-   . fmapErr (either id show) . Tar.checkPortability
+   . fmapErr (either id show) . chainChecks (Tar.checkEntryTarbomb (display pkgid ++ "-docs"))
+   . fmapErr (either id show) . chainChecks Tar.checkEntrySecurity
+   . fmapErr (either id show) . chainChecks Tar.checkEntryPortability
+   . fmapErr (either id show) . Tar.decodeLongNames
    . fmapErr show             . Tar.read
   where
     fmapErr f    = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
+    chainChecks check = Tar.mapEntries (\entry -> maybe (Right entry) Left (check entry))
+
     checkEntries = Tar.foldEntries checkEntry (Right ()) Left
 
     checkEntry entry remainder
-      | Tar.entryPath entry == docMetaPath = checkDocMeta entry remainder
-      | otherwise                          = remainder
+      | Tar.entryTarPath entry == docMetaPath = checkDocMeta entry remainder
+      | otherwise                             = remainder
 
     checkDocMeta entry remainder =
       case Tar.entryContent entry of

@@ -19,10 +19,14 @@ deriving instance Eq CombinedTarErrs
 
 -- | Test that check permissions does the right thing
 testPermissions :: FilePath                              -- ^ .tar.gz file to test
-                -> (Tar.Entry -> Maybe CombinedTarErrs)  -- ^ Converter to create errors if necessary
+                -> (Tar.GenEntry FilePath FilePath -> Maybe CombinedTarErrs)  -- ^ Converter to create errors if necessary
                 -> Assertion
 testPermissions tarPath mangler = do
     entries <- Tar.read . GZip.decompress <$> BL.readFile tarPath
-    let mappedEntries = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . FormatError) entries
+    let mappedEntries = Tar.foldEntries
+            Tar.Next
+            Tar.Done
+            (Tar.Fail . either FormatError LongNamesError)
+            (Tar.decodeLongNames entries)
     when (checkEntries mangler mappedEntries /= checkUselessPermissions mappedEntries) $
         assertFailure ("Permissions check did not match expected for: " ++ tarPath)
