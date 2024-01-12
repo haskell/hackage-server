@@ -7,11 +7,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1693611461,
-        "narHash": "sha256-aPODl8vAgGQ0ZYFIRisxYG5MOGSkIczvu2Cd8Gb9+1Y=",
+        "lastModified": 1704982712,
+        "narHash": "sha256-2Ptt+9h8dczgle2Oo6z5ni5rt/uLMG47UFTR1ry/wgg=",
         "owner": "hercules-ci",
         "repo": "flake-parts",
-        "rev": "7f53fdb7bdc5bb237da7fefef12d099e4fd611ca",
+        "rev": "07f6395285469419cf9d078f59b5b49993198c00",
         "type": "github"
       },
       "original": {
@@ -37,11 +37,11 @@
     },
     "haskell-flake": {
       "locked": {
-        "lastModified": 1694478711,
-        "narHash": "sha256-zW/saV4diypxwP56b8l93Nw8fR7tXLbOFku2I+xYCxU=",
+        "lastModified": 1704968632,
+        "narHash": "sha256-QUxzfOGRyDXhCnIYLyLQ5dF3SXQiBjA/XcrKuZhi0iI=",
         "owner": "srid",
         "repo": "haskell-flake",
-        "rev": "ddc704f3f62d3d3569ced794b534e8fd065c379c",
+        "rev": "c9c28dc5c27cb23b032f76b4bd4adc1fa715bcdc",
         "type": "github"
       },
       "original": {
@@ -50,13 +50,29 @@
         "type": "github"
       }
     },
+    "hoogle-input": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1697376046,
+        "narHash": "sha256-xcGZ11ocdlB8ks20QAhtPZ+4ggmV4Om4CPHH/M6NjXk=",
+        "owner": "ndmitchell",
+        "repo": "hoogle",
+        "rev": "0be38ee5e078e31ef7eabeaba255aed12ce7055d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ndmitchell",
+        "repo": "hoogle",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1694736714,
-        "narHash": "sha256-5xqXf2CfPiIHg2W7f+6odQ9c09L+jTVqGmxLB6qxPLc=",
+        "lastModified": 1705019030,
+        "narHash": "sha256-svV+kQEK5pDtRjkVibM4P1gd+kid9ne0mK0UECWpW2s=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "8b1c1ca2feb87ae8b7d9455d8dfe5361f249e4cf",
+        "rev": "80c10db7bc1a9198e3ca692144099174a56185e8",
         "type": "github"
       },
       "original": {
@@ -71,6 +87,7 @@
         "flake-parts": "flake-parts",
         "flake-root": "flake-root",
         "haskell-flake": "haskell-flake",
+        "hoogle-input": "hoogle-input",
         "nixpkgs": "nixpkgs"
       }
     }
