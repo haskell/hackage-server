@@ -5,6 +5,9 @@
     haskell-flake.url = "github:srid/haskell-flake";
     flake-root.url = "github:srid/flake-root";
     flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
+
+    hoogle-input.url = "github:ndmitchell/hoogle";
+    hoogle-input.flake = false;
   };
 
   outputs = inputs@{ self, nixpkgs, flake-parts, ... }:
@@ -21,24 +24,28 @@
         haskellProjects.default = {
           settings = {
             hackage-server.check = false;
+            warp-tls.jailbreak = true;
+            tls-session-manager.jailbreak = true;
+            # http-client-tls.jailbreak = true;
+            # crypton-connection.jailbreak = true;
             heist.check = false;
-            fourmolu.check = false;
-            hw-prim.jailbreak = true;
-            hw-hspec-hedgehog.jailbreak = true;
-            hw-fingertree.jailbreak = true;
+            ap-normalize.check = false;
+            extensions.jailbreak = true;
+            # https://community.flake.parts/haskell-flake/dependency#nixpkgs
+            # tar = { super, ... }:
+            #   { custom = _: super.tar_0_6_0_0; };
+            # tasty = { super, ... }:
+            #   { custom = _: super.tasty_1_5; };
           };
           packages = {
-            Cabal.source = "3.10.1.0";
-            Cabal-syntax.source = "3.10.1.0";
-            attoparsec-aeson.source = "2.1.0.0";
-            hedgehog.source = "1.4";
-            ormolu.source = "0.7.2.0";
-            fourmolu.source = "0.13.1.0";
-            tasty-hedgehog.source = "1.4.0.2";
-            ghc-lib-parser.source = "9.6.2.20230523";
-            ghc-lib-parser-ex.source = "9.6.0.2";
-            hlint.source = "3.6.1";
-            stylish-haskell.source = "0.14.5.0";
+            # https://community.flake.parts/haskell-flake/dependency#path
+            hoogle.source = inputs.hoogle-input;
+            heist.source = "1.1.1.2";
+            # tls-session-manager.source = "0.0.4";
+            # warp-tls.source = "3.4.3";
+            # http-io-streams.source = "0.1.6.3";
+            tls.source = "1.9.0";
+            # tasty.source = "1.5";
           };
           devShell = {
             tools = hp: {
