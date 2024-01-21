@@ -16,9 +16,6 @@ module Distribution.Client.Index (
   ) where
 
 import qualified Codec.Archive.Tar       as Tar
-         ( read, Entries(..) )
-import qualified Codec.Archive.Tar.Entry as Tar
-         ( Entry(..), entryPath )
 
 import Distribution.Package
 import Distribution.Text

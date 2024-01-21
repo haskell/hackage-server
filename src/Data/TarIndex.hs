@@ -18,7 +18,7 @@ module Data.TarIndex (
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 
-import Codec.Archive.Tar (Entry(..), EntryContent(..), Entries(..), entryPath)
+import Codec.Archive.Tar (Entry, GenEntry(..), GenEntryContent(..), Entries, GenEntries(..), entryPath)
 import qualified Data.StringTable as StringTable
 import Data.StringTable (StringTable)
 import qualified Data.IntTrie as IntTrie

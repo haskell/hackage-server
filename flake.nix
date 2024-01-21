@@ -32,8 +32,8 @@
             ap-normalize.check = false;
             extensions.jailbreak = true;
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
-            # tar = { super, ... }:
-            #   { custom = _: super.tar_0_6_0_0; };
+            tar = { super, ... }:
+              { custom = _: super.tar_0_6_0_0; };
             # tasty = { super, ... }:
             #   { custom = _: super.tasty_1_5; };
           };

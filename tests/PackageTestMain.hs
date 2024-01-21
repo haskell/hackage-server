@@ -9,6 +9,7 @@ import Data.Time (getCurrentTime)
 import Data.List (isInfixOf)
 
 import qualified Codec.Archive.Tar as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Compression.GZip as GZip
 
 import Distribution.Server.Packages.Unpack
@@ -42,19 +43,19 @@ tarPermissions =
         (testPermissions "tests/permissions-tarballs/bad-dir-perms.tar.gz" badDirMangler)
     ]
 
-goodMangler :: (Tar.Entry -> Maybe CombinedTarErrs)
+goodMangler :: (Tar.GenEntry tarPath linkTarget -> Maybe CombinedTarErrs)
 goodMangler = const Nothing
 
-badFileMangler :: (Tar.Entry -> Maybe CombinedTarErrs)
+badFileMangler :: (Tar.GenEntry FilePath linkTarget -> Maybe CombinedTarErrs)
 badFileMangler entry =
   case Tar.entryContent entry of
-    (Tar.NormalFile _ _) -> Just $ PermissionsError (Tar.entryPath entry) 0o600
+    (Tar.NormalFile _ _) -> Just $ PermissionsError (Tar.entryTarPath entry) 0o600
     _ -> Nothing
 
-badDirMangler :: (Tar.Entry -> Maybe CombinedTarErrs)
+badDirMangler :: (Tar.GenEntry FilePath linkTarget -> Maybe CombinedTarErrs)
 badDirMangler entry =
   case Tar.entryContent entry of
-    Tar.Directory -> Just $ PermissionsError (Tar.entryPath entry) 0o700
+    Tar.Directory -> Just $ PermissionsError (Tar.entryTarPath entry) 0o700
     _ -> Nothing
 
 ---------------------------------------------------------------------------

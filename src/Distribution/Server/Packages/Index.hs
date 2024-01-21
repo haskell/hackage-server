@@ -10,9 +10,7 @@ module Distribution.Server.Packages.Index (
   ) where
 
 import qualified Codec.Archive.Tar       as Tar
-         ( write )
 import qualified Codec.Archive.Tar.Entry as Tar
-         ( Entry(..), fileEntry, toTarPath, Ownership(..) )
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Framework.MemSize
