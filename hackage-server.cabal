@@ -680,6 +680,10 @@ test-suite HashTests
     , tasty       ^>= 1.5
     , tasty-hunit ^>= 0.10
 
+-- DocTests require `write-ghc-environment=always`
+-- https://github.com/haskell/hackage-server/issues/1197
+--   cabal build --write-ghc-environment-files=always
+--   cabal test DocTests --write-ghc-environment=always
 test-suite DocTests
   import:         test-defaults
 
