@@ -519,6 +519,8 @@ isAcceptableLicense = either goSpdx goLegacy . licenseRaw
         goSimple (SPDX.ELicenseRef _)      = False -- don't allow referenced licenses
         goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
         goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
+        goSimple (SPDX.ELicenseId SPDX.Bzip2_1_0_5) = True -- not OSI approved, but make an exception: https://github.com/haskell/hackage-server/issues/1294
+        goSimple (SPDX.ELicenseId SPDX.Bzip2_1_0_6) = True -- same as above
         goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid || SPDX.LId.licenseIsFsfLibre lid -- allow only OSI or FSF approved licenses.
 
     -- pre `cabal-version: 2.2`
