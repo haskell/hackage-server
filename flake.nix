@@ -27,6 +27,7 @@
             # hackage-server.check = false;
             # hackage-server.cabalFlags.write-ghc-environment-files = true;
             # hackage-server.cabalFlags.write-ghc-environment = "always";
+            hackage-server.extraConfigureFlags = [ "--write-ghc-environment=always" ];
 
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
             tar = { super, ... }:
