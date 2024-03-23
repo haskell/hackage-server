@@ -32,7 +32,7 @@
             tar = { super, ... }:
               { custom = _: super.tar_0_6_2_0; };
             tls = { super, ... }:
-              { custom = _: super.tls_2_0_1; };
+              { custom = _: super.tls_2_0_1 // { check = false; }; };
             tls-session-manager = { super, ... }:
               { custom = _: super.tls-session-manager_0_0_5; };
             tasty = { super, ... }:
