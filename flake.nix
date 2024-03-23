@@ -23,6 +23,7 @@
           settings = {
             # https://github.com/srid/haskell-flake/discussions/196
             hackage-server.check = false;
+            threads.check = false;
             # hackage-server.cabalFlags.write-ghc-environment-files = true;
             # hackage-server.cabalFlags.write-ghc-environment = "always";
             # hackage-server.extraConfigureFlags = [ "--write-ghc-environment=always" ];
