@@ -19,30 +19,27 @@
         # has only one.
         packages.default = config.packages.hackage-server;
         haskellProjects.default = {
+          basePackages = pkgs.haskell.packages.ghc98;
           settings = {
             # https://github.com/srid/haskell-flake/discussions/196
-            # hackage-server = { super, ... }: {
-            #   custom = pkg:  pkg.overrideAttrs (oa: { postCheck = ''..''; });
-            # };
-            # hackage-server.check = false;
+            hackage-server.check = false;
             # hackage-server.cabalFlags.write-ghc-environment-files = true;
             # hackage-server.cabalFlags.write-ghc-environment = "always";
-            hackage-server.extraConfigureFlags = [ "--write-ghc-environment=always" ];
+            # hackage-server.extraConfigureFlags = [ "--write-ghc-environment=always" ];
 
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
             tar = { super, ... }:
-              { custom = _: super.tar_0_6_1_0; };
+              { custom = _: super.tar_0_6_2_0; };
             tls = { super, ... }:
-              { custom = _: super.tls_1_9_0; };
+              { custom = _: super.tls_2_0_1; };
+            tls-session-manager = { super, ... }:
+              { custom = _: super.tls-session-manager_0_0_5; };
             tasty = { super, ... }:
               { custom = _: super.tasty_1_5; };
             logict.jailbreak = true;
             integer-logarithms.jailbreak = true;
             time-compat.jailbreak = true;
-            indexed-traversable.jailbreak = true;
             indexed-traversable-instances.jailbreak = true;
-            bitvec.jailbreak = true;
-            snap.check = false;
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
