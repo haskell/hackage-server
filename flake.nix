@@ -31,8 +31,9 @@
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
             tar = { super, ... }:
               { custom = _: super.tar_0_6_2_0; };
-            tls = { super, ... }:
-              { custom = _: super.tls_2_0_1 // { check = false; }; };
+            # tls = { super, ... }:
+            #   { custom = _: super.tls_2_0_1 // { check = false; }; };
+            tls.check = false;
             tls-session-manager = { super, ... }:
               { custom = _: super.tls-session-manager_0_0_5; };
             tasty = { super, ... }:
@@ -44,7 +45,7 @@
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
-            # tls.source = "1.9.0";
+            tls.source = "2.0.1";
           };
           devShell = {
             tools = hp: {
