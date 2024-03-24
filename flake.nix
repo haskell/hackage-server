@@ -19,33 +19,18 @@
         # has only one.
         packages.default = config.packages.hackage-server;
         haskellProjects.default = {
-          basePackages = pkgs.haskell.packages.ghc98;
           settings = {
-            # https://github.com/srid/haskell-flake/discussions/196
             hackage-server.check = false;
-            threads.check = false;
-            # hackage-server.cabalFlags.write-ghc-environment-files = true;
-            # hackage-server.cabalFlags.write-ghc-environment = "always";
-            # hackage-server.extraConfigureFlags = [ "--write-ghc-environment=always" ];
-
+            ap-normalize.check = false;
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
             tar = { super, ... }:
-              { custom = _: super.tar_0_6_2_0; };
-            # tls = { super, ... }:
-            #   { custom = _: super.tls_2_0_1 // { check = false; }; };
-            tls.check = false;
-            tls-session-manager = { super, ... }:
-              { custom = _: super.tls-session-manager_0_0_5; };
-            tasty = { super, ... }:
-              { custom = _: super.tasty_1_5; };
-            logict.jailbreak = true;
-            integer-logarithms.jailbreak = true;
-            time-compat.jailbreak = true;
-            indexed-traversable-instances.jailbreak = true;
+              { custom = _: super.tar_0_6_1_0; };
+            # tasty = { super, ... }:
+            #   { custom = _: super.tasty_1_5; };
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
-            tls.source = "2.0.1";
+            tls.source = "1.9.0";
           };
           devShell = {
             tools = hp: {
