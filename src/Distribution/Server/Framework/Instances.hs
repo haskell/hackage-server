@@ -196,6 +196,7 @@ instance SafeCopy  Arch where
     putCopy AArch64       = contain $ putWord8 17
     putCopy S390X         = contain $ putWord8 18
     putCopy Wasm32        = contain $ putWord8 19
+    putCopy RISCV64       = contain $ putWord8 20
 
     getCopy = contain $ do
       tag <- getWord8
@@ -220,6 +221,7 @@ instance SafeCopy  Arch where
         17 -> return AArch64
         18 -> return S390X
         19 -> return Wasm32
+        20 -> return RISCV64
         _  -> fail "SafeCopy Arch getCopy: unexpected tag"
 
 instance SafeCopy CompilerFlavor where
@@ -388,7 +390,8 @@ instance Arbitrary Arch where
   arbitrary = oneof [ pure OtherArch <*> vectorOf 3 (choose ('A', 'Z'))
                     , pure I386, pure X86_64, pure PPC, pure PPC64, pure Sparc
                     , pure Arm, pure Mips, pure SH, pure IA64, pure S390
-                    , pure Alpha, pure Hppa, pure Rs6000, pure M68k, pure Vax ]
+                    , pure Alpha, pure Hppa, pure Rs6000, pure M68k, pure Vax
+                    , pure AArch64, pure RISCV64]
 
 instance Arbitrary OS where
   arbitrary = oneof [ pure OtherOS <*> vectorOf 3 (choose ('A', 'Z'))
