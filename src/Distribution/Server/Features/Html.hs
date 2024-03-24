@@ -1461,7 +1461,7 @@ mkHtmlCandidates ServerEnv{..} utilities@HtmlUtilities{..}
 dependenciesPage :: Bool -> PackageRender -> URL -> Resource.XHtml
 dependenciesPage isCandidate render docURL =
     Resource.XHtml $ hackagePage (pkg ++ ": dependencies") $
-      [h2 << heading, Pages.renderDetailedDependencies render]
+      [h1 << heading, Pages.renderDetailedDependencies render]
        ++ Pages.renderPackageFlags render docURL
   where
     pkg = display $ rendPkgId render
