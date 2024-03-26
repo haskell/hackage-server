@@ -21,7 +21,7 @@
         haskellProjects.default = {
           # basePackages = pkgs.haskell.packages.ghc98;
           settings = {
-            hackage-server.check = false;
+            # hackage-server.check = false;
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
             tar = { super, ... }:
               { custom = _: super.tar_0_6_2_0; };
