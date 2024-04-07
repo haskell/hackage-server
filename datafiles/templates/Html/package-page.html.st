@@ -140,6 +140,15 @@
               <td>$package.buildDepends$</td>
             </tr>
 
+            $if(package.optional.hasTestedWith)$
+            <tr>
+              <th>Tested with</th>
+              <td class="word-wrap">
+                $package.optional.testedWith$
+              </td>
+            </tr>
+            $endif$
+
             <tr>
               <th>License</th>
               <td class="word-wrap">$package.license$</td>
