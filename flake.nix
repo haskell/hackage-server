@@ -24,7 +24,7 @@
             ap-normalize.check = false;
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
             tar = { super, ... }:
-              { custom = _: super.tar_0_6_1_0; };
+              { custom = _: super.tar_0_6_2_0; };
             # tasty = { super, ... }:
             #   { custom = _: super.tasty_1_5; };
           };
