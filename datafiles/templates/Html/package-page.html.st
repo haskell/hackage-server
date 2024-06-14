@@ -107,6 +107,11 @@
                 edit package information
               </a>
             </li>
+            <li>
+              <a href="$baseurl$/package/$package.name$/analytics-pixels">
+                edit package analytics pixels
+              </a>
+            </li>
           </ul>
           <p>Candidates</p>
           <ul>
