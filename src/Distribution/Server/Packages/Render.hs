@@ -67,10 +67,11 @@ data ModSigIndex = ModSigIndex {
 data PackageRender = PackageRender {
     rendPkgId        :: PackageIdentifier,
     rendLibName      :: LibraryName -> String,
+    rendComponentName :: ComponentName -> String,
     rendDepends      :: [Dependency],
     rendExecNames    :: [String],
     rendLibraryDeps  :: [(LibraryName, DependencyTree)],
-    rendExecutableDeps :: [(String, DependencyTree)],
+    rendExecutableDeps :: [(ComponentName, DependencyTree)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
     rendMaintainer   :: Maybe String,
@@ -100,8 +101,9 @@ doPackageRender users info = PackageRender
     { rendPkgId        = packageId'
     , rendDepends      = flatDependencies genDesc
     , rendLibName      = renderLibName
+    , rendComponentName = renderComponentName
     , rendExecNames    = map (unUnqualComponentName . exeName) (executables flatDesc)
-    , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
+    , rendExecutableDeps = (CExeName *** depTree buildInfo)
                                 `map` condExecutables genDesc
     , rendLibraryDeps = second (depTree libBuildInfo) <$> allCondLibs genDesc
     , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
@@ -181,6 +183,10 @@ doPackageRender users info = PackageRender
     renderLibName LMainLibName = packageName'
     renderLibName (LSubLibName name) =
       packageName' ++ ":" ++ unUnqualComponentName name
+
+    renderComponentName :: ComponentName -> String
+    renderComponentName (CLibName name) = renderLibName name
+    renderComponentName name@(CNotLibName _) = componentNameRaw name
 
 allCondLibs :: GenericPackageDescription -> [(LibraryName, CondTree ConfVar [Dependency] Library)]
 allCondLibs desc = maybeToList ((LMainLibName,) <$> condLibrary desc)

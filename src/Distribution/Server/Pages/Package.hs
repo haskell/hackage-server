@@ -37,7 +37,7 @@ import qualified Text.XHtml.Strict
 import Data.Bool (bool)
 import Data.Maybe               (fromMaybe, isJust, mapMaybe, catMaybes)
 import Data.List                (intersperse, intercalate, partition)
-import Control.Arrow            (second, Arrow (..))
+import Control.Arrow            (Arrow (..))
 import System.FilePath.Posix    ((</>), (<.>))
 
 import qualified Documentation.Haddock.Markup as Haddock
@@ -201,11 +201,6 @@ moduleSection render mdocIndex docURL mPkgId quickNav = case renderedModules of
         renderedModules :: [(LibraryName, ModSigIndex)]
         renderedModules = rendModules render mdocIndex
 
-tabulate :: [(String, Html)] -> Html
-tabulate items = table ! [theclass "properties"] <<
-        [tr << [th << t, td << d] | (t, d) <- items]
-
-
 renderDependencies :: PackageRender -> (String, Html)
 renderDependencies render =
     ("Dependencies", summary +++ detailsLink)
@@ -236,12 +231,23 @@ nonbreakingSpan :: Html -> Html
 nonbreakingSpan str = thespan ! [thestyle "white-space: nowrap"] << str
 
 renderDetailedDependencies :: PackageRender -> Html
-renderDetailedDependencies pkgRender =
-    tabulate $ map (second (fromMaybe noDeps . render)) targets
+renderDetailedDependencies pkgRender
+  = mconcat (mapMaybe renderComponentType componentsByType)
+
   where
-    targets :: [(String, DependencyTree)]
-    targets = (first (rendLibName pkgRender) <$> rendLibraryDeps pkgRender)
-        ++ rendExecutableDeps pkgRender
+    componentsByType :: [(String, [(ComponentName, DependencyTree)])]
+    componentsByType =
+      [ ("Libraries", first CLibName <$> rendLibraryDeps pkgRender)
+      , ("Executables", rendExecutableDeps pkgRender)
+      ]
+
+    renderComponentType :: (String, [(ComponentName, DependencyTree)]) -> Maybe Html
+    renderComponentType (_, []) = Nothing
+    renderComponentType (componentType, items) = Just $ mconcat
+      [ h2 << componentType
+      , flip foldMap items $ \(componentName, deptree) ->
+        h3 << rendComponentName pkgRender componentName +++ fromMaybe noDeps (render deptree)
+      ]
 
     noDeps = list [toHtml "No dependencies"]
 
@@ -257,7 +263,7 @@ renderDetailedDependencies pkgRender =
                       NotBuildable -> [strong << "buildable:" +++ " False"]
 
     list :: [Html] -> Html
-    list items = thediv ! [identifier "detailed-dependencies"] << unordList items
+    list items = unordList items ! [identifier "detailed-dependencies"]
 
     renderComponent :: CondBranch ConfVar [Dependency] IsBuildable
                     -> Maybe Html
