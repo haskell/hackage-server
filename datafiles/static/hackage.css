@@ -270,7 +270,7 @@ pre + pre {
 @media (prefers-color-scheme: dark) {
   blockquote {
     border-left: 3px solid #2f2842;
-    background-color: #252034;
+    background-color: #4c4771;
   }
 }
 
