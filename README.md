@@ -13,67 +13,41 @@ You can use the Nix package manager to provide these dependencies, or install th
 
 ### Using the [Nix package manager](https://nixos.org/) and provided [Nix Flake](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html)
 
-If you have the Nix package manager installed, you can build and run `hackage-server` without manually installing any dependencies.
+If you have the Nix package manager installed, you can build and run `hackage-server` without manually installing any dependencies:
 
-This uses `flake.nix`, implemented with [`srid/haskell-flake`](https://github.com/srid/haskell-flake).
+    $ nix run
 
-There are at least three ways to use this `flake.nix`. Clone this repository, enter the repository directory, then choose one of these options:
+    'state' state-dir already exists
+    hackage-server: Ready! Point your browser at http://127.0.0.1:8080
+    
+If the required `state` directory does not already exist, `nix run` will create and initialize it.
 
-#### [`nix develop`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-develop.html)
+The `flake.nix` is implemented with [`srid/haskell-flake`](https://github.com/srid/haskell-flake).
 
-    nix develop
+Alternatively, open the [`nix develop`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-develop.html) shell:
+
+    $ nix develop
 
     (in develop shell)
-    $ cabal v2-run -- hackage-server init --static-dir=datafiles
+    
+    # if state directory does not already exist
+    $ cabal v2-run -- hackage-server init --static-dir=datafiles --state-dir=state
 
-    $ cabal v2-run -- hackage-server run --static-dir=datafiles --base-uri=http://127.0.0.1:8080
+    $ cabal v2-run -- hackage-server run --static-dir=datafiles --state-dir=state --base-uri=http://127.0.0.1:8080
     hackage-server: Ready! Point your browser at http://127.0.0.1:8080
 
-Note the `init` command will create a new folder `state` in your working directory.
+#### Populate the local package index
 
-If you have [direnv](https://direnv.net/), `direnv allow` will load this `nix develop` shell automatically.
+This copies packages from real Hackage Server to local Hackage Server.
 
-#### [`nix build`](https://nixos.org/manual/nix/stable/command-ref/nix-build.html)
+Add the default `admin` user to the `mirrorers` group here:
+http://localhost:8080/packages/mirrorers/
 
-    nix build
+Then
 
-This will produce a `hackage-server` executable in `result/`.
+     $ nix run .#mirror-hackage-server
 
-For this executable, Hackage dependencies are not pulled from Hackage directly like usual. Hackage dependencies are provided by the [Nixpkgs](https://search.nixos.org/packages) [`haskell-updates`](https://github.com/NixOS/nixpkgs/tree/haskell-updates) branch, and a few [overrides in `flake.nix`](https://zero-to-flakes.com/haskell-flake/dependency#using-hackage-versions).
-
-#### [`nix run`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-run)
-
-`nix run` is more convenient to use than `nix build`.
-
-As with `nix build`, Hackage dependencies are not pulled from Hackage directly like usual. See caveat above.
-
-List the available [Flake Apps](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-run#apps) with [`nix flake show`](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake-show.html):
-
-    $ nix flake show
-    ...
-    ├───apps
-    ...
-    │   │   ├───hackage-build: app
-    │   │   ├───hackage-import: app
-    │   │   ├───hackage-mirror: app
-    │   │   └───hackage-server: app
-    ...
-
-Run the `hackage-server` App:
-
-    nix run .#hackage-server -- init --static-dir=datafiles
-
-    nix run .#hackage-server -- run --static-dir=datafiles --base-uri=http://127.0.0.1:8080
-    
-The `.` refers to the `flake.nix` in your working directory. `#hackage-server` refers to the App specified in that `flake.nix`.
-
-`hackage-server` is the default App, so those commands can be shortened:
-
-    nix run . -- init --static-dir=datafiles
-
-    nix run . -- run --static-dir=datafiles --base-uri=http://127.0.0.1:8080
-
-##### Not working
+#### Not working
 
 Please note this App *cannot* be run [directly from GitHub](https://determinate.systems/posts/nix-run) like this:
 
