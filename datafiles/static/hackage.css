@@ -267,9 +267,21 @@ pre + pre {
   margin-top: 0.5em;
 }
 
+@media (prefers-color-scheme: dark) {
+  blockquote {
+    border-left: 3px solid #2f2842;
+    background-color: #252034;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  blockquote {
+    border-left: 3px solid #c7a5d3;
+    background-color: #eee4f1;
+  }
+}
+
 blockquote {
-  border-left: 3px solid #c7a5d3;
-  background-color: #eee4f1;
   margin: 0.5em;
   padding: 0.0005em 0.3em 0.5em 0.5em;
 }
