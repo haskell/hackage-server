@@ -36,7 +36,18 @@ Alternatively, open the [`nix develop`](https://nixos.org/manual/nix/stable/comm
     $ cabal v2-run -- hackage-server run --static-dir=datafiles --state-dir=state --base-uri=http://127.0.0.1:8080
     hackage-server: Ready! Point your browser at http://127.0.0.1:8080
 
-##### Not working
+#### Populate the local package index
+
+This copies packages from real Hackage Server to local Hackage Server.
+
+Add the default `admin` user to the `mirrorers` group here:
+http://localhost:8080/packages/mirrorers/
+
+Then
+
+     $ nix run .#mirror-hackage-server
+
+#### Not working
 
 Please note this App *cannot* be run [directly from GitHub](https://determinate.systems/posts/nix-run) like this:
 
