@@ -37,11 +37,11 @@
     },
     "haskell-flake": {
       "locked": {
-        "lastModified": 1718653460,
-        "narHash": "sha256-8ana22BZaLp91gGvQq8YbfteJKFqza4qrqc6++bCnH4=",
+        "lastModified": 1719249394,
+        "narHash": "sha256-ytIvs6dq1dD3eicwhmqMyhIDH52DfqhOiCpmJbjBYVI=",
         "owner": "srid",
         "repo": "haskell-flake",
-        "rev": "569e28636c1aaee767a43741511fb36a6d3c284b",
+        "rev": "dfea80e8a907a7818f11090788f84f1a62985694",
         "type": "github"
       },
       "original": {
@@ -52,11 +52,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1718842396,
-        "narHash": "sha256-9uvK+h2xF2fclkPRz2tlXtz++VNXot22isEVvWizA7Q=",
+        "lastModified": 1719706517,
+        "narHash": "sha256-ynXAAr5AJgTQHQAJW4GH3i8auqnZVzcjCokZMdEKjcs=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "49f3b031c4e87e18acc2a68f15fdb56871a170df",
+        "rev": "01da4c59cc4879540b7a5d73230475b4616a0dc8",
         "type": "github"
       },
       "original": {
