@@ -173,7 +173,7 @@ common defaults
   other-extensions: CPP, TemplateHaskell
 
 
-library lib-server
+library
   import: defaults
   hs-source-dirs:   src
 
@@ -472,7 +472,7 @@ library lib-server
 common exe-defaults
   import: defaults
 
-  build-depends: lib-server
+  build-depends: hackage-server
   hs-source-dirs: exes
   ghc-options: -threaded -rtsopts
 
@@ -493,7 +493,7 @@ executable hackage-mirror
   main-is: MirrorClient.hs
 
   build-depends:
-    -- version constraints inherited from lib-server
+    -- version constraints inherited from hackage-server
     , HTTP
     , hackage-security
 
@@ -503,7 +503,7 @@ executable hackage-build
   main-is: BuildClient.hs
 
   build-depends:
-    -- version constraints inherited from lib-server
+    -- version constraints inherited from hackage-server
     , HTTP
 
   -- Runtime dependency only;
@@ -523,7 +523,7 @@ executable hackage-import
   main-is: ImportClient.hs
 
   build-depends:
-      -- version constraints inherited from lib-server
+      -- version constraints inherited from hackage-server
     , HTTP
     , async
     , csv
@@ -533,7 +533,7 @@ executable hackage-import
 common test-defaults
   import: defaults
 
-  build-depends: lib-server
+  build-depends: hackage-server
   hs-source-dirs: tests
   ghc-options: -threaded -rtsopts -fno-warn-orphans
 
@@ -563,9 +563,9 @@ test-suite HighLevelTest
   -- so if this works, it's accidental!
   build-tool-depends: hackage-server:hackage-server
 
-  -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
+  -- NOTE: hackage-server is not a real dependency; it's only used to inherit version constraints
   build-depends:
-    -- version constraints inherited from lib-server
+    -- version constraints inherited from hackage-server
     , HTTP
     , attoparsec-aeson >= 2.1.0.0 && < 2.3
     , base64-bytestring
@@ -640,9 +640,9 @@ test-suite CreateUserTest
   -- see note in 'Test-Suite HighLevelTest'
   build-tool-depends: hackage-server:hackage-server
 
-  -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
+  -- NOTE: hackage-server is not a real dependency; it's only used to inherit version constraints
   build-depends:
-    -- version constraints inherited from lib-server
+    -- version constraints inherited from hackage-server
     , HTTP
     , base64-bytestring
     , random
@@ -657,7 +657,7 @@ test-suite PackageTests
   other-modules:  Distribution.Server.Packages.UnpackTest
 
   build-depends:
-    -- version constraints inherited from lib-server
+    -- version constraints inherited from hackage-server
     -- component-specific dependencies
     , tasty        ^>= 1.5
     , tasty-hunit  ^>= 0.10
@@ -670,7 +670,7 @@ test-suite HashTests
   main-is:        HashTestMain.hs
 
   build-depends:
-    -- version constraints inherited from lib-server
+    -- version constraints inherited from hackage-server
     , base16-bytestring
     , cereal
     , cryptohash-md5
@@ -686,7 +686,7 @@ test-suite DocTests
   type:           exitcode-stdio-1.0
   main-is:        DocTestMain.hs
   build-depends:
-    , lib-server
+    , hackage-server
     , doctest-parallel ^>= 0.3.0
         -- doctest-parallel-0.2.2 is the first to filter out autogen-modules
 
