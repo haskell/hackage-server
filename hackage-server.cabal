@@ -28,9 +28,10 @@ license:      BSD-3-Clause
 license-file: LICENSE
 
 tested-with:
-  GHC == 9.8.1
-  GHC == 9.6.3
-  GHC == 9.4.7
+  GHC == 9.10.1
+  GHC == 9.8.2
+  GHC == 9.6.5
+  GHC == 9.4.8
   GHC == 9.2.8
   GHC == 9.0.2
   GHC == 8.10.7
@@ -129,13 +130,13 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.13  && < 4.20
+    , base                   >= 4.13  && < 4.21
     , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.10  && < 0.13
     , containers             >= 0.6.0 && < 0.8
     , deepseq                >= 1.4   && < 1.6
     , directory              >= 1.3   && < 1.4
-    , filepath               >= 1.4   && < 1.5
+    , filepath               >= 1.4   && < 1.6
     , mtl                    >= 2.2.1 && < 2.4
         -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , pretty                 >= 1.1   && < 1.2
@@ -148,19 +149,19 @@ common defaults
   -- other dependencies shared by most components
   build-depends:
     , aeson                  >= 2.1.0.0 && < 2.3
-    , Cabal                  >= 3.10.1.0 && < 3.12
-    , Cabal-syntax           >= 3.10.1.0 && < 3.12
+    , Cabal                  >= 3.10.1.0 && < 3.14
+    , Cabal-syntax           >= 3.10.1.0 && < 3.14
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
     , fail                  ^>= 4.9.0
-    , network                >= 3 && < 3.2
+    , network                >= 3 && < 3.3
     , network-bsd           ^>= 2.8
     , network-uri           ^>= 2.6
     , parsec                ^>= 3.1.13
     , tar                   ^>= 0.6
     , unordered-containers  ^>= 0.2.10
     , vector                ^>= 0.12 || ^>= 0.13.0.0
-    , zlib                  ^>= 0.6.2
+    , zlib                  ^>= 0.6.2  || ^>= 0.7.0.0
 
   ghc-options:
     -funbox-strict-fields
@@ -170,6 +171,7 @@ common defaults
   if impl(ghc >= 8.10)
     ghc-options: -Wno-unused-record-wildcards
 
+  default-extensions: LambdaCase, TupleSections
   other-extensions: CPP, TemplateHaskell
 
 
@@ -407,7 +409,7 @@ library
   build-depends:
     , HStringTemplate       ^>= 0.8
     , HTTP                  ^>= 4000.3.16 || ^>= 4000.4.1
-    , QuickCheck            ^>= 2.14
+    , QuickCheck             >= 2.14      && < 2.16
     , acid-state            ^>= 0.16
     , async                 ^>= 2.2.1
     -- requires bumping http-io-streams
@@ -438,7 +440,7 @@ library
     , haddock-library       ^>= 1.11.0
         -- haddock-library-1.11.0 changed type of markupOrderedList
         -- see https://github.com/haskell/hackage-server/issues/1128
-    , happstack-server      ^>= 7.7.1     || ^>= 7.8.0
+    , happstack-server      ^>= 7.7.1     || ^>= 7.8.0  || ^>= 7.9.0
     , hashable              ^>= 1.3       || ^>= 1.4
     , hs-captcha            ^>= 1.0
     , hslogger              ^>= 1.3.1
@@ -452,7 +454,7 @@ library
     , stm                   ^>= 2.5.0
     , stringsearch          ^>= 0.3.6.6
     , tagged                ^>= 0.8.5
-    , xhtml                 ^>= 3000.2.0.0
+    , xhtml                  >= 3000.2.0.0 && < 3000.4
     , xmlgen                ^>= 0.6
     , xss-sanitize          ^>= 0.3.6
 
@@ -611,6 +613,9 @@ benchmark RevDeps
   build-depends:
     , random       ^>= 1.2
     , gauge
+  -- gauge does not support base-4.20
+  if impl(ghc >= 9.10)
+    buildable: False
   ghc-options: -with-rtsopts=-s
   other-modules: RevDepCommon
 
