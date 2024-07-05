@@ -6,15 +6,6 @@ packages:
 
 -- This project config requires cabal 2.4 or later
 
--- If in doubt, use GHC 8.8 to build hackage-server; see
--- 'tested-with' in 'hackage-server.cabal' for a list of currently
--- CI-validated GHC versions
---
--- with-compiler: ghc-8.8
-
-         
-allow-newer: rss:time, rss:base
-
 -----------------------------------------------------------------------------
 -- Anti-constraints
 

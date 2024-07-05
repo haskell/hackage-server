@@ -20,8 +20,9 @@ import Control.Monad (liftM2)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 import qualified Data.Char as Char
+import Data.Functor ( (<&>) )
 import Data.Maybe (fromMaybe)
-import Data.List (foldl')
+import Data.List (find, foldl')
 import Control.Monad.State (get, put, modify)
 import Control.Monad.Reader (ask, asks)
 import Control.DeepSeq
@@ -87,13 +88,9 @@ lookupTagAlias tag
          return (Map.lookup tag m)
 
 getTagAlias :: Tag -> Query TagAlias Tag
-getTagAlias tag
-    = do TagAlias m <- ask
-         if tag `elem` Map.keys m
-            then return tag
-            else if tag `Set.member` foldr Set.union Set.empty (Map.elems m)
-                then return $ head (Map.keys $ Map.filter (tag `Set.member`) m)
-                else return tag
+getTagAlias tag = ask <&> \ (TagAlias m) ->
+  if Map.member tag m then tag
+  else maybe tag fst $ find (Set.member tag . snd) $ Map.toList m
 
 emptyPackageTags :: PackageTags
 emptyPackageTags = PackageTags Map.empty Map.empty Map.empty
@@ -279,4 +276,3 @@ $(makeAcidic ''PackageTags ['tagsForPackage
                          ,'lookupReviewTags
                          ,'clearReviewTags
                          ])
-

@@ -292,9 +292,17 @@ extraChecks :: GenericPackageDescription
             -> UploadMonad ()
 extraChecks genPkgDesc pkgId tarIndex = do
   let pkgDesc = flattenPackageDescription genPkgDesc
-  fileChecks <- checkPackageContent (tarOps pkgId tarIndex) pkgDesc
-
-  let pureChecks = checkPackage genPkgDesc (Just pkgDesc)
+  fileChecks <- checkPackageContent (tarOps pkgId tarIndex)
+-- The API change of checkPackage happened somewhere between 3.10 and 3.12.
+#if !MIN_VERSION_Cabal(3,12,0)
+                  pkgDesc
+#else
+                  genPkgDesc
+#endif
+  let pureChecks = checkPackage genPkgDesc
+#if !MIN_VERSION_Cabal(3,12,0)
+                     (Just pkgDesc)
+#endif
       checks = pureChecks ++ fileChecks
       isDistError (PackageDistSuspicious     {}) = False -- just a warning
       isDistError (PackageDistSuspiciousWarn {}) = False -- just a warning
