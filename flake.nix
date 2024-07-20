@@ -52,6 +52,8 @@
               { custom = _: super.Cabal_3_12_1_0; };
             Cabal-syntax = { super, ... }:
               { custom = _: super.Cabal-syntax_3_12_1_0; };
+            cabal-install = { super, ... }:
+              { custom = _: super.cabal-install_3_12_1_0; };
             hackage-security = { super, ... }:
               { custom = _: super.hackage-security_0_6_2_6; };
             # tasty = { super, ... }:
@@ -60,6 +62,7 @@
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
             # tls.source = "1.9.0";
+            # cabal-install.source = "3.12.1.0";
           };
           devShell = {
             tools = hp: {
