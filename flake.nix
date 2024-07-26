@@ -47,9 +47,9 @@
             ap-normalize.check = false;
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
             tar = { super, ... }:
-              { custom = _: super.tar_0_6_2_0; };
-            # tasty = { super, ... }:
-            #   { custom = _: super.tasty_1_5; };
+              { custom = _: super.tar_0_6_3_0; };
+            hackage-security = { super, ... }:
+              { custom = _: super.hackage-security_0_6_2_6; };
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
