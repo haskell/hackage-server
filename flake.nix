@@ -42,6 +42,7 @@
         };
         packages.default = config.packages.hackage-server;
         haskellProjects.default = {
+          basePackages = pkgs.haskell.packages.ghc98;
           settings = {
             hackage-server.check = false;
             ap-normalize.check = false;
