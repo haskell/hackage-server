@@ -32,6 +32,7 @@
     <div style="font-size: small">
       [ $tags$ ]
       [ <a href="/package/$package.name$/tags/edit">Propose Tags</a> ]
+      [ <a href="https://github.com/haskell/security-advisories/blob/main/CONTRIBUTING.md">Report a vulnerability</a> ]
     </div>
 
     $if(isDeprecated)$
