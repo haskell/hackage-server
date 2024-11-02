@@ -15,30 +15,45 @@
         inputs.flake-root.flakeModule
       ];
       perSystem = { self', system, lib, config, pkgs, ... }: {
-        # The "main" project. You can have multiple projects, but this template
-        # has only one.
+        apps.default.program = pkgs.writeShellApplication {
+          name = "run-hackage-server";
+          runtimeInputs = [ config.packages.default ];
+          text = ''
+            if [ ! -d "state" ]; then
+              hackage-server init --static-dir=datafiles --state-dir=state
+            else
+              echo "'state' state-dir already exists"
+            fi
+            hackage-server run \
+              --static-dir=datafiles \
+              --state-dir=state \
+              --base-uri=http://127.0.0.1:8080
+          '';
+        };
+        apps.mirror-hackage-server.program = pkgs.writeShellApplication {
+          name = "mirror-hackage-server";
+          runtimeInputs = [ config.packages.default ];
+          text = ''
+            echo 'Copying packages from real Hackage Server into local Hackage Server.'
+            echo 'This assumes the local Hackage Server uses default credentials;'
+            echo 'otherwise, override in nix-default-servers.cfg'
+            hackage-mirror nix-default-servers.cfg
+          '';
+        };
         packages.default = config.packages.hackage-server;
         haskellProjects.default = {
           settings = {
             hackage-server.check = false;
-            heist.check = false;
-            fourmolu.check = false;
-            hw-prim.jailbreak = true;
-            hw-hspec-hedgehog.jailbreak = true;
-            hw-fingertree.jailbreak = true;
+            ap-normalize.check = false;
+            # https://community.flake.parts/haskell-flake/dependency#nixpkgs
+            tar = { super, ... }:
+              { custom = _: super.tar_0_6_3_0; };
+            hackage-security = { super, ... }:
+              { custom = _: super.hackage-security_0_6_2_6; };
           };
           packages = {
-            Cabal.source = "3.10.1.0";
-            Cabal-syntax.source = "3.10.1.0";
-            attoparsec-aeson.source = "2.1.0.0";
-            hedgehog.source = "1.4";
-            ormolu.source = "0.7.2.0";
-            fourmolu.source = "0.13.1.0";
-            tasty-hedgehog.source = "1.4.0.2";
-            ghc-lib-parser.source = "9.6.2.20230523";
-            ghc-lib-parser-ex.source = "9.6.0.2";
-            hlint.source = "3.6.1";
-            stylish-haskell.source = "0.14.5.0";
+            # https://community.flake.parts/haskell-flake/dependency#path
+            # tls.source = "1.9.0";
           };
           devShell = {
             tools = hp: {

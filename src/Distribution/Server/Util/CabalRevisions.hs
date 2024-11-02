@@ -178,12 +178,19 @@ checkCabalFileRevision checkXRevision old new = do
 
     checkPackageChecks :: Check GenericPackageDescription
     checkPackageChecks pkg pkg' =
-      let checks  = checkPackage pkg  Nothing
-          checks' = filter notUpperBounds $ checkPackage pkg' Nothing
+      let checks  = checkPackage pkg
+-- The API change of checkPackage happened somewhere between 3.10 and 3.12.
+#if !MIN_VERSION_Cabal(3,12,0)
+                      Nothing
+#endif
+          checks' = filter notUpperBounds $ checkPackage pkg'
+#if !MIN_VERSION_Cabal(3,12,0)
+                      Nothing
+#endif
           -- if multiple upper bounds are missing, then the simple set subtraction might detect a change to
           -- just one, and fail. Ideally we'd perform a set subtraction directly on just the missing bounds
           -- warning contents. A simple second best is to discard this check for now.
-          notUpperBounds (PackageDistSuspiciousWarn (MissingUpperBounds _)) = False
+          notUpperBounds (PackageDistSuspiciousWarn MissingUpperBounds{}) = False
           notUpperBounds _ = True
        in case checks' \\ checks of
             []        -> return ()

@@ -33,7 +33,7 @@ import Text.XHtml.Strict hiding (p, name, title, content)
 import qualified Text.XHtml.Strict as XHtml
 
 import Data.Maybe               (maybeToList, fromMaybe, isJust)
-import Data.List                (intersperse)
+import Data.List                (intercalate, intersperse)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Format         (defaultTimeLocale, formatTime)
 
@@ -228,6 +228,12 @@ packagePageTemplate render
           (vList $ map sourceRepositoryToHtml (sourceRepos desc))
       ] ++
 
+      [ templateVal "hasTestedWith"
+          (not $ null pkgTestedWith)
+      , templateVal "testedWith"
+          (intercalate ", " pkgTestedWith)
+      ] ++
+
       [ templateVal "hasSynopsis"
           (not . Short.null $ synopsis (rendOther render))
       , templateVal "synopsis"
@@ -238,6 +244,10 @@ packagePageTemplate render
     pkgid   = rendPkgId render
     pkgVer  = display $ pkgVersion pkgid
     pkgName = display $ packageName pkgid
+    pkgTestedWith =
+      [ display compilerFlavor ++ " " ++ display versionRange
+      | (compilerFlavor, versionRange) <- testedWith desc
+      ]
 
     desc = rendOther render
 

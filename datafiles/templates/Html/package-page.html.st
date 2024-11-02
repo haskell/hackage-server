@@ -32,6 +32,7 @@
     <div style="font-size: small">
       [ $tags$ ]
       [ <a href="/package/$package.name$/tags/edit">Propose Tags</a> ]
+      [ <a href="https://github.com/haskell/security-advisories/blob/main/CONTRIBUTING.md">Report a vulnerability</a> ]
     </div>
 
     $if(isDeprecated)$
@@ -138,6 +139,15 @@
               <th>Dependencies</th>
               <td>$package.buildDepends$</td>
             </tr>
+
+            $if(package.optional.hasTestedWith)$
+            <tr>
+              <th>Tested with</th>
+              <td class="word-wrap">
+                $package.optional.testedWith$
+              </td>
+            </tr>
+            $endif$
 
             <tr>
               <th>License</th>

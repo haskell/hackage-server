@@ -117,10 +117,28 @@ h4 { font-size: 100%;   /* 13px */ }
 h5 { font-size: 100%;   /* 13px */ }
 h6 { font-size: 100%;   /* 13px */ }
 
-select, input, button, textarea {
+select, input, button, textarea, input::file-selector-button {
   font-size: 1rem;
   margin: 0.5em;
-  padding: 0.1em;
+  padding: 0.5em 0.8em;
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: #eee;
+}
+
+select:hover, input:hover, button:hover, textarea:hover, input::file-selector-button:hover {
+  background: #dcdcdc;
+}
+
+input[type=file] {
+  background: none;
+  border: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  select, input, button, textarea, input::file-selector-button {
+    border: 0;
+  }
 }
 
 table {
@@ -267,9 +285,21 @@ pre + pre {
   margin-top: 0.5em;
 }
 
+@media (prefers-color-scheme: dark) {
+  blockquote {
+    border-left: 3px solid #2f2842;
+    background-color: #4c4771;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  blockquote {
+    border-left: 3px solid #c7a5d3;
+    background-color: #eee4f1;
+  }
+}
+
 blockquote {
-  border-left: 3px solid #c7a5d3;
-  background-color: #eee4f1;
   margin: 0.5em;
   padding: 0.0005em 0.3em 0.5em 0.5em;
 }
@@ -1145,6 +1175,14 @@ a.deprecated[href]:visited {
 
 .versions a.normal[href]:visited {
     color: #61B01E;
+}
+
+.lib-contents {
+  margin-left: 20px;
+}
+
+.lib-contents > h3 {
+  margin: 0.7em 0;
 }
 
 /* Paginator */

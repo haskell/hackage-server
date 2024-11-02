@@ -117,6 +117,7 @@ instance SafeCopy VersionRange where
             10 -> majorBoundVersion     <$> safeGet  -- since Cabal-2.0
             _ -> fail "VersionRange.getCopy: bad tag"
 
+-- !! KEEP IN SYNC with instance Arbitrary OS
 instance SafeCopy OS where
     errorTypeName _ = "OS"
 
@@ -173,6 +174,7 @@ instance SafeCopy OS where
 #endif
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
+-- !! KEEP IN SYNC with instance Arbitrary Arch
 instance SafeCopy  Arch where
     errorTypeName _ = "Arch"
 
@@ -196,6 +198,12 @@ instance SafeCopy  Arch where
     putCopy AArch64       = contain $ putWord8 17
     putCopy S390X         = contain $ putWord8 18
     putCopy Wasm32        = contain $ putWord8 19
+#if MIN_VERSION_Cabal_syntax(3,12,0)
+    putCopy PPC64LE       = contain $ putWord8 20
+    putCopy Sparc64       = contain $ putWord8 21
+    putCopy RISCV64       = contain $ putWord8 22
+    putCopy LoongArch64   = contain $ putWord8 23
+#endif
 
     getCopy = contain $ do
       tag <- getWord8
@@ -220,8 +228,15 @@ instance SafeCopy  Arch where
         17 -> return AArch64
         18 -> return S390X
         19 -> return Wasm32
+#if MIN_VERSION_Cabal_syntax(3,12,0)
+        20 -> return PPC64LE
+        21 -> return Sparc64
+        22 -> return RISCV64
+        23 -> return LoongArch64
+#endif
         _  -> fail "SafeCopy Arch getCopy: unexpected tag"
 
+-- !! KEEP IN SYNC with instance Arbitrary CompilerFlavor
 instance SafeCopy CompilerFlavor where
     errorTypeName _ = "CompilerFlavor"
 
@@ -238,6 +253,9 @@ instance SafeCopy CompilerFlavor where
     putCopy (HaskellSuite s)  = contain $ putWord8 10 >> safePut s
     putCopy GHCJS             = contain $ putWord8 11
     putCopy Eta               = contain $ putWord8 12
+#if MIN_VERSION_Cabal_syntax(3,12,1)
+    putCopy MHS               = contain $ putWord8 13
+#endif
 
     getCopy = contain $ do
       tag <- getWord8
@@ -255,6 +273,9 @@ instance SafeCopy CompilerFlavor where
         10 -> return HaskellSuite <*> safeGet
         11 -> return GHCJS
         12 -> return Eta
+#if MIN_VERSION_Cabal_syntax(3,12,1)
+        13 -> return MHS
+#endif
         _  -> fail "SafeCopy CompilerFlavor getCopy: unexpected tag"
 
 
@@ -363,6 +384,7 @@ instance Parsec UTCTime where
         Just t  -> return t
     where
       digit2 = replicateM 2 P.digit
+
 -------------------
 -- Arbitrary instances
 --
@@ -376,31 +398,88 @@ instance Arbitrary Version where
 instance Arbitrary PackageIdentifier where
   arbitrary = PackageIdentifier <$> arbitrary <*> arbitrary
 
+-- !! KEEP IN SYNC with instance SafeCopy CompilerFlavor
 instance Arbitrary CompilerFlavor where
-  arbitrary = oneof [ pure OtherCompiler <*> vectorOf 3 (choose ('A', 'Z'))
-                    , pure GHC, pure NHC, pure YHC, pure Hugs, pure HBC
-                    , pure Helium, pure JHC, pure LHC, pure UHC ]
+  arbitrary = oneof
+    [ pure OtherCompiler <*> vectorOf 3 (choose ('A', 'Z'))
+    , pure GHC
+    , pure NHC
+    , pure YHC
+    , pure Hugs
+    , pure HBC
+    , pure Helium
+    , pure JHC
+    , pure LHC
+    , pure UHC
+    , pure HaskellSuite <*> vectorOf 3 (choose ('A', 'Z'))
+    , pure GHCJS
+    , pure Eta
+#if MIN_VERSION_Cabal_syntax(3,12,1)
+    , pure MHS
+#endif
+    ]
 
 instance Arbitrary CompilerId where
   arbitrary = CompilerId <$> arbitrary <*> arbitrary
 
+-- !! KEEP IN SYNC with instance SafeCopy Arch
 instance Arbitrary Arch where
-  arbitrary = oneof [ pure OtherArch <*> vectorOf 3 (choose ('A', 'Z'))
-                    , pure I386, pure X86_64, pure PPC, pure PPC64, pure Sparc
-                    , pure Arm, pure Mips, pure SH, pure IA64, pure S390
-                    , pure Alpha, pure Hppa, pure Rs6000, pure M68k, pure Vax ]
-
-instance Arbitrary OS where
-  arbitrary = oneof [ pure OtherOS <*> vectorOf 3 (choose ('A', 'Z'))
-                    , pure Linux, pure Windows, pure OSX, pure FreeBSD
-                    , pure OpenBSD, pure NetBSD, pure Solaris, pure AIX
-                    , pure HPUX, pure IRIX, pure HaLVM, pure IOS
-#if MIN_VERSION_Cabal_syntax(3,11,0)
-                    , pure Haiku
-#else
-                    , pure $ OtherOS "haiku"
+  arbitrary = oneof
+    [ pure OtherArch <*> vectorOf 3 (choose ('A', 'Z'))
+    , pure I386
+    , pure X86_64
+    , pure PPC
+    , pure PPC64
+    , pure Sparc
+    , pure Arm
+    , pure Mips
+    , pure SH
+    , pure IA64
+    , pure S390
+    , pure Alpha
+    , pure Hppa
+    , pure Rs6000
+    , pure M68k
+    , pure Vax
+    , pure JavaScript
+    , pure AArch64
+    , pure S390X
+    , pure Wasm32
+#if MIN_VERSION_Cabal_syntax(3,12,0)
+    , pure PPC64LE
+    , pure Sparc64
+    , pure RISCV64
+    , pure LoongArch64
 #endif
-                    ]
+    ]
+
+-- !! KEEP IN SYNC with instance SafeCopy OS
+instance Arbitrary OS where
+  arbitrary = oneof
+    [ pure OtherOS <*> vectorOf 3 (choose ('A', 'Z'))
+    , pure Linux
+    , pure Windows
+    , pure OSX
+    , pure FreeBSD
+    , pure OpenBSD
+    , pure NetBSD
+    , pure Solaris
+    , pure AIX
+    , pure HPUX
+    , pure IRIX
+    , pure HaLVM
+    , pure IOS
+    , pure DragonFly
+    , pure Ghcjs
+    , pure Hurd
+    , pure Android
+    , pure Wasi
+#if MIN_VERSION_Cabal_syntax(3,11,0)
+    , pure Haiku
+#else
+    , pure $ OtherOS "haiku"
+#endif
+    ]
 
 instance Arbitrary FlagName where
   arbitrary = mkFlagName <$> vectorOf 4 (choose ('a', 'z'))

@@ -14,5 +14,5 @@ main = do
   args <- getArgs
   pkg  <- findCabalPackage "hackage-server"
   -- Need to give the library name, otherwise the parser does not find it.
-  lib  <- extractSpecificCabalLibrary (Just "lib-server") pkg
+  lib  <- extractSpecificCabalLibrary Nothing pkg
   mainFromLibrary lib args

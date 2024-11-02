@@ -1,4 +1,7 @@
+{-# LANGUAGE CPP #-}
+
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
+
 module Main where
 
 import qualified Distribution.Server as Server
@@ -65,7 +68,11 @@ main :: IO ()
 main = topHandler $ do
     hSetBuffering stdout LineBuffering
     args <- getArgs
+#if !MIN_VERSION_Cabal(3,12,0)
     case commandsRun (globalCommand commands) commands args of
+#else
+    commandsRun (globalCommand commands) commands args >>= \case
+#endif
       CommandHelp   help  -> printHelp help
       CommandList   opts  -> printOptionsList opts
       CommandErrors errs  -> printErrors errs
@@ -79,6 +86,7 @@ main = topHandler $ do
 
   where
     printHelp help = getProgName >>= putStr . help
+    printOptionsList :: [String] -> IO ()
     printOptionsList = putStr . unlines
     printErrors errs = do
       putStr (intercalate "\n" errs)
@@ -154,7 +162,11 @@ optionVerbosity getter setter =
     "Control verbosity (n is 0--3, default verbosity level is 1)"
     getter setter
     (optArg "n" (fmap Flag Verbosity.flagToVerbosity)
-          (Flag Verbosity.verbose)
+          (
+#if MIN_VERSION_Cabal(3,12,0)
+           show Verbosity.verbose,
+#endif
+           Flag Verbosity.verbose)
           (fmap (Just . showForCabal) . flagToList))
 
 optionStateDir :: (a -> Flag FilePath)

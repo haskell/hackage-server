@@ -34,9 +34,10 @@ import Distribution.Utils.ShortText (fromShortText, ShortText)
 import Text.XHtml.Strict hiding (p, name, title, content)
 import qualified Text.XHtml.Strict
 
-import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe, catMaybes)
+import Data.Bool (bool)
+import Data.Maybe               (fromMaybe, isJust, mapMaybe, catMaybes)
 import Data.List                (intersperse, intercalate, partition)
-import Control.Arrow            (second)
+import Control.Arrow            (Arrow (..))
 import System.FilePath.Posix    ((</>), (<.>))
 
 import qualified Documentation.Haddock.Markup as Haddock
@@ -152,15 +153,19 @@ renderPackageFlags render docURL =
         whenNotNull xs a = if null xs then [] else a
 
 moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Maybe PackageId -> Bool -> [Html]
-moduleSection render mdocIndex docURL mPkgId quickNav =
-    maybeToList $ fmap msect (rendModules render mdocIndex)
-  where msect ModSigIndex{ modIndex = m, sigIndex = s } = toHtml $
+moduleSection render mdocIndex docURL mPkgId quickNav = case renderedModules of
+  [(LMainLibName, mods)] -> [msect mods]
+  renderedLibs -> concatMap renderNamedLib renderedLibs
+
+  where msect (ModSigIndex{ modIndex = m, sigIndex = s }) =
+          let heading = bool h3 h2 containsSubLibraries in
+          toHtml $
             (if not (null s)
-                then [ h2 << "Signatures"
+                then [ heading << "Signatures"
                      , renderModuleForest docURL s ]
                 else []) ++
             (if not (null m)
-                then [ h2 << "Modules"] ++
+                then [ heading << "Modules"] ++
                      [renderDocIndexLink] ++
                      [renderModuleForest docURL m ]
                 else [])
@@ -184,10 +189,17 @@ moduleSection render mdocIndex docURL mPkgId quickNav =
             concatLinks [h]    = Just h
             concatLinks (h:hs) = (h +++) . ("] [" +++) <$> concatLinks hs
 
-tabulate :: [(String, Html)] -> Html
-tabulate items = table ! [theclass "properties"] <<
-        [tr << [th << t, td << d] | (t, d) <- items]
+        renderNamedLib :: (LibraryName, ModSigIndex) -> [Html]
+        renderNamedLib (name, mods) =
+          [ h2 << ("library " ++ rendLibName render name)
+          , thediv ! [theclass "lib-contents"] << msect mods
+          ]
 
+        containsSubLibraries :: Bool
+        containsSubLibraries = map fst renderedModules == [LMainLibName]
+
+        renderedModules :: [(LibraryName, ModSigIndex)]
+        renderedModules = rendModules render mdocIndex
 
 renderDependencies :: PackageRender -> (String, Html)
 renderDependencies render =
@@ -219,15 +231,23 @@ nonbreakingSpan :: Html -> Html
 nonbreakingSpan str = thespan ! [thestyle "white-space: nowrap"] << str
 
 renderDetailedDependencies :: PackageRender -> Html
-renderDetailedDependencies pkgRender =
-    tabulate $ map (second (fromMaybe noDeps . render)) targets
+renderDetailedDependencies pkgRender
+  = mconcat (mapMaybe renderComponentType componentsByType)
+
   where
-    targets :: [(String, DependencyTree)]
-    targets = maybeToList library
-        ++ rendSublibraryDeps pkgRender
-        ++ rendExecutableDeps pkgRender
-      where
-        library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
+    componentsByType :: [(String, [(ComponentName, DependencyTree)])]
+    componentsByType =
+      [ ("Libraries", first CLibName <$> rendLibraryDeps pkgRender)
+      , ("Executables", rendExecutableDeps pkgRender)
+      ]
+
+    renderComponentType :: (String, [(ComponentName, DependencyTree)]) -> Maybe Html
+    renderComponentType (_, []) = Nothing
+    renderComponentType (componentType, items) = Just $ mconcat
+      [ h2 << componentType
+      , flip foldMap items $ \(componentName, deptree) ->
+        h3 << rendComponentName pkgRender componentName +++ fromMaybe noDeps (render deptree)
+      ]
 
     noDeps = list [toHtml "No dependencies"]
 
@@ -243,7 +263,7 @@ renderDetailedDependencies pkgRender =
                       NotBuildable -> [strong << "buildable:" +++ " False"]
 
     list :: [Html] -> Html
-    list items = thediv ! [identifier "detailed-dependencies"] << unordList items
+    list items = unordList items ! [identifier "detailed-dependencies"]
 
     renderComponent :: CondBranch ConfVar [Dependency] IsBuildable
                     -> Maybe Html

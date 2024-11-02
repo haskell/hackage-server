@@ -1,6 +1,7 @@
 -- TODO: Review and possibly move elsewhere. This code was part of the
 -- RecentPackages (formerly "Check") feature, but that caused some cyclic
 -- dependencies.
+{-# LANGUAGE TupleSections #-}
 module Distribution.Server.Packages.Render (
     -- * Package render
     PackageRender(..)
@@ -53,6 +54,7 @@ import Distribution.Utils.ShortText (fromShortText)
 
 import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex, TarEntryOffset)
+import Data.Bifunctor (first, Bifunctor (..))
 
 data ModSigIndex = ModSigIndex {
         modIndex :: ModuleForest,
@@ -64,11 +66,12 @@ data ModSigIndex = ModSigIndex {
 -- This is why some fields of PackageDescription are preprocessed, and others aren't.
 data PackageRender = PackageRender {
     rendPkgId        :: PackageIdentifier,
+    rendLibName      :: LibraryName -> String,
+    rendComponentName :: ComponentName -> String,
     rendDepends      :: [Dependency],
     rendExecNames    :: [String],
-    rendLibraryDeps  :: Maybe DependencyTree,
-    rendSublibraryDeps :: [(String, DependencyTree)],
-    rendExecutableDeps :: [(String, DependencyTree)],
+    rendLibraryDeps  :: [(LibraryName, DependencyTree)],
+    rendExecutableDeps :: [(ComponentName, DependencyTree)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
     rendMaintainer   :: Maybe String,
@@ -78,7 +81,7 @@ data PackageRender = PackageRender {
     -- to test if a module actually has a corresponding documentation HTML
     -- file we can link to.  If no 'TarIndex' is provided, it is assumed
     -- all links are dead.
-    rendModules      :: Maybe TarIndex -> Maybe ModSigIndex,
+    rendModules      :: Maybe TarIndex -> [(LibraryName, ModSigIndex)],
     rendHasTarball   :: Bool,
     rendChangeLog    :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
     rendReadme       :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
@@ -95,14 +98,14 @@ data PackageRender = PackageRender {
 
 doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender
-    { rendPkgId        = pkgInfoId info
+    { rendPkgId        = packageId'
     , rendDepends      = flatDependencies genDesc
+    , rendLibName      = renderLibName
+    , rendComponentName = renderComponentName
     , rendExecNames    = map (unUnqualComponentName . exeName) (executables flatDesc)
-    , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
-    , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
+    , rendExecutableDeps = (CExeName *** depTree buildInfo)
                                 `map` condExecutables genDesc
-    , rendSublibraryDeps = (unUnqualComponentName *** depTree libBuildInfo)
-                                `map` condSubLibraries genDesc
+    , rendLibraryDeps = second (depTree libBuildInfo) <$> allCondLibs genDesc
     , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = map getSymbolicPath $ licenseFiles desc
     , rendMaintainer   = case fromShortText $ maintainer desc of
@@ -144,17 +147,15 @@ doPackageRender users info = PackageRender
                                then Buildable
                                else NotBuildable
 
-    renderModules docindex
-      | Just lib <- library flatDesc
-      = let mod_ix = mkForest $ exposedModules lib
+    renderModules :: Maybe TarIndex -> [(LibraryName, ModSigIndex)]
+    renderModules docindex = flip fmap (allLibraries flatDesc) $ \lib ->
+      let mod_ix = mkForest $ exposedModules lib
                            -- Assumes that there is an HTML per reexport
                            ++ map moduleReexportName (reexportedModules lib)
                            ++ virtualModules (libBuildInfo lib)
-            sig_ix = mkForest $ signatures lib
-            mkForest = moduleForest . map (\m -> (m, moduleHasDocs docindex m))
-        in Just (ModSigIndex { modIndex = mod_ix, sigIndex = sig_ix })
-      | otherwise
-      = Nothing
+          sig_ix = mkForest $ signatures lib
+          mkForest = moduleForest . map (\m -> (m, moduleHasDocs docindex m))
+      in (libName lib, ModSigIndex { modIndex = mod_ix, sigIndex = sig_ix })
 
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
@@ -171,6 +172,25 @@ doPackageRender users info = PackageRender
         ty <- repoType r
         loc <- repoLocation r
         return (ty, loc, r)
+
+    packageId' :: PackageIdentifier
+    packageId' = pkgInfoId info
+
+    packageName' :: String
+    packageName' = unPackageName $ pkgName packageId'
+
+    renderLibName :: LibraryName -> String
+    renderLibName LMainLibName = packageName'
+    renderLibName (LSubLibName name) =
+      packageName' ++ ":" ++ unUnqualComponentName name
+
+    renderComponentName :: ComponentName -> String
+    renderComponentName (CLibName name) = renderLibName name
+    renderComponentName name@(CNotLibName _) = componentNameRaw name
+
+allCondLibs :: GenericPackageDescription -> [(LibraryName, CondTree ConfVar [Dependency] Library)]
+allCondLibs desc = maybeToList ((LMainLibName,) <$> condLibrary desc)
+  ++ (first LSubLibName <$> condSubLibraries desc)
 
 type DependencyTree = CondTree ConfVar [Dependency] IsBuildable
 

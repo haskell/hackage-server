@@ -142,10 +142,10 @@ tarPackageChecks lax now tarGzFile contents = do
       expectedDir = display pkgid
 
       selectEntry entry = case Tar.entryContent entry of
-        Tar.NormalFile bs _         -> Just (normalise (Tar.entryPath entry), NormalFile bs)
-        Tar.Directory               -> Just (normalise (Tar.entryPath entry), Directory)
-        Tar.SymbolicLink linkTarget -> Just (normalise (Tar.entryPath entry), Link (Tar.fromLinkTarget linkTarget))
-        Tar.HardLink     linkTarget -> Just (normalise (Tar.entryPath entry), Link (Tar.fromLinkTarget linkTarget))
+        Tar.NormalFile bs _         -> Just (normalise (Tar.entryTarPath entry), NormalFile bs)
+        Tar.Directory               -> Just (normalise (Tar.entryTarPath entry), Directory)
+        Tar.SymbolicLink linkTarget -> Just (normalise (Tar.entryTarPath entry), Link linkTarget)
+        Tar.HardLink     linkTarget -> Just (normalise (Tar.entryTarPath entry), Link linkTarget)
         _                           -> Nothing
   files <- selectEntries explainTarError selectEntry entries
   return (pkgid, files)
@@ -303,17 +303,18 @@ extraChecks :: GenericPackageDescription
             -> UploadMonad ()
 extraChecks genPkgDesc pkgId tarIndex = do
   let pkgDesc = flattenPackageDescription genPkgDesc
-  fileChecks <- checkPackageContent (tarOps pkgId tarIndex) pkgDesc
-
-
-  -- this path info check is just until we can depend on cabal 3.12 for PathInfo autogen modules.
-  -- https://github.com/haskell/cabal/issues/9331
-  checkPathInfo pkgDesc
-
-  let pureChecks = checkPackage genPkgDesc (Just pkgDesc)
+  fileChecks <- checkPackageContent (tarOps pkgId tarIndex)
+-- The API change of checkPackage happened somewhere between 3.10 and 3.12.
+#if !MIN_VERSION_Cabal(3,12,0)
+                  pkgDesc
+#else
+                  genPkgDesc
+#endif
+  let pureChecks = checkPackage genPkgDesc
+#if !MIN_VERSION_Cabal(3,12,0)
+                     (Just pkgDesc)
+#endif
       checks = pureChecks ++ fileChecks
-
-
 
       isDistError (PackageDistSuspicious     {}) = False -- just a warning
       isDistError (PackageDistSuspiciousWarn {}) = False -- just a warning
@@ -350,14 +351,14 @@ warn msg = tell [msg]
 runUploadMonad :: UploadMonad a -> Either String (a, [String])
 runUploadMonad (UploadMonad m) = runIdentity . runExceptT . runWriterT $ m
 
-selectEntries :: forall err a.
+selectEntries :: forall tarPath linkTarget err a.
                  (err -> String)
-              -> (Tar.Entry -> Maybe a)
-              -> Tar.Entries err
+              -> (Tar.GenEntry tarPath linkTarget -> Maybe a)
+              -> Tar.GenEntries tarPath linkTarget err
               -> UploadMonad [a]
 selectEntries formatErr select = extract []
   where
-    extract :: [a] -> Tar.Entries err -> UploadMonad [a]
+    extract :: [a] -> Tar.GenEntries tarPath linkTarget err -> UploadMonad [a]
     extract _        (Tar.Fail err)           = throwError (formatErr err)
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) =
@@ -371,18 +372,20 @@ data CombinedTarErrs =
    | TarBombError     FilePath FilePath
    | FutureTimeError  FilePath UTCTime UTCTime
    | PermissionsError FilePath Tar.Permissions
+   | LongNamesError   Tar.DecodeLongNamesError
 
 tarballChecks :: Bool -> UTCTime -> FilePath
               -> Tar.Entries Tar.FormatError
-              -> Tar.Entries CombinedTarErrs
+              -> Tar.GenEntries FilePath FilePath CombinedTarErrs
 tarballChecks lax now expectedDir =
     (if not lax then checkFutureTimes now else id)
   . checkTarbomb expectedDir
   . (if not lax then checkUselessPermissions else id)
   . (if lax then ignoreShortTrailer
             else fmapTarError (either id PortabilityError)
-               . Tar.checkPortability)
-  . fmapTarError FormatError
+               . Tar.mapEntries (\entry -> maybe (Right entry) Left (Tar.checkEntryPortability entry)))
+  . fmapTarError (either FormatError LongNamesError)
+  . Tar.decodeLongNames
   where
     ignoreShortTrailer =
       Tar.foldEntries Tar.Next Tar.Done
@@ -392,32 +395,39 @@ tarballChecks lax now expectedDir =
     fmapTarError f = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
 
 checkFutureTimes :: UTCTime
-                 -> Tar.Entries CombinedTarErrs
-                 -> Tar.Entries CombinedTarErrs
+                 -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
+                 -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
 checkFutureTimes now =
     checkEntries checkEntry
   where
     -- Allow 30s for client clock skew
     now' = addUTCTime 30 now
+
+    checkEntry :: Tar.GenEntry FilePath linkTarget -> Maybe CombinedTarErrs
     checkEntry entry
       | entryUTCTime > now'
       = Just (FutureTimeError posixPath entryUTCTime now')
       where
         entryUTCTime = posixSecondsToUTCTime (realToFrac (Tar.entryTime entry))
-        posixPath    = Tar.fromTarPathToPosixPath (Tar.entryTarPath entry)
+        posixPath    = Tar.entryTarPath entry
 
     checkEntry _ = Nothing
 
-checkTarbomb :: FilePath -> Tar.Entries CombinedTarErrs -> Tar.Entries CombinedTarErrs
+checkTarbomb
+  :: FilePath
+  -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
+  -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
 checkTarbomb expectedTopDir =
     checkEntries checkEntry
   where
     checkEntry entry =
-      case splitDirectories (Tar.entryPath entry) of
+      case splitDirectories (Tar.entryTarPath entry) of
         (topDir:_) | topDir == expectedTopDir -> Nothing
-        _ -> Just $ TarBombError (Tar.entryPath entry) expectedTopDir
+        _ -> Just $ TarBombError (Tar.entryTarPath entry) expectedTopDir
 
-checkUselessPermissions :: Tar.Entries CombinedTarErrs -> Tar.Entries CombinedTarErrs
+checkUselessPermissions
+  :: Tar.GenEntries FilePath linkTarget CombinedTarErrs
+  -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
 checkUselessPermissions =
     checkEntries checkEntry
   where
@@ -429,11 +439,14 @@ checkUselessPermissions =
       where
         checkPermissions expected actual =
             if expected .&. actual /= expected
-                then Just $ PermissionsError (Tar.entryPath entry) actual
+                then Just $ PermissionsError (Tar.entryTarPath entry) actual
                 else Nothing
 
 
-checkEntries :: (Tar.Entry -> Maybe e) -> Tar.Entries e -> Tar.Entries e
+checkEntries
+  :: (Tar.GenEntry tarPath linkTarget -> Maybe e)
+  -> Tar.GenEntries tarPath linkTarget e
+  -> Tar.GenEntries tarPath linkTarget e
 checkEntries checkEntry =
   Tar.foldEntries (\entry rest -> maybe (Tar.Next entry rest) Tar.Fail
                                         (checkEntry entry))
@@ -487,6 +500,10 @@ explainTarError (PermissionsError entryname mode) =
   where
     showMode :: Tar.Permissions -> String
     showMode m = printf "%.3o" (fromIntegral m :: Int)
+explainTarError (LongNamesError err) =
+    "There is an error in the format of entries with long names in the tar file: " ++ show err
+ ++ ". Check that it is a valid tar file (e.g. 'tar -xtf thefile.tar'). "
+ ++ "You may need to re-create the package tarball and try again."
 
 quote :: String -> String
 quote s = "'" ++ s ++ "'"
@@ -522,6 +539,8 @@ isAcceptableLicense = either goSpdx goLegacy . licenseRaw
         goSimple (SPDX.ELicenseRef _)      = False -- don't allow referenced licenses
         goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
         goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
+        goSimple (SPDX.ELicenseId SPDX.Bzip2_1_0_5) = True -- not OSI approved, but make an exception: https://github.com/haskell/hackage-server/issues/1294
+        goSimple (SPDX.ELicenseId SPDX.Bzip2_1_0_6) = True -- same as above
         goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid || SPDX.LId.licenseIsFsfLibre lid -- allow only OSI or FSF approved licenses.
 
     -- pre `cabal-version: 2.2`
