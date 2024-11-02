@@ -13,7 +13,9 @@ $hackagePageHeader()$
 
 <p>Email confirmation done!
 
-<p>Now you can set your password and create the account.
+<p>Now you can set your password and use the account. If you wish to
+  upload a package, please request to be added to the uploader group
+  by one of the mechanisms described in the email you were sent.
 
 <form action="$posturl$" method="post" enctype="multipart/form-data">
   <table>
@@ -31,4 +33,3 @@ $hackagePageHeader()$
 
 </div>
 </body></html>
-

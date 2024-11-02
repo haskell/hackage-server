@@ -130,7 +130,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initDownloadFeature env
     mkTagsFeature           <- logStartup "tags" $
                                initTagsFeature env
-    mkAnalyticsPixelsFeature <- logStartup "analytics pixels" $ 
+    mkAnalyticsPixelsFeature <- logStartup "analytics pixels" $
                                initAnalyticsPixelsFeature env
     mkVersionsFeature       <- logStartup "versions" $
                                initVersionsFeature env
@@ -320,7 +320,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          reportsCoreFeature
                          userDetailsFeature
                          recentPackagesFeature
-                         
+
 
     editCabalFeature <- mkEditCabalFilesFeature
                           usersFeature

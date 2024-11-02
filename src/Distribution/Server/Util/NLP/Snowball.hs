@@ -33,7 +33,7 @@ newtype Stemmer = Stemmer (MVar (ForeignPtr Struct))
 
 -- | Create a new reusable 'Stemmer' instance.
 newStemmer :: IO Stemmer
-newStemmer = do 
+newStemmer = do
   struct <- stemmer_new
   when (struct == nullPtr) $
     error "Text.Snowball.newStemmer: nullPtr"
