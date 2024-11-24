@@ -85,7 +85,9 @@ initPackageInfoJSONFeature env = do
   return $ \core preferred -> do
 
     let coreR = coreResource core
-        info = "Get basic package information"
+        info = "Get basic package information: \
+               \The response contains a JSON object where the keys are version numbers as strings, \
+               \and the values are whether the version is preferred or not"
         vInfo = "Get basic package information at a specific metadata revision"
 
         jsonResources = [
