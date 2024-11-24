@@ -19,7 +19,6 @@ module Distribution.Server.Framework.RequestContentTypes (
 
     -- * various specific content types
     expectTextPlain,
-    expectUncompressedTarball,
     expectCompressedTarball,
     expectAesonContent,
     expectCSV,
@@ -102,15 +101,6 @@ gzipDecompress content = go content decompressor
 expectTextPlain :: ServerPartE LBS.ByteString
 expectTextPlain = expectContentType "text/plain"
 
--- | Expect an uncompressed @.tar@ file.
---
--- The tar file is not validated.
---
--- A content-encoding of \"gzip\" is handled transparently.
---
-expectUncompressedTarball :: ServerPartE LBS.ByteString
-expectUncompressedTarball = expectContentType "application/x-tar"
-
 -- | Expect a compressed @.tar.gz@ file.
 --
 -- Neither the gzip encoding nor the tar format are validated.
@@ -128,7 +118,7 @@ expectCompressedTarball = do
       Just actual
         | actual == "application/x-tar"
         , contentEncoding == Just "gzip" -> consumeRequestBody
-        | actual == "application/x-gzip"
+        | actual == "application/gzip" || actual == "application/x-gzip" 
         , contentEncoding == Nothing     -> consumeRequestBody
       _                                  -> errExpectedTarball
   where
