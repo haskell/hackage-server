@@ -37,7 +37,7 @@
             echo 'Copying packages from real Hackage Server into local Hackage Server.'
             echo 'This assumes the local Hackage Server uses default credentials;'
             echo 'otherwise, override in nix-default-servers.cfg'
-            hackage-mirror nix-default-servers.cfg
+            hackage-mirror nix-default-servers.cfg "$@"
           '';
         };
         packages.default = config.packages.hackage-server;
