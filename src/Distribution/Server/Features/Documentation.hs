@@ -23,6 +23,7 @@ import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as ServerTarball
 import qualified Distribution.Server.Util.DocMeta as DocMeta
+import qualified Distribution.Server.Util.GZip as Gzip
 import Distribution.Server.Features.BuildReports.BuildReport (PkgDetails(..), BuildStatus(..))
 import Data.TarIndex (TarIndex)
 import qualified Codec.Archive.Tar       as Tar
@@ -46,7 +47,6 @@ import Data.Time.Clock (NominalDiffTime, diffUTCTime, getCurrentTime)
 import System.Directory (getModificationTime)
 import Control.Applicative
 import Distribution.Server.Features.PreferredVersions
-import Distribution.Server.Features.PreferredVersions.State (getVersionStatus)
 import Distribution.Server.Packages.Types
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
@@ -327,8 +327,10 @@ documentationFeature name
       -- \* Generate the new index
       -- \* Drop the index for the old tar-file
       -- \* Link the new documentation to the package
-      fileContents <- expectUncompressedTarball
-      mres <- liftIO $ BlobStorage.addWith store fileContents
+      fileContents <- expectCompressedTarball
+      let filename = display pkgid ++ "-docs" <.> "tar.gz"
+          unpacked = Gzip.decompressNamed filename fileContents
+      mres <- liftIO $ BlobStorage.addWith store unpacked 
                          (\content -> return (checkDocTarball pkgid content))
       case mres of
         Left  err -> errBadRequest "Invalid documentation tarball" [MText err]
@@ -377,15 +379,15 @@ documentationFeature name
         helper (pkg:pkgs) = do
           hasDoc <- queryHasDocumentation (pkgInfoId pkg)
           let status = getVersionStatus prefInfo (packageVersion pkg)
-          if hasDoc && status == NormalVersion 
-              then pure (Just (packageId pkg)) 
+          if hasDoc && status == NormalVersion
+              then pure (Just (packageId pkg))
               else helper pkgs
 
         helper2 [] = pure Nothing
         helper2 (pkg:pkgs) = do
           hasDoc <- queryHasDocumentation (pkgInfoId pkg)
           if hasDoc
-              then pure (Just (packageId pkg)) 
+              then pure (Just (packageId pkg))
               else helper2 pkgs
 
     withDocumentation :: Resource -> DynamicPath
@@ -400,7 +402,7 @@ documentationFeature name
                 then (var, unPackageName $ pkgName pkgid)
                 else e
             | e@(var, _) <- dpath ]
-          basePkgPath   = (renderResource' self basedpath)
+          basePkgPath   = renderResource' self basedpath
           canonicalLink = show serverBaseURI ++ basePkgPath
           canonicalHeader = "<" ++ canonicalLink ++ ">; rel=\"canonical\""
 
@@ -484,7 +486,7 @@ checkDocTarball pkgid =
 ------------------------------------------------------------------------------}
 
 mapParaM :: Monad m => (a -> m b) -> [a] -> m [(a, b)]
-mapParaM f = mapM (\x -> (,) x `liftM` f x)
+mapParaM f = mapM (\x -> (,) x <$> f x)
 
 getFileAge :: FilePath -> IO NominalDiffTime
 getFileAge file = diffUTCTime <$> getCurrentTime <*> getModificationTime file
