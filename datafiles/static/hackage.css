@@ -147,6 +147,10 @@ table {
   font:100%;
 }
 
+pre {
+  border-radius: 3px;
+}
+
 pre, code, kbd, samp, .src {
   font-family: monospace;
 }
