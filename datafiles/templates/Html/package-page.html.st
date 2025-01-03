@@ -95,29 +95,6 @@
           $downloadSection$
         </div>
 
-        <div id="maintainer-corner">
-          <h4>Maintainer's Corner</h4>
-          <p><a href="$package.maintainerURL$">Package maintainers</a></p>
-          <ul>
-            <li>
-              $maintainers$
-            </li>
-          </ul>
-          <p>For package maintainers and hackage trustees</p>
-          <ul>
-            <li>
-              <a href="$baseurl$/package/$package.name$/maintain">
-                edit package information
-              </a>
-            </li>
-          </ul>
-          <p>Candidates</p>
-          <ul>
-            <li>
-              $candidates$
-            </li>
-          </ul>
-        </div>
 
       </div><!-- /left-pane -->
 
@@ -282,6 +259,34 @@
             <tr>
               <th>Status</th>
               <td>$buildStatus$</td>
+            </tr>
+            <tr>
+              <th>Maintainer's Corner</th>
+              <td>
+                <details>
+                  <summary>Expand for Details</summary>
+                  <p><a href="$package.maintainerURL$">Package maintainers</a></p>
+                  <ul>
+                    <li>
+                      $maintainers$
+                    </li>
+                  </ul>
+                  <p>For package maintainers and hackage trustees</p>
+                  <ul>
+                    <li>
+                      <a href="$baseurl$/package/$package.name$/maintain">
+                        edit package information
+                      </a>
+                    </li>
+                  </ul>
+                  <p>Candidates</p>
+                  <ul>
+                    <li>
+                      $candidates$
+                    </li>
+                  </ul>
+                </details>
+              </td>
             </tr>
           </tbody>
         </table>
