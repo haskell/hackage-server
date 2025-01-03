@@ -29,7 +29,7 @@
 <body>
   $hackagePageHeader()$
 
-  <div id="content">
+  <main id="content">
     <h1><a href="$baseurl$/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
     <div style="font-size: small">
       [ $tags$ ]
@@ -122,7 +122,7 @@
       </div><!-- /left-pane -->
 
 
-      <div id="properties">
+      <aside id="properties">
         <table class="properties">
           <tbody>
 
@@ -285,7 +285,7 @@
             </tr>
           </tbody>
         </table>
-      </div> <!-- /properties -->
+      </aside> <!-- /properties -->
     </div><!-- /flex-container -->
 
     $if(package.optional.hasReadme)$
@@ -298,7 +298,7 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs@v1.29.0/components/prism-core.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@v1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     $endif$
-  </div> <!-- /content -->
+  </main> <!-- /content -->
 
   $packagePageAssets()$
   <div style="clear:both"></div>
