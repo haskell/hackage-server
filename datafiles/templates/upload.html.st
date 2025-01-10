@@ -36,6 +36,33 @@ of that name and version, including <em>package</em><tt>.cabal</tt>.
 See the notes at the bottom of the page.
 </p>
 
+<h3 id="changelogs">Version history and change logs</h3>
+
+<p>If a package includes a ChangeLog file (in either plain text or Markdown format), Hackage will link to it on the corresponding package page. The following filenames are recognized:</p>
+
+<dl>
+    <dt>basename</dt>
+    <dd>
+        <ul>
+            <li><tt>change_log</tt></li>
+            <li><tt>changelog</tt></li>
+            <li><tt>changes</tt></li>
+            <li><tt>news</tt></li>
+        </ul>
+    </dd>
+    <dt>extension</dt>
+    <dd>
+        <ul>
+            <li><em>(none)</em></li>
+            <li><tt>.txt</tt></li>
+            <li><tt>.md</tt></li>
+            <li><tt>.markdown</tt></li>
+        </ul>
+    </dd>
+</dl>
+
+<p>ChangeLog names are matched case-insensitively: <tt>NEWS</tt>, <tt>Changes.TXT</tt>, and <tt>ChangeLog.md</tt> will all work.</p>
+
 <h3 id="versioning_and_curation">Package versioning and curation</h3>
 
 <p>By default, uploaded packages are <i>curated</i> which means that both maintainers and hackage trustees may revise their metadata (particularly involving version bounds) to guide build tools in producing install-plans. (For more information on revisions, see the <a href="https://github.com/haskell-infra/hackage-trustees/blob/master/revisions-information.md">FAQ</A>).
