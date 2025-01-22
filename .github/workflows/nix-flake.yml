@@ -13,12 +13,13 @@ jobs:
       matrix:
         os:
         - ubuntu-latest
+        - ubuntu-24.04-arm
         - macos-latest
     name: Nix on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v30
+    - uses: cachix/install-nix-action@master
       with:
         extra_nix_config: |
           trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hackage-server.cachix.org-1:iw0iRh6+gsFIrxROFaAt5gKNgIHejKjIfyRdbpPYevY=
