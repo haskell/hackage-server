@@ -38,7 +38,7 @@ import System.Directory
 import System.FilePath
          ( (</>), (<.>) )
 import Network.URI
-         ( URI(..), URIAuth(..), parseAbsoluteURI )
+         ( URI(..), parseAbsoluteURI )
 import Distribution.Simple.Command
 import Distribution.Simple.Setup
          ( Flag(..), fromFlag, fromFlagOrDefault, flagToList, flagToMaybe )
@@ -197,6 +197,7 @@ data RunFlags = RunFlags {
     flagRunPort            :: Flag String,
     flagRunIP              :: Flag String,
     flagRunHostURI         :: Flag String,
+    flagRunUserContentURI  :: Flag String,
     flagRunStateDir        :: Flag FilePath,
     flagRunStaticDir       :: Flag FilePath,
     flagRunTmpDir          :: Flag FilePath,
@@ -215,6 +216,7 @@ defaultRunFlags = RunFlags {
     flagRunPort            = NoFlag,
     flagRunIP              = NoFlag,
     flagRunHostURI         = NoFlag,
+    flagRunUserContentURI  = NoFlag,
     flagRunStateDir        = NoFlag,
     flagRunStaticDir       = NoFlag,
     flagRunTmpDir          = NoFlag,
@@ -264,6 +266,10 @@ runCommand =
           "Server's public base URI (defaults to machine name)"
           flagRunHostURI (\v flags -> flags { flagRunHostURI = v })
           (reqArgFlag "NAME")
+      , option [] ["user-content-host"]
+          "Server's public user content host name (for untrusted content, defeating XSS style attacks)"
+          flagRunUserContentURI (\v flags -> flags { flagRunUserContentURI = v })
+          (reqArgFlag "NAME")
       , optionStateDir
           flagRunStateDir (\v flags -> flags { flagRunStateDir = v })
       , optionStaticDir
@@ -307,6 +313,7 @@ runAction opts = do
     port       <- checkPortOpt    defaults (flagToMaybe (flagRunPort       opts))
     ip         <- checkIPOpt      defaults (flagToMaybe (flagRunIP         opts))
     hosturi    <- checkHostURI    defaults (flagToMaybe (flagRunHostURI    opts)) port
+    usercontenthost <- checkUserContentHost defaults (flagToMaybe (flagRunUserContentURI opts))
     cacheDelay <- checkCacheDelay defaults (flagToMaybe (flagRunCacheDelay opts))
     let stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagRunStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagRunStaticDir opts)
@@ -317,6 +324,7 @@ runAction opts = do
                     }
         config    = defaults {
                         confHostUri    = hosturi,
+                        confUserContentHost = usercontenthost,
                         confListenOn   = listenOn,
                         confStateDir   = stateDir,
                         confStaticDir  = staticDir,
@@ -370,16 +378,7 @@ runAction opts = do
                -> return n
       _        -> fail $ "bad port number " ++ show str
 
-    checkHostURI defaults Nothing port = do
-      let guessURI       = confHostUri defaults
-          Just authority = uriAuthority guessURI
-          portStr | port == 80 = ""
-                  | otherwise  = ':' : show port
-          guessURI' = guessURI { uriAuthority = Just authority { uriPort = portStr } }
-      lognotice verbosity $ "Guessing public URI as " ++ show guessURI'
-                        ++ "\n(you can override with the --base-uri= flag)"
-      return guessURI'
-
+    checkHostURI defaults Nothing _ = fail "You must provide the --base-uri= flag"
     checkHostURI _        (Just str) _ = case parseAbsoluteURI str of
       Nothing -> fail $ "Cannot parse as a URI: " ++ str ++ "\n"
                      ++ "Make sure you include the http:// part"
@@ -393,6 +392,9 @@ runAction opts = do
           fail $ "Sorry, the server assumes the base-uri to be at the root of "
               ++ " the domain, so cannot use " ++ uriPath uri
         | otherwise -> return uri { uriPath = "" }
+
+    checkUserContentHost _ Nothing    = fail "You must provide the --user-content-host= flag"
+    checkUserContentHost _ (Just str) = pure str
 
     checkIPOpt defaults Nothing    = return (loIP (confListenOn defaults))
     checkIPOpt _        (Just str) =

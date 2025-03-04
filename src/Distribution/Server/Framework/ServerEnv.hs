@@ -1,11 +1,20 @@
+{-# LANGUAGE NamedFieldPuns #-}
 module Distribution.Server.Framework.ServerEnv where
 
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Framework.Logging (Verbosity)
 import Distribution.Server.Framework.Cron (Cron)
 import Distribution.Server.Framework.Templating (TemplatesMode)
+import Distribution.Server.Framework.Error (ServerPartE)
 
+import qualified Data.ByteString as BS
+import qualified Data.Text as T
 import qualified Network.URI as URI
+import Data.List (find)
+import Data.Text.Encoding (decodeASCII', encodeUtf8)
+import Happstack.Server (ServerMonad(askRq))
+import Happstack.Server.Response (seeOther, toResponse)
+import Happstack.Server.Types (HeaderPair(..), Response, rqHeaders, rqQuery, rqUri)
 
 import qualified Hackage.Security.Util.Path as Sec
 
@@ -49,6 +58,8 @@ data ServerEnv = ServerEnv {
     -- current server (e.g. as required in RSS feeds).
     serverBaseURI   :: URI.URI,
 
+    serverUserContentHost :: String,
+
     -- | A tunable parameter for cache policy. Setting this parameter high
     -- during bulk imports can very significantly improve performance. During
     -- normal operation it probably doesn't help much.
@@ -62,3 +73,56 @@ data ServerEnv = ServerEnv {
 
     serverVerbosity  :: Verbosity
 }
+
+getHostAndBaseAuth :: ServerMonad m => ServerEnv -> m (Maybe (BS.ByteString, URI.URIAuth))
+getHostAndBaseAuth ServerEnv {serverBaseURI} = do
+  rq <- askRq
+  let
+    mbHost :: Maybe BS.ByteString
+    mbHost =
+      case find ((== encodeUtf8 (T.pack "host")) . hName) $ rqHeaders rq of
+        Just hostHeaderPair | [oneValue] <- hValue hostHeaderPair ->
+          -- If there is a colon in the host header, remove it.
+          -- We require the regName of user-content and base to differ.
+          -- 58 is ASCII for colon
+          let (beforeColon, _colonAndAfter) = BS.break (== 58) oneValue
+           in Just beforeColon
+        _ -> Nothing
+    mbBaseAuth = URI.uriAuthority serverBaseURI
+  case (,) <$> mbHost <*> mbBaseAuth of
+    Nothing -> pure Nothing
+    Just (hostHeaderValue, baseAuth) -> pure $ Just (hostHeaderValue, baseAuth)
+
+requireUserContent :: ServerEnv -> Response -> ServerPartE Response
+requireUserContent env@ServerEnv {serverBaseURI, serverUserContentHost} action = do
+  Just (hostHeaderValue, baseAuth) <- getHostAndBaseAuth env
+  rq <- askRq
+  if hostHeaderValue == encodeUtf8 (T.pack $ URI.uriRegName baseAuth)
+     then
+      let
+        uri = URI.URI
+          { URI.uriScheme = URI.uriScheme serverBaseURI
+          , URI.uriAuthority = Just URI.URIAuth { URI.uriUserInfo = "", URI.uriRegName = serverUserContentHost, URI.uriPort = "" }
+          , URI.uriPath = rqUri rq
+          , URI.uriQuery = rqQuery rq
+          , URI.uriFragment = ""
+          }
+      in
+       seeOther (show uri) (toResponse ())
+     else
+       if hostHeaderValue /= encodeUtf8 (T.pack serverUserContentHost)
+          then
+            fail $
+              "Host name (" <> maybe "N/A" T.unpack (decodeASCII' hostHeaderValue) <> ")" <>
+              " matched neither user content host (" <> serverUserContentHost <> ")" <>
+              " nor base host (" <> URI.uriRegName baseAuth <> ")"
+          else pure action
+
+-- | Returns Just when the host isn't matching the regular host
+isRegularHost :: ServerMonad m => ServerEnv -> m (Maybe (BS.ByteString, String))
+isRegularHost env = do
+  mbPair <- getHostAndBaseAuth env
+  case mbPair of
+    Just (hostHeaderValue, baseAuth) | hostHeaderValue /= encodeUtf8 (T.pack $ URI.uriRegName baseAuth) ->
+      pure $ Just (hostHeaderValue, URI.uriRegName baseAuth)
+    _ -> pure Nothing

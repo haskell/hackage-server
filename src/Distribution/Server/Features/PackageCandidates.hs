@@ -609,7 +609,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
-          serveTarball (display (packageId pkg) ++ " candidate source tarball")
+          tarServeResponse <$> serveTarball (display (packageId pkg) ++ " candidate source tarball")
                        ["index.html"] (display (packageId pkg)) fp index
                        [Public, maxAgeMinutes 5] etag Nothing
 

@@ -3,7 +3,7 @@
 -- We authenticate clients using HTTP Basic or Digest authentication and we
 -- authorise users based on membership of particular user groups.
 --
-{-# LANGUAGE LambdaCase, PatternGuards #-}
+{-# LANGUAGE LambdaCase, PatternGuards, NamedFieldPuns #-}
 module Distribution.Server.Framework.Auth (
     -- * Checking authorisation
     guardAuthorised,
@@ -39,6 +39,7 @@ import Distribution.Server.Framework.AuthCrypt
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error
 import Distribution.Server.Framework.HtmlFormWrapper (rqRealMethod)
+import Distribution.Server.Framework.ServerEnv (ServerEnv, isRegularHost)
 
 import Happstack.Server
 
@@ -77,9 +78,10 @@ adminRealm   = RealmName "Hackage admin"
 --     certain privileged actions.
 --
 guardAuthorised :: RealmName -> Users.Users -> [PrivilegeCondition]
+                -> ServerEnv
                 -> ServerPartE UserId
-guardAuthorised realm users privconds = do
-    (uid, _) <- guardAuthenticated realm users
+guardAuthorised realm users privconds env = do
+    (uid, _) <- guardAuthenticated realm users env
     guardPriviledged users uid privconds
     return uid
 
@@ -93,22 +95,26 @@ guardAuthorised realm users privconds = do
 -- It only checks the user is known, it does not imply that the user is
 -- authorised to do anything in particular, see 'guardAuthorised'.
 --
-guardAuthenticated :: RealmName -> Users.Users -> ServerPartE (UserId, UserInfo)
-guardAuthenticated realm users = do
-    authres <- checkAuthenticated realm users
+guardAuthenticated :: RealmName -> Users.Users -> ServerEnv -> ServerPartE (UserId, UserInfo)
+guardAuthenticated realm users env = do
+    authres <- checkAuthenticated realm users env
     case authres of
       Left  autherr -> throwError =<< authErrorResponse realm autherr
       Right info    -> return info
 
-checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> m (Either AuthError (UserId, UserInfo))
-checkAuthenticated realm users = do
-    req <- askRq
-    return $ case getHeaderAuth req of
-      Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
-      Just _ | plainHttp req  -> Left InsecureAuthError
-      Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
-      Just (AuthToken,  ahdr) -> checkTokenAuth  users       ahdr
-      Nothing                 -> Left NoAuthError
+checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> ServerEnv -> m (Either AuthError (UserId, UserInfo))
+checkAuthenticated realm users env = do
+    mbHostMismatch <- isRegularHost env
+    case mbHostMismatch of
+       Just (actualHost, oughtToBeHost) -> pure (Left BadHost { actualHost , oughtToBeHost })
+       Nothing -> do
+         req <- askRq
+         return $ case getHeaderAuth req of
+           Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
+           Just _ | plainHttp req  -> Left InsecureAuthError
+           Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
+           Just (AuthToken,  ahdr) -> checkTokenAuth  users       ahdr
+           Nothing                 -> Left NoAuthError
   where
     getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
     getHeaderAuth req =
@@ -424,6 +430,7 @@ data AuthError = NoAuthError
                | UserStatusError       UserId UserInfo
                | PasswordMismatchError UserId UserInfo
                | BadApiKeyError
+               | BadHost { actualHost :: BS.ByteString, oughtToBeHost :: String }
   deriving Show
 
 authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
@@ -448,6 +455,9 @@ authErrorResponse realm autherr = do
 
         BadApiKeyError ->
           ErrorResponse 401 [digestHeader] "Bad auth token" []
+
+        BadHost {} ->
+          ErrorResponse 401 [digestHeader] "Bad host" []
 
         -- we don't want to leak info for the other cases, so same message for them all:
         _ ->
