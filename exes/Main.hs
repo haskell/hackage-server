@@ -38,7 +38,7 @@ import System.Directory
 import System.FilePath
          ( (</>), (<.>) )
 import Network.URI
-         ( URI(..), parseAbsoluteURI )
+         ( URI(..), URIAuth(..), parseAbsoluteURI )
 import Distribution.Simple.Command
 import Distribution.Simple.Setup
          ( Flag(..), fromFlag, fromFlagOrDefault, flagToList, flagToMaybe )
@@ -198,6 +198,7 @@ data RunFlags = RunFlags {
     flagRunIP              :: Flag String,
     flagRunHostURI         :: Flag String,
     flagRunUserContentURI  :: Flag String,
+    flagRunRequiredBaseHostHeader :: Flag String,
     flagRunStateDir        :: Flag FilePath,
     flagRunStaticDir       :: Flag FilePath,
     flagRunTmpDir          :: Flag FilePath,
@@ -217,6 +218,7 @@ defaultRunFlags = RunFlags {
     flagRunIP              = NoFlag,
     flagRunHostURI         = NoFlag,
     flagRunUserContentURI  = NoFlag,
+    flagRunRequiredBaseHostHeader = NoFlag,
     flagRunStateDir        = NoFlag,
     flagRunStaticDir       = NoFlag,
     flagRunTmpDir          = NoFlag,
@@ -266,9 +268,13 @@ runCommand =
           "Server's public base URI (defaults to machine name)"
           flagRunHostURI (\v flags -> flags { flagRunHostURI = v })
           (reqArgFlag "NAME")
-      , option [] ["user-content-host"]
-          "Server's public user content host name (for untrusted content, defeating XSS style attacks)"
+      , option [] ["user-content-uri"]
+          "Server's public user content base URI (for untrusted content, defeating XSS style attacks)"
           flagRunUserContentURI (\v flags -> flags { flagRunUserContentURI = v })
+          (reqArgFlag "NAME")
+      , option [] ["required-base-host-header"]
+          "Required host header value for incoming requests (potentially internal, e.g. if behind reverse proxy). Base means that it is _not_ for the user-content domain."
+          flagRunRequiredBaseHostHeader (\v flags -> flags { flagRunRequiredBaseHostHeader = v })
           (reqArgFlag "NAME")
       , optionStateDir
           flagRunStateDir (\v flags -> flags { flagRunStateDir = v })
@@ -313,7 +319,8 @@ runAction opts = do
     port       <- checkPortOpt    defaults (flagToMaybe (flagRunPort       opts))
     ip         <- checkIPOpt      defaults (flagToMaybe (flagRunIP         opts))
     hosturi    <- checkHostURI    defaults (flagToMaybe (flagRunHostURI    opts)) port
-    usercontenthost <- checkUserContentHost defaults (flagToMaybe (flagRunUserContentURI opts))
+    usercontenturi <- checkUserContentURI defaults (flagToMaybe (flagRunUserContentURI opts))
+    requiredbasehostheader <- checkRequiredBaseHostHeader defaults (flagToMaybe (flagRunRequiredBaseHostHeader opts))
     cacheDelay <- checkCacheDelay defaults (flagToMaybe (flagRunCacheDelay opts))
     let stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagRunStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagRunStaticDir opts)
@@ -324,7 +331,8 @@ runAction opts = do
                     }
         config    = defaults {
                         confHostUri    = hosturi,
-                        confUserContentHost = usercontenthost,
+                        confUserContentUri = usercontenturi,
+                        confRequiredBaseHostHeader = requiredbasehostheader,
                         confListenOn   = listenOn,
                         confStateDir   = stateDir,
                         confStaticDir  = staticDir,
@@ -378,8 +386,19 @@ runAction opts = do
                -> return n
       _        -> fail $ "bad port number " ++ show str
 
-    checkHostURI defaults Nothing _ = fail "You must provide the --base-uri= flag"
-    checkHostURI _        (Just str) _ = case parseAbsoluteURI str of
+    checkHostURI defaults Nothing port = do
+      let guessURI       = confHostUri defaults
+          Just authority = uriAuthority guessURI
+          portStr | port == 80 = ""
+                  | otherwise  = ':' : show port
+          guessURI' = guessURI { uriAuthority = Just authority { uriPort = portStr } }
+      lognotice verbosity $ "Guessing public URI as " ++ show guessURI'
+                        ++ "\n(you can override with the --base-uri= flag)"
+      return guessURI'
+
+    checkHostURI _        (Just str) _ = validateURI str
+
+    validateURI str = case parseAbsoluteURI str of
       Nothing -> fail $ "Cannot parse as a URI: " ++ str ++ "\n"
                      ++ "Make sure you include the http:// part"
       Just uri
@@ -387,14 +406,17 @@ runAction opts = do
           fail $ "Sorry, the server assumes it will be served (or proxied) "
               ++ " via http or https, so cannot use uri scheme " ++ uriScheme uri
         | isNothing (uriAuthority uri) ->
-          fail "The base-uri has to include the full host name"
+          fail "The base-uri and the user-content-uri have to include full host names"
         | uriPath uri `notElem` ["", "/"] ->
-          fail $ "Sorry, the server assumes the base-uri to be at the root of "
-              ++ " the domain, so cannot use " ++ uriPath uri
+          fail $ "Sorry, the server assumes base-uri and user-content-uri to be at the root of "
+              ++ " their domains, so cannot use " ++ uriPath uri
         | otherwise -> return uri { uriPath = "" }
 
-    checkUserContentHost _ Nothing    = fail "You must provide the --user-content-host= flag"
-    checkUserContentHost _ (Just str) = pure str
+    checkUserContentURI _ Nothing    = fail "You must provide the --user-content-uri= flag"
+    checkUserContentURI _ (Just str) = validateURI str
+
+    checkRequiredBaseHostHeader _ Nothing    = fail "You must provide the --required-base-host-header= flag. It's typically the host part of the base-uri."
+    checkRequiredBaseHostHeader _ (Just str) = pure str
 
     checkIPOpt defaults Nothing    = return (loIP (confListenOn defaults))
     checkIPOpt _        (Just str) =

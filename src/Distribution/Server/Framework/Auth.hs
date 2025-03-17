@@ -30,6 +30,7 @@ module Distribution.Server.Framework.Auth (
     authErrorResponse,
   ) where
 
+import qualified Data.Text as T
 import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), UserInfo)
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
@@ -39,7 +40,7 @@ import Distribution.Server.Framework.AuthCrypt
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error
 import Distribution.Server.Framework.HtmlFormWrapper (rqRealMethod)
-import Distribution.Server.Framework.ServerEnv (ServerEnv, isRegularHost)
+import Distribution.Server.Framework.ServerEnv (ServerEnv(ServerEnv, serverRequiredBaseHostHeader), getHost)
 
 import Happstack.Server
 
@@ -103,10 +104,19 @@ guardAuthenticated realm users env = do
       Right info    -> return info
 
 checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> ServerEnv -> m (Either AuthError (UserId, UserInfo))
-checkAuthenticated realm users env = do
-    mbHostMismatch <- isRegularHost env
-    case mbHostMismatch of
-       Just (actualHost, oughtToBeHost) -> pure (Left BadHost { actualHost , oughtToBeHost })
+checkAuthenticated realm users ServerEnv { serverRequiredBaseHostHeader } = do
+    mbHost <- getHost
+    case mbHost of
+       Just hostHeaderValue ->
+         if hostHeaderValue /= T.encodeUtf8 (T.pack serverRequiredBaseHostHeader)
+            then pure $ Left BadHost
+              { actualHost=Just hostHeaderValue
+              , oughtToBeHost=serverRequiredBaseHostHeader
+              }
+            else pure $ Left BadHost
+              { actualHost=Nothing
+              , oughtToBeHost=serverRequiredBaseHostHeader
+              }
        Nothing -> do
          req <- askRq
          return $ case getHeaderAuth req of
@@ -430,7 +440,7 @@ data AuthError = NoAuthError
                | UserStatusError       UserId UserInfo
                | PasswordMismatchError UserId UserInfo
                | BadApiKeyError
-               | BadHost { actualHost :: BS.ByteString, oughtToBeHost :: String }
+               | BadHost { actualHost :: Maybe BS.ByteString, oughtToBeHost :: String }
   deriving Show
 
 authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
