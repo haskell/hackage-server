@@ -54,6 +54,8 @@ import Data.Foldable (toList)
 import Data.Traversable (for)
 import qualified Data.List as List
 import Data.Time (UTCTime)
+import Distribution.Server.Users.Types (UserName, UserInfo(..))
+import Distribution.Server.Features.Users (UserFeature(lookupUserInfo))
 
 
 data PackageInfoJSONFeature = PackageInfoJSONFeature {
@@ -79,10 +81,10 @@ data PackageInfoJSONResource = PackageInfoJSONResource {
 -- line for a package when it changes
 initPackageInfoJSONFeature
   :: Framework.ServerEnv
-  -> IO (CoreFeature -> Preferred.VersionsFeature -> IO PackageInfoJSONFeature)
+  -> IO (CoreFeature -> Preferred.VersionsFeature -> UserFeature -> IO PackageInfoJSONFeature)
 initPackageInfoJSONFeature env = do
   packageInfoState <- packageInfoStateComponent False (Framework.serverStateDir env)
-  return $ \core preferred -> do
+  return $ \core preferred userFeature -> do
 
     let coreR = coreResource core
         info = "Get basic package information: \
@@ -94,13 +96,13 @@ initPackageInfoJSONFeature env = do
           (Framework.extendResource (corePackagePage coreR)) {
                 Framework.resourceDesc = [(Framework.GET, info)]
               , Framework.resourceGet  =
-                  [("json", servePackageBasicDescription coreR
+                  [("json", servePackageBasicDescription coreR userFeature
                             preferred packageInfoState)]
               }
           , (Framework.extendResource (coreCabalFileRev coreR)) {
                 Framework.resourceDesc = [(Framework.GET, vInfo)]
               , Framework.resourceGet  =
-                  [("json", servePackageBasicDescription coreR
+                  [("json", servePackageBasicDescription coreR userFeature
                      preferred packageInfoState)]
               }
           ]
@@ -133,14 +135,15 @@ initPackageInfoJSONFeature env = do
 
 -- | Pure function for extracting basic package info from a Cabal file
 getBasicDescription
-  :: UTCTime
+  :: UserName
+  -> UTCTime
     -- ^ Time of upload
   -> CabalFileText
   -> Int
      -- ^ Metadata revision. This will be added to the resulting
      --   @PackageBasicDescription@
   -> Either String PackageBasicDescription
-getBasicDescription uploadedAt (CabalFileText cf) metadataRev =
+getBasicDescription uploader uploadedAt (CabalFileText cf) metadataRev =
   let parseResult = PkgDescr.parseGenericPackageDescription (BS.toStrict cf)
   in case PkgDescr.runParseResult parseResult of
     (_, Right pkg) -> let
@@ -154,6 +157,7 @@ getBasicDescription uploadedAt (CabalFileText cf) metadataRev =
       pbd_homepage          = T.pack . fromShortText $ PkgDescr.homepage pkgd
       pbd_metadata_revision = metadataRev
       pbd_uploaded_at       = uploadedAt
+      pbd_uploader          = uploader
       in
       return $ PackageBasicDescription {..}
     (_, Left (_, perrs)) ->
@@ -168,12 +172,13 @@ getBasicDescription uploadedAt (CabalFileText cf) metadataRev =
 --   A listing of versions and their deprecation states
 servePackageBasicDescription
   :: CoreResource
+  -> UserFeature
   -> Preferred.VersionsFeature
   -> Framework.StateComponent Framework.AcidState PackageInfoState
   -> Framework.DynamicPath
      -- ^ URI specifying a package and version `e.g. lens or lens-4.11`
   -> Framework.ServerPartE Framework.Response
-servePackageBasicDescription resource preferred packageInfoState dpath = do
+servePackageBasicDescription resource userFeature preferred packageInfoState dpath = do
 
   let metadataRev :: Maybe Int = lookup "revision" dpath >>= Framework.fromReqURI
 
@@ -220,7 +225,9 @@ servePackageBasicDescription resource preferred packageInfoState dpath = do
 
       let cabalFile = metadataRevs Vector.! metadataInd
           uploadedAt = fst $ uploadInfos Vector.! metadataInd
-          pkgDescr  = getBasicDescription uploadedAt cabalFile metadataInd
+          uploaderId = snd $ uploadInfos Vector.! metadataInd
+      uploader <- userName <$> lookupUserInfo userFeature uploaderId
+      let pkgDescr  = getBasicDescription uploader uploadedAt cabalFile metadataInd
       case pkgDescr of
         Left e  -> Framework.errInternalError [Framework.MText e]
         Right d -> return d
