@@ -113,11 +113,10 @@ checkAuthenticated realm users ServerEnv { serverRequiredBaseHostHeader } = do
               { actualHost=Just hostHeaderValue
               , oughtToBeHost=serverRequiredBaseHostHeader
               }
-            else pure $ Left BadHost
-              { actualHost=Nothing
-              , oughtToBeHost=serverRequiredBaseHostHeader
-              }
-       Nothing -> do
+            else goCheck
+       Nothing -> goCheck
+  where
+    goCheck = do
          req <- askRq
          return $ case getHeaderAuth req of
            Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
@@ -125,7 +124,6 @@ checkAuthenticated realm users ServerEnv { serverRequiredBaseHostHeader } = do
            Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
            Just (AuthToken,  ahdr) -> checkTokenAuth  users       ahdr
            Nothing                 -> Left NoAuthError
-  where
     getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
     getHeaderAuth req =
         case getHeader "authorization" req of
