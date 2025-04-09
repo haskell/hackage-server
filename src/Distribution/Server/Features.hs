@@ -379,6 +379,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     packageInfoJSONFeature <- mkPackageJSONFeature
                                 coreFeature
                                 versionsFeature
+                                usersFeature
 
 #endif
 

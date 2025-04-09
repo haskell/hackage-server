@@ -41,7 +41,8 @@ import qualified Distribution.Parsec as Parsec
 
 import qualified Distribution.Server.Features.PreferredVersions as Preferred
 import           Distribution.Server.Framework.MemSize          (MemSize,
-                                                                 memSize, memSize8)
+                                                                 memSize, memSize9)
+import Distribution.Server.Users.Types (UserName)
 
 
 -- | Basic information about a package. These values are
@@ -55,6 +56,7 @@ data PackageBasicDescription = PackageBasicDescription
   , pbd_homepage          :: !T.Text
   , pbd_metadata_revision :: !Int
   , pbd_uploaded_at       :: !UTCTime
+  , pbd_uploader          :: !UserName
   } deriving (Eq, Show, Generic)
 
 instance SafeCopy PackageBasicDescription where
@@ -67,6 +69,7 @@ instance SafeCopy PackageBasicDescription where
     put $ T.encodeUtf8 pbd_homepage
     put pbd_metadata_revision
     safePut pbd_uploaded_at
+    safePut pbd_uploader
 
   getCopy = contain $ do
     licenseStr <- get
@@ -80,6 +83,7 @@ instance SafeCopy PackageBasicDescription where
         pbd_homepage          <- T.decodeUtf8 <$> get
         pbd_metadata_revision <- get
         pbd_uploaded_at       <- safeGet
+        pbd_uploader          <- safeGet
         return PackageBasicDescription{..}
 
 
@@ -96,8 +100,8 @@ instance Aeson.ToJSON PackageBasicDescription where
       , Key.fromString "homepage"          .= pbd_homepage
       , Key.fromString "metadata_revision" .= pbd_metadata_revision
       , Key.fromString "uploaded_at"       .= pbd_uploaded_at
+      , Key.fromString "uploader"          .= pbd_uploader
       ]
-
 
 instance Aeson.FromJSON PackageBasicDescription where
   parseJSON = Aeson.withObject "PackageBasicDescription" $ \obj -> do
@@ -114,8 +118,8 @@ instance Aeson.FromJSON PackageBasicDescription where
         pbd_homepage          <- obj .: Key.fromString "homepage"
         pbd_metadata_revision <- obj .: Key.fromString "metadata_revision"
         pbd_uploaded_at       <- obj .: Key.fromString "uploaded_at"
-        return $
-          PackageBasicDescription {..}
+        pbd_uploader          <- obj .: Key.fromString "uploader"
+        return $ PackageBasicDescription {..}
 
 -- | An index of versions for one Hackage package
 --   and their preferred/deprecated status
@@ -229,8 +233,8 @@ deriveSafeCopy 0 'base ''PackageInfoState
 
 instance MemSize PackageBasicDescription where
   memSize PackageBasicDescription{..} =
-    memSize8 (Pretty.prettyShow pbd_license) pbd_copyright pbd_synopsis
-             pbd_description pbd_author pbd_homepage pbd_metadata_revision pbd_uploaded_at
+    memSize9 (Pretty.prettyShow pbd_license) pbd_copyright pbd_synopsis
+             pbd_description pbd_author pbd_homepage pbd_metadata_revision pbd_uploaded_at pbd_uploader
 
 instance MemSize PackageVersions where
   memSize (PackageVersions ps) = getSum $
