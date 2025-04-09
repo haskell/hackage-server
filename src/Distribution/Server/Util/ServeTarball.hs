@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.Util.ServeTarball
@@ -17,6 +18,8 @@ module Distribution.Server.Util.ServeTarball
     , loadTarEntry
     , constructTarIndexFromFile
     , constructTarIndex
+    , TarServe(..)
+    , tarServeResponse
     ) where
 
 import Happstack.Server.Types
@@ -41,10 +44,19 @@ import Control.Monad.Trans (MonadIO, liftIO)
 import Control.Monad (msum, mzero, MonadPlus(..))
 import System.IO
 
+data TarServe
+  = TarFile BS.ByteString Response
+  | TarDir Response
+
+tarServeResponse :: TarServe -> Response
+tarServeResponse (TarFile _ resp) = resp
+tarServeResponse (TarDir resp) = resp
+
 -- | Serve the contents of a tar file
 -- file. TODO: This is not a sustainable implementation,
 -- but it gives us something to test with.
-serveTarball :: (MonadIO m, MonadPlus m)
+serveTarball :: forall m
+              . (MonadIO m, MonadPlus m)
              => String     -- description for directory listings
              -> [FilePath] -- dir index file names (e.g. ["index.html"])
              -> FilePath   -- root dir in tar to serve
@@ -53,7 +65,7 @@ serveTarball :: (MonadIO m, MonadPlus m)
              -> [CacheControl]
              -> ETag       -- the etag
              -> Maybe (BS.ByteString -> BS.ByteString) -- optional transform to files
-             -> ServerPartT m Response
+             -> ServerPartT m TarServe
 serveTarball descr indices tarRoot tarball tarIndex cacheCtls etag transform = do
     rq <- askRq
     action GET $ remainingPath $ \paths -> do
@@ -66,7 +78,7 @@ serveTarball descr indices tarRoot tarball tarIndex cacheCtls etag transform = d
 
       msum $ concat
        [ serveFiles validPaths
-       , serveDirs (rqUri rq) validPaths
+       , fmap TarDir <$> serveDirs (rqUri rq) validPaths
        ]
   where
     serveFiles paths
@@ -75,12 +87,13 @@ serveTarball descr indices tarRoot tarball tarIndex cacheCtls etag transform = d
                Just (TarIndex.TarFileEntry off)
                    -> do
                  cacheControl cacheCtls etag
-                 tfe <- liftIO $ serveTarEntry_ transform tarball off path
-                 ok (toResponse tfe)
+                 (fileContent, response) <- liftIO $ serveTarEntry_ transform tarball off path
+                 ok (TarFile fileContent response)
                _ -> mzero
 
     action act m = method act >> m
 
+    serveDirs :: FilePath -> [FilePath] -> [ServerPartT m Response]
     serveDirs fullPath paths
            = flip map paths $ \path ->
              case TarIndex.lookup tarIndex path of
@@ -133,12 +146,13 @@ loadTarEntry_ transform tarfile off = do
     _ -> fail "failed to read entry from tar file"
 
 serveTarEntry :: FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
-serveTarEntry = serveTarEntry_ Nothing
+serveTarEntry tarfile off fname = snd <$> serveTarEntry_ Nothing tarfile off fname
 
-serveTarEntry_ :: Maybe (BS.ByteString -> BS.ByteString) -> FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
+serveTarEntry_ :: Maybe (BS.ByteString -> BS.ByteString) -> FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO (BS.ByteString, Response)
 serveTarEntry_ transform tarfile off fname = do
     Right (size, body) <- loadTarEntry_ transform tarfile off
-    return . ((setHeader "Content-Length" (show size)) .
+    return  . (body,)
+            . ((setHeader "Content-Length" (show size)) .
               (setHeader "Content-Type" mimeType)) $
               resultBS 200 body
   where mimeType = mime fname

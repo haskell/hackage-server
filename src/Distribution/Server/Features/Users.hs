@@ -144,7 +144,8 @@ data UserFeature = UserFeature {
     -- | For a given user, return all of the URIs for groups they are in.
     getGroupIndex       :: forall m. (Functor m, MonadIO m) => UserId -> m [String],
     -- | For a given URI, get a GroupDescription for it, if one can be found.
-    getIndexDesc        :: forall m. MonadIO m => String -> m GroupDescription
+    getIndexDesc        :: forall m. MonadIO m => String -> m GroupDescription,
+    userFeatureServerEnv :: ServerEnv
 }
 
 instance IsHackageFeature UserFeature where
@@ -227,7 +228,7 @@ deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserGroupResource
 
 -- TODO: add renaming
 initUserFeature :: ServerEnv -> IO (IO UserFeature)
-initUserFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
+initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
   -- Canonical state
   usersState  <- usersStateComponent  serverStateDir
   adminsState <- adminsStateComponent serverStateDir
@@ -261,6 +262,7 @@ initUserFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMod
                             groupIndex
                             userAdded authFailHook groupChangedHook
                             adminG adminR
+                            serverEnv
 
         (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
 
@@ -301,10 +303,11 @@ userFeature :: Templates
             -> Hook (GroupDescription, Bool, UserId, UserId, String) ()
             -> UserGroup
             -> GroupResource
+            -> ServerEnv
             -> (UserFeature, UserGroup)
 userFeature templates usersState adminsState
              groupIndex userAdded authFailHook groupChangedHook
-             adminGroup adminResource
+             adminGroup adminResource userFeatureServerEnv
   = (UserFeature {..}, adminGroupDesc)
   where
     userFeatureInterface = (emptyHackageFeature "users") {
@@ -484,7 +487,7 @@ userFeature templates usersState adminsState
     -- See note about "authn" cookie above
     guardAuthenticatedWithErrHook :: Users.Users -> ServerPartE UserId
     guardAuthenticatedWithErrHook users = do
-        (uid,_) <- Auth.checkAuthenticated realm users
+        (uid,_) <- Auth.checkAuthenticated realm users userFeatureServerEnv
                    >>= either handleAuthError return
         addCookie Session (mkCookie "authn" "1")
         -- Set-Cookie:authn="1";Path=/;Version="1"
@@ -493,6 +496,8 @@ userFeature templates usersState adminsState
         realm = Auth.hackageRealm --TODO: should be configurable
 
         handleAuthError :: Auth.AuthError -> ServerPartE a
+        handleAuthError Auth.BadHost { actualHost, oughtToBeHost } =
+          errForbidden "Bad Host" [MText $ "Authenticated resources can only be accessed using the regular server host name " <> oughtToBeHost <> ", but was provided host " <> show actualHost]
         handleAuthError err = do
           defaultResponse  <- Auth.authErrorResponse realm err
           overrideResponse <- msum <$> runHook authFailHook err
@@ -513,7 +518,7 @@ userFeature templates usersState adminsState
           _        -> pure ()
 
         users <- queryGetUserDb
-        either (const Nothing) Just `fmap` Auth.checkAuthenticated Auth.hackageRealm users
+        either (const Nothing) Just `fmap` Auth.checkAuthenticated Auth.hackageRealm users userFeatureServerEnv
 
     -- | Resources representing the collection of known users.
     --

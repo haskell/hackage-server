@@ -7,6 +7,7 @@ module Distribution.Server.Features.Documentation (
     initDocumentationFeature
   ) where
 
+import Distribution.Server.Features.Security.SHA256       (sha256)
 import Distribution.Server.Framework
 
 import Distribution.Server.Features.Documentation.State
@@ -43,7 +44,8 @@ import Data.Function (fix)
 
 import Data.Aeson (toJSON)
 import Data.Maybe
-import Data.Time.Clock (NominalDiffTime, diffUTCTime, getCurrentTime)
+import Data.Time.Calendar (fromGregorian)
+import Data.Time.Clock (NominalDiffTime, UTCTime(..), diffUTCTime, getCurrentTime)
 import System.Directory (getModificationTime)
 import Control.Applicative
 import Distribution.Server.Features.PreferredVersions
@@ -154,7 +156,7 @@ documentationFeature :: String
                      -> Hook PackageId ()
                      -> DocumentationFeature
 documentationFeature name
-                     ServerEnv{serverBlobStore = store, serverBaseURI}
+                     env@ServerEnv{serverBlobStore = store, serverBaseURI}
                      CoreResource{
                          packageInPath
                        , guardValidPackageId
@@ -291,11 +293,29 @@ documentationFeature name
             etag    = BlobStorage.blobETag blob
         -- if given a directory, the default page is index.html
         -- the root directory within the tarball is e.g. foo-1.0-docs/
+        mtime <- liftIO $ getModificationTime tarball
         age <- liftIO $ getFileAge tarball
         let maxAge = documentationCacheTime age
-        ServerTarball.serveTarball (display pkgid ++ " documentation")
-                                   [{-no index-}] (display pkgid ++ "-docs")
-                                   tarball index [Public, maxAge] etag (Just rewriteDocs)
+        tarServe <-
+          ServerTarball.serveTarball (display pkgid ++ " documentation")
+                                     [{-no index-}] (display pkgid ++ "-docs")
+                                     tarball index [Public, maxAge] etag (Just rewriteDocs)
+        case tarServe of
+          ServerTarball.TarDir response -> pure response
+          ServerTarball.TarFile fileContent response -> do
+            let
+              digest = show $ sha256 fileContent
+              -- Because JSON files cannot execute code or affect layout, we don't need to verify anything else
+              isDocIndex =
+                case dpath of
+                  ("..","doc-index.json") : _ -> True
+                  _ -> False
+            if mtime < UTCTime (fromGregorian 2025 2 1) 0
+               || isDocIndex
+               || digest == "548d676b3e5a52cbfef06d7424ec065c1f34c230407f9f5dc002c27a9666bec4" -- quick-jump.min.js
+               || digest == "6bd159f6d7b1cfef1bd190f1f5eadcd15d35c6c567330d7465c3c35d5195bc6f" -- quick-jump.css
+               then pure response
+               else requireUserContent env response
 
     rewriteDocs :: BSL.ByteString -> BSL.ByteString
     rewriteDocs dochtml = case BSL.breakFindAfter (BS.pack "<head>") dochtml of
