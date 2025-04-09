@@ -1,11 +1,20 @@
+{-# LANGUAGE NamedFieldPuns #-}
 module Distribution.Server.Framework.ServerEnv where
 
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Framework.Logging (Verbosity)
 import Distribution.Server.Framework.Cron (Cron)
 import Distribution.Server.Framework.Templating (TemplatesMode)
+import Distribution.Server.Framework.Error (ServerPartE)
 
+import qualified Data.ByteString as BS
+import qualified Data.Text as T
 import qualified Network.URI as URI
+import Data.List (find)
+import Data.Text.Encoding (encodeUtf8)
+import Happstack.Server (ServerMonad(askRq))
+import Happstack.Server.Response (seeOther, toResponse)
+import Happstack.Server.Types (HeaderPair(..), Response, rqHeaders, rqQuery, rqUri)
 
 import qualified Hackage.Security.Util.Path as Sec
 
@@ -49,6 +58,10 @@ data ServerEnv = ServerEnv {
     -- current server (e.g. as required in RSS feeds).
     serverBaseURI   :: URI.URI,
 
+    serverUserContentBaseURI :: URI.URI,
+    -- | This might be an internal host name, used internally behind a load balancer
+    serverRequiredBaseHostHeader :: String,
+
     -- | A tunable parameter for cache policy. Setting this parameter high
     -- during bulk imports can very significantly improve performance. During
     -- normal operation it probably doesn't help much.
@@ -62,3 +75,27 @@ data ServerEnv = ServerEnv {
 
     serverVerbosity  :: Verbosity
 }
+
+getHost :: ServerMonad m => m (Maybe BS.ByteString)
+getHost = do
+  rq <- askRq
+  pure $
+    case find ((== encodeUtf8 (T.pack "host")) . hName) $ rqHeaders rq of
+      Just hostHeaderPair | [oneValue] <- hValue hostHeaderPair -> Just oneValue
+      _ -> Nothing
+
+requireUserContent :: ServerEnv -> Response -> ServerPartE Response
+requireUserContent ServerEnv {serverUserContentBaseURI, serverRequiredBaseHostHeader} action = do
+  Just hostHeaderValue <- getHost
+  rq <- askRq
+  if hostHeaderValue == encodeUtf8 (T.pack serverRequiredBaseHostHeader)
+     then
+      let
+        uri = serverUserContentBaseURI
+          { URI.uriPath = rqUri rq
+          , URI.uriQuery = rqQuery rq
+          }
+      in
+       seeOther (show uri) (toResponse ())
+     else
+       pure action

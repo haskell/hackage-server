@@ -206,7 +206,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
-          serveTarball (display (packageId pkg) ++ " source tarball")
+          tarServeResponse <$> serveTarball (display (packageId pkg) ++ " source tarball")
                        [] (display (packageId pkg)) fp index
                        [Public, maxAgeDays 30] etag Nothing
 

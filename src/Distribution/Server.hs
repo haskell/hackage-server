@@ -68,6 +68,8 @@ data ListenOn = ListenOn {
 data ServerConfig = ServerConfig {
   confVerbosity :: Verbosity,
   confHostUri   :: URI,
+  confUserContentUri :: URI,
+  confRequiredBaseHostHeader :: String,
   confListenOn  :: ListenOn,
   confStateDir  :: FilePath,
   confStaticDir :: FilePath,
@@ -96,6 +98,8 @@ defaultServerConfig = do
                       uriScheme    = "https:",
                       uriAuthority = Just (URIAuth "" hostName (':' : show portnum))
                     },
+    confUserContentUri = nullURI, -- This is a required argument, so the default doesn't matter
+    confRequiredBaseHostHeader = "", -- This is a required argument, so the default doesn't matter
     confListenOn  = ListenOn {
                         loPortNum = 8080,
                         loIP = "127.0.0.1"
@@ -122,7 +126,7 @@ hasSavedState :: ServerConfig -> IO Bool
 hasSavedState = doesDirectoryExist . confDbStateDir
 
 mkServerEnv :: ServerConfig -> IO ServerEnv
-mkServerEnv config@(ServerConfig verbosity hostURI _
+mkServerEnv config@(ServerConfig verbosity hostURI userContentURI requiredBaseHostHeader _
                                     stateDir _ tmpDir
                                     cacheDelay liveTemplates) = do
     createDirectoryIfMissing False stateDir
@@ -147,6 +151,8 @@ mkServerEnv config@(ServerConfig verbosity hostURI _
             serverTmpDir        = tmpDir,
             serverCacheDelay    = cacheDelay * 1000000, --microseconds
             serverBaseURI       = hostURI,
+            serverUserContentBaseURI = userContentURI,
+            serverRequiredBaseHostHeader = requiredBaseHostHeader,
             serverVerbosity     = verbosity
          }
     return env

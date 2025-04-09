@@ -441,7 +441,7 @@ initUserNotifyFeature :: ServerEnv
                           -> ReverseFeature
                           -> VouchFeature
                           -> IO UserNotifyFeature)
-initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
+initUserNotifyFeature ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
     -- Canonical state
     notifyState <- notifyStateComponent serverStateDir
@@ -452,7 +452,7 @@ initUserNotifyFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                    [ "user-notify-form.html", "endorsements-complete.txt" ]
 
     return $ \users core uploadfeature adminlog userdetails reports tags revers vouch -> do
-      let feature = userNotifyFeature env
+      let feature = userNotifyFeature
                       users core uploadfeature adminlog userdetails reports tags
                       revers vouch notifyState templates
       return feature
@@ -576,8 +576,7 @@ pkgInfoToPkgId :: PkgInfo -> PackageIdentifier
 pkgInfoToPkgId pkgInfo =
   PackageIdentifier (packageName pkgInfo) (packageVersion pkgInfo)
 
-userNotifyFeature :: ServerEnv
-                  -> UserFeature
+userNotifyFeature :: UserFeature
                   -> CoreFeature
                   -> UploadFeature
                   -> AdminLogFeature
@@ -589,8 +588,7 @@ userNotifyFeature :: ServerEnv
                   -> StateComponent AcidState NotifyData
                   -> Templates
                   -> UserNotifyFeature
-userNotifyFeature serverEnv@ServerEnv{serverCron}
-                  UserFeature{..}
+userNotifyFeature UserFeature{..}
                   CoreFeature{..}
                   UploadFeature{..}
                   AdminLogFeature{..}
@@ -603,6 +601,7 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
   = UserNotifyFeature {..}
 
   where
+    ServerEnv {serverCron} = userFeatureServerEnv
     userNotifyFeatureInterface = (emptyHackageFeature "user-notify") {
         featureDesc      = "Notifications to users on metadata updates."
       , featureResources = [userNotifyResource] -- TODO we can add json features here for updating prefs
@@ -717,7 +716,7 @@ userNotifyFeature serverEnv@ServerEnv{serverCron}
         vouchNotifications <- fmap (, NotifyVouchingCompleted) <$> drainQueuedNotifications
 
         emails <-
-          getNotificationEmails serverEnv userDetailsFeature users templates $
+          getNotificationEmails userFeatureServerEnv userDetailsFeature users templates $
             concat
               [ revisionUploadNotifications
               , groupActionNotifications
