@@ -25,14 +25,7 @@ module Distribution.Client
   , requestGET'
   , requestPUT
   , (<//>)
-    -- * TODO: Exported although they appear unused
-  , extractURICredentials
-  , removeURICredentials
   , getETag
-  , downloadFile'
-  , requestGET
-  , requestPUTFile
-  , requestPOST
   , checkStatus
   ) where
 
@@ -226,20 +219,6 @@ infixr 5 <//>
 uri <//> path = uri { uriPath = Posix.addTrailingPathSeparator (uriPath uri)
                                 Posix.</> path }
 
-
-extractURICredentials :: URI -> Maybe (String, String)
-extractURICredentials uri
-  | Just authority <- uriAuthority uri
-  , (username, ':':passwd0) <- break (==':') (uriUserInfo authority)
-  , let passwd = takeWhile (/='@') passwd0
-  , not (null username)
-  , not (null passwd)
-  = Just (username, passwd)
-extractURICredentials _ = Nothing
-
-removeURICredentials :: URI -> URI
-removeURICredentials uri = uri { uriAuthority = fmap (\auth -> auth { uriUserInfo = "" }) (uriAuthority uri) }
-
 uriHostName :: URI -> Maybe String
 uriHostName = fmap uriRegName . uriAuthority
 
@@ -361,28 +340,6 @@ unquote ('"':s) = go s
     go (c:cs)   = c : go cs
 unquote     s   = s
 
--- AAARG! total lack of exception handling in HTTP monad!
-downloadFile' :: URI -> FilePath -> HttpSession Bool
-downloadFile' uri file = do
-  liftIO $ putStrLn $ "downloading " ++ show uri ++ " to " ++ file
-  mcontent <- requestGET' uri
-  case mcontent of
-    Nothing      -> do liftIO $ putStrLn $ "404 " ++ show uri
-                       return False
-
-    Just content -> do liftIO $ BS.writeFile file content
-                       return True
-
-requestGET :: URI -> HttpSession ByteString
-requestGET uri = do
-    req <- mkRequest "GET" headers uri
-    runRequest req $ \rsp -> do
-        rsp' <- responseReadBSL rsp
-        checkStatus uri rsp'
-        return (responseBody rsp')
-  where
-    headers = []
-
 -- | Like 'requestGET' but return @Nothing@ on 404 status.
 requestGET' :: URI -> HttpSession (Maybe ByteString)
 requestGET' uri = do
@@ -396,18 +353,9 @@ requestGET' uri = do
   where
     headers = []
 
-requestPUTFile :: URI -> String -> Maybe String -> FilePath -> HttpSession ()
-requestPUTFile uri mime_type mEncoding file = do
-    content <- liftIO $ BS.readFile file
-    requestPUT uri mime_type mEncoding content
-
-requestPOST, requestPUT :: URI -> String -> Maybe String -> ByteString -> HttpSession ()
-requestPOST = requestPOSTPUT "POST"
-requestPUT = requestPOSTPUT "PUT"
-
-requestPOSTPUT :: Method -> URI -> String -> Maybe String -> ByteString -> HttpSession ()
-requestPOSTPUT meth uri mimetype mEncoding body = do
-    req <- mkUploadRequest meth uri mimetype mEncoding [] body
+requestPUT :: URI -> String -> Maybe String -> ByteString -> HttpSession ()
+requestPUT uri mimetype mEncoding body = do
+    req <- mkUploadRequest "PUT" uri mimetype mEncoding [] body
     runRequest req $ \rsp -> do
         rsp' <- responseReadBSL rsp
         checkStatus uri rsp'
