@@ -53,7 +53,6 @@ import Paths_hackage_server (version)
 
 import Data.Aeson (eitherDecode, encode, parseJSON)
 import Data.Aeson.Types (parseEither)
-import Distribution.Server.Framework (resp)
 
 data Mode = Help [String]
           | Init URI [URI]
