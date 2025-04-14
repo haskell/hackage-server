@@ -263,29 +263,26 @@
             <tr>
               <th>Maintainer's Corner</th>
               <td>
-                <details>
-                  <summary>Expand for Details</summary>
-                  <p><a href="$package.maintainerURL$">Package maintainers</a></p>
-                  <ul>
-                    <li>
-                      $maintainers$
-                    </li>
-                  </ul>
-                  <p>For package maintainers and hackage trustees</p>
-                  <ul>
-                    <li>
-                      <a href="$baseurl$/package/$package.name$/maintain">
-                        edit package information
-                      </a>
-                    </li>
-                  </ul>
-                  <p>Candidates</p>
-                  <ul>
-                    <li>
-                      $candidates$
-                    </li>
-                  </ul>
-                </details>
+                <p><a href="$package.maintainerURL$">Package maintainers</a></p>
+                <ul>
+                  <li>
+                    $maintainers$
+                  </li>
+                </ul>
+                <p>For package maintainers and hackage trustees</p>
+                <ul>
+                  <li>
+                    <a href="$baseurl$/package/$package.name$/maintain">
+                      edit package information
+                    </a>
+                  </li>
+                </ul>
+                <p>Candidates</p>
+                <ul>
+                  <li>
+                    $candidates$
+                  </li>
+                </ul>
               </td>
             </tr>
           </tbody>

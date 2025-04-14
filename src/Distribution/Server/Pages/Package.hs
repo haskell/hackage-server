@@ -95,7 +95,7 @@ downloadSection PackageRender{..} =
             [ anchor ! [href cabalURL] << "Package description" ]
           (True,Nothing) ->
             [ anchor ! [href cabalURL] << "Package description"
-            , toHtml " (as included in the package as *.cabal file)"
+            , toHtml " (as included in the package cabal file)"
             ]
           (True,Just _) ->
             [ anchor ! [href cabalURL] << "Package description"
