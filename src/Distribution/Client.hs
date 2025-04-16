@@ -376,9 +376,13 @@ checkStatus uri rsp = case statusCode $ responseStatus rsp of
   _code -> fail (showFailure uri rsp)
 
 showFailure :: URI -> Response ByteString -> String
-showFailure uri rsp =
-    show (responseStatus rsp) ++ show uri
- ++ case lookup hContentType (responseHeaders rsp) of
-      Just mimetype | "text/plain" `BSS.isPrefixOf` mimetype
-                   -> '\n' : (unpackUTF8 . responseBody $ rsp)
-      _            -> ""
+showFailure uri rsp = unlines
+    [ "error: failed HTTP request"
+    , "  status: " ++ show (responseStatus rsp)
+    , "  url: " ++ show uri
+    , "  response: " ++
+        case lookup hContentType (responseHeaders rsp) of
+          Just mimetype | "text/plain" `BSS.isPrefixOf` mimetype
+                       -> '\n' : (unpackUTF8 . responseBody $ rsp)
+          _            -> ""
+    ]
