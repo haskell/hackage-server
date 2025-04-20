@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DerivingStrategies #-}
 module Distribution.Server.Users.Types (
     module Distribution.Server.Users.Types,
     module Distribution.Server.Users.AuthToken,
@@ -26,13 +27,14 @@ import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
 import Data.Typeable (Typeable)
 import Data.Hashable
+import Data.Serialize (Serialize)
 
 
 newtype UserId = UserId Int
-  deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Pretty)
+  deriving newtype (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Pretty)
 
 newtype UserName  = UserName String
-  deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Hashable)
+  deriving newtype (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Hashable, Serialize)
 
 data UserInfo = UserInfo {
                   userName   :: !UserName,
