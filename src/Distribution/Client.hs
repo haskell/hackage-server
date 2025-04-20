@@ -1,4 +1,6 @@
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Distribution.Client
   ( -- * Command line handling
     validateHackageURI
@@ -12,23 +14,26 @@ module Distribution.Client
   , HttpSession
   , uriHostName
   , httpSession
+  , Request
+  , mkRequest
+  , mkUploadRequest
+  , noRedirects
+  , applyBasicAuth
+  , runRequest
+  , Response(..)
+  , responseReadBSL
   , requestGET'
   , requestPUT
   , (<//>)
-  , provideAuthInfo
-    -- * TODO: Exported although they appear unused
-  , extractURICredentials
-  , removeURICredentials
   , getETag
-  , downloadFile'
-  , requestGET
-  , requestPUTFile
-  , requestPOST
   , checkStatus
   ) where
 
-import Network.HTTP
-import Network.Browser
+import Network.HTTP.Client
+import Network.HTTP.Client.TLS
+import Network.HTTP.Types.Header
+import Network.HTTP.Types.Status
+import Network.HTTP.Types.Method
 import Network.URI (URI(..), URIAuth(..), parseURI)
 
 import Distribution.Server.Prelude
@@ -42,13 +47,15 @@ import Distribution.Verbosity
 import Distribution.Simple.Utils
 import Distribution.Text
 
+import Control.Exception
+import Control.Monad.Trans.Reader
 import Data.Version
 import Data.List
-import Control.Exception
 import Data.Time
 import Data.Time.Clock.POSIX
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy          as BS
+import qualified Data.ByteString.Char8         as BSS
 import qualified Distribution.Server.Util.GZip as GZip
 import qualified Codec.Archive.Tar             as Tar
 import qualified Codec.Archive.Tar.Entry       as Tar
@@ -58,6 +65,7 @@ import System.IO.Error
 import System.FilePath
 import System.Directory
 import qualified System.FilePath.Posix as Posix
+import Network.HTTP ()
 
 
 -------------------------
@@ -71,9 +79,14 @@ validateHackageURI str = case parseURI str of
 
 validateHackageURI' :: URI -> Either String URI
 validateHackageURI' uri
-    | uriScheme uri /= "http:"     = Left $ "only http URLs are supported " ++ show uri
+    | not $ okayScheme (uriScheme uri) =
+                                     Left $ "only http URLs are supported " ++ show uri
     | isNothing (uriAuthority uri) = Left $ "server name required in URL " ++ show uri
     | otherwise                    = Right uri
+  where
+    okayScheme "http:"  = True
+    okayScheme "https:" = True
+    okayScheme _        = False
 
 validatePackageIds :: [String] -> Either String [PackageId]
 validatePackageIds pkgstrs =
@@ -206,67 +219,99 @@ infixr 5 <//>
 uri <//> path = uri { uriPath = Posix.addTrailingPathSeparator (uriPath uri)
                                 Posix.</> path }
 
-
-extractURICredentials :: URI -> Maybe (String, String)
-extractURICredentials uri
-  | Just authority <- uriAuthority uri
-  , (username, ':':passwd0) <- break (==':') (uriUserInfo authority)
-  , let passwd = takeWhile (/='@') passwd0
-  , not (null username)
-  , not (null passwd)
-  = Just (username, passwd)
-extractURICredentials _ = Nothing
-
-removeURICredentials :: URI -> URI
-removeURICredentials uri = uri { uriAuthority = fmap (\auth -> auth { uriUserInfo = "" }) (uriAuthority uri) }
-
-provideAuthInfo :: URI -> Maybe (String, String) -> URI -> String -> IO (Maybe (String, String))
-provideAuthInfo for_uri credentials = \uri _realm -> do
-    if uriHostName uri == uriHostName for_uri then return credentials
-                                              else return Nothing
-
 uriHostName :: URI -> Maybe String
 uriHostName = fmap uriRegName . uriAuthority
 
 
-type HttpSession a = BrowserAction (HandleStream ByteString) a
+newtype HttpSession a = HttpSession (ReaderT HttpEnv IO a)
+    deriving (Functor, Applicative, Monad, MonadFail, MonadIO)
+
+data HttpEnv = HttpEnv { httpManager :: Manager
+                       , initialHeaders :: RequestHeaders
+                       }
+
+mkRequest
+    :: Method
+    -> RequestHeaders
+    -> URI
+    -> HttpSession Request
+mkRequest meth headers uri = do
+    req0 <- liftIO $ requestFromURI uri
+    return $ req0 { method = meth, requestHeaders = headers }
+
+mkUploadRequest
+    :: Method
+    -> URI
+    -> String        -- ^ MIME type
+    -> Maybe String  -- ^ encoding
+    -> RequestHeaders
+    -> ByteString    -- ^ body
+    -> HttpSession Request
+mkUploadRequest meth uri mimetype mEncoding headers body = do
+    req <- mkRequest meth (headers ++ headers') uri
+    return $ req { requestBody = RequestBodyLBS body }
+  where
+    headers' = [ (hContentLength, BSS.pack $ show (BS.length body))
+              , (hContentType, BSS.pack mimetype) ]
+              ++ case mEncoding of
+                Nothing       -> []
+                Just encoding -> [ (hContentEncoding, BSS.pack encoding) ]
+
+-- | Prohibit following of redirects.
+noRedirects :: Request -> Request
+noRedirects req = req { redirectCount = 0 }
+
+runRequest :: Request
+            -> (Response BodyReader -> IO a)
+            -> HttpSession a
+runRequest req0 k = HttpSession $ do
+    env <- ask
+    let req = req0 { requestHeaders = initialHeaders env ++ requestHeaders req0 }
+    liftIO $ withResponse req (httpManager env) k
+
+responseReadBSL :: Response BodyReader -> IO (Response BS.ByteString)
+responseReadBSL rsp =
+    traverse (fmap BS.fromChunks . brConsume) rsp
 
 httpSession :: Verbosity -> String -> Version -> HttpSession a -> IO a
-httpSession verbosity agent version action =
-    browse $ do
-      setUserAgent (agent ++ "/" ++ showVersion version)
-      setErrHandler dieNoVerbosity
-      setOutHandler (debug verbosity)
-      setAllowBasicAuth True
-      setCheckForProxy True
-      action
+httpSession verbosity agent version (HttpSession action) = do
+    manager <- newTlsManager
+    let env = HttpEnv { httpManager = manager
+                      , initialHeaders = [ (hUserAgent, BSS.pack $ agent ++ "/" ++ showVersion version) ]
+                      }
+    runReaderT action env
 
 downloadFile :: URI -> FilePath -> HttpSession ()
 downloadFile uri file = do
-  out $ "downloading " ++ show uri ++ " to " ++ file
+  liftIO $ putStrLn $ "downloading " ++ show uri ++ " to " ++ file
   let etagFile = file <.> "etag"
   metag <- liftIO $ catchJustDoesNotExistError
                         (Just <$> readFile etagFile)
                         (\_ -> return Nothing)
   case metag of
     Just etag -> do
-      let headers = [mkHeader HdrIfNoneMatch (quote etag)]
-      (_, rsp) <- request (Request uri GET headers BS.empty)
-      case rspCode rsp of
-        (3,0,4) -> out $ file ++ " unchanged with ETag " ++ etag
-        (2,0,0) -> liftIO $ writeDowloadedFileAndEtag rsp
-        _       -> err (showFailure uri rsp)
+      let headers = [(hIfNoneMatch, BSS.pack (quote etag))]
+      req <- mkRequest "GET" headers uri
+      runRequest req $ \rsp -> do
+        case statusCode $ responseStatus rsp of
+          304 -> putStrLn $ file ++ " unchanged with ETag " ++ etag
+          200 -> writeDowloadedFileAndEtag rsp
+          _   -> do rsp' <- responseReadBSL rsp
+                    hPutStrLn stderr (showFailure uri rsp')
 
     Nothing -> do
-      (_, rsp) <- request (Request uri GET [] BS.empty)
-      case rspCode rsp of
-        (2,0,0) -> liftIO $ writeDowloadedFileAndEtag rsp
-        _       -> err (showFailure uri rsp)
+        req <- mkRequest "GET" [] uri
+        runRequest req $ \rsp ->
+          case statusCode $ responseStatus rsp of
+            200 -> writeDowloadedFileAndEtag rsp
+            _   -> do rsp' <- responseReadBSL rsp
+                      hPutStrLn stderr (showFailure uri rsp')
 
   where
     writeDowloadedFileAndEtag rsp = do
-      BS.writeFile file (rspBody rsp)
-      setETag file (unquote <$> findHeader HdrETag rsp)
+      bss <- brConsume (responseBody rsp)
+      BS.writeFile file (BS.fromChunks bss)
+      setETag file (unquote . BSS.unpack <$> lookup hETag (responseHeaders rsp))
 
 getETag :: FilePath -> IO (Maybe String)
 getETag file =
@@ -295,78 +340,49 @@ unquote ('"':s) = go s
     go (c:cs)   = c : go cs
 unquote     s   = s
 
--- AAARG! total lack of exception handling in HTTP monad!
-downloadFile' :: URI -> FilePath -> HttpSession Bool
-downloadFile' uri file = do
-  out $ "downloading " ++ show uri ++ " to " ++ file
-  mcontent <- requestGET' uri
-  case mcontent of
-    Nothing      -> do out $ "404 " ++ show uri
-                       return False
-
-    Just content -> do liftIO $ BS.writeFile file content
-                       return True
-
-requestGET :: URI -> HttpSession ByteString
-requestGET uri = do
-    (_, rsp) <- request (Request uri GET headers BS.empty)
-    checkStatus uri rsp
-    return (rspBody rsp)
-  where
-    headers = []
-
--- Really annoying!
+-- | Like 'requestGET' but return @Nothing@ on 404 status.
 requestGET' :: URI -> HttpSession (Maybe ByteString)
 requestGET' uri = do
-    (_, rsp) <- request (Request uri GET headers BS.empty)
-    case rspCode rsp of
-      (4,0,4) -> return Nothing
-      _       -> do checkStatus uri rsp
-                    return (Just (rspBody rsp))
+    req <- mkRequest "GET" headers uri
+    runRequest req $ \rsp -> do
+        case statusCode $ responseStatus rsp of
+          404 -> return Nothing
+          _   -> do rsp' <- responseReadBSL rsp
+                    checkStatus uri rsp'
+                    return $ Just (responseBody rsp')
   where
     headers = []
 
+requestPUT :: URI -> String -> Maybe String -> ByteString -> HttpSession ()
+requestPUT uri mimetype mEncoding body = do
+    req <- mkUploadRequest "PUT" uri mimetype mEncoding [] body
+    runRequest req $ \rsp -> do
+        rsp' <- responseReadBSL rsp
+        checkStatus uri rsp'
 
-requestPUTFile :: URI -> String -> Maybe String -> FilePath -> HttpSession ()
-requestPUTFile uri mime_type mEncoding file = do
-    content <- liftIO $ BS.readFile file
-    requestPUT uri mime_type mEncoding content
-
-requestPOST, requestPUT :: URI -> String -> Maybe String -> ByteString -> HttpSession ()
-requestPOST = requestPOSTPUT POST
-requestPUT = requestPOSTPUT PUT
-
-requestPOSTPUT :: RequestMethod -> URI -> String -> Maybe String -> ByteString -> HttpSession ()
-requestPOSTPUT meth uri mimetype mEncoding body = do
-    (_, rsp) <- request (Request uri meth headers body)
-    checkStatus uri rsp
-  where
-    headers = [ Header HdrContentLength (show (BS.length body))
-              , Header HdrContentType mimetype ]
-              ++ case mEncoding of
-                Nothing       -> []
-                Just encoding -> [ Header HdrContentEncoding encoding ]
-
-
-checkStatus :: URI -> Response ByteString -> HttpSession ()
-checkStatus uri rsp = case rspCode rsp of
+checkStatus :: URI -> Response ByteString -> IO ()
+checkStatus uri rsp = case statusCode $ responseStatus rsp of
   -- 200 OK
-  (2,0,0) -> return ()
+  200 -> return ()
   -- 201 Created
-  (2,0,1) -> return ()
+  201 -> return ()
   -- 201 Created
-  (2,0,2) -> return ()
+  202 -> return ()
   -- 204 No Content
-  (2,0,4) -> return ()
+  204 -> return ()
   -- 400 Bad Request
-  (4,0,0) -> liftIO (warn normal (showFailure uri rsp)) >> return ()
+  400 -> liftIO (warn normal (showFailure uri rsp)) >> return ()
   -- Other
-  _code   -> err (showFailure uri rsp)
+  _code -> fail (showFailure uri rsp)
 
 showFailure :: URI -> Response ByteString -> String
-showFailure uri rsp =
-    show (rspCode rsp) ++ " " ++ rspReason rsp ++ show uri
- ++ case lookupHeader HdrContentType (rspHeaders rsp) of
-      Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> '\n' : (unpackUTF8 . rspBody $ rsp)
-      _            -> ""
+showFailure uri rsp = unlines
+    [ "error: failed HTTP request"
+    , "  status: " ++ show (responseStatus rsp)
+    , "  url: " ++ show uri
+    , "  response: " ++
+        case lookup hContentType (responseHeaders rsp) of
+          Just mimetype | "text/plain" `BSS.isPrefixOf` mimetype
+                       -> '\n' : (unpackUTF8 . responseBody $ rsp)
+          _            -> ""
+    ]

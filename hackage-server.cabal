@@ -409,6 +409,9 @@ library
   build-depends:
     , HStringTemplate       ^>= 0.8
     , HTTP                  ^>= 4000.3.16 || ^>= 4000.4.1
+    , http-client           ^>= 0.7       && < 0.8
+    , http-client-tls       ^>= 0.3
+    , http-types             >= 0.10      && < 0.13
     , QuickCheck             >= 2.14      && < 2.16
     , acid-state            ^>= 0.16
     , async                 ^>= 2.2.1
@@ -454,6 +457,7 @@ library
     , stm                   ^>= 2.5.0
     , stringsearch          ^>= 0.3.6.6
     , tagged                ^>= 0.8.5
+    , transformers          ^>= 0.6
     , xhtml                  >= 3000.2.0.0 && < 3000.4
     , xmlgen                ^>= 0.6
     , xss-sanitize          ^>= 0.3.6
@@ -506,7 +510,7 @@ executable hackage-build
 
   build-depends:
     -- version constraints inherited from hackage-server
-    , HTTP
+    , http-types
 
   -- Runtime dependency only;
   -- TODO: we have no proper support for this kind of dependencies in cabal
