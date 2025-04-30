@@ -24,7 +24,7 @@ jobs:
         extra_nix_config: |
           trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hackage-server.cachix.org-1:iw0iRh6+gsFIrxROFaAt5gKNgIHejKjIfyRdbpPYevY=
           substituters = https://cache.nixos.org/ https://hackage-server.cachix.org/
-    - uses: cachix/cachix-action@v15
+    - uses: cachix/cachix-action@v16
       with:
         # https://nix.dev/tutorials/continuous-integration-github-actions#setting-up-github-actions
         name: hackage-server
