@@ -13,7 +13,7 @@ import qualified Network.URI as URI
 import Data.List (find)
 import Data.Text.Encoding (encodeUtf8)
 import Happstack.Server (ServerMonad(askRq))
-import Happstack.Server.Response (seeOther, toResponse)
+import Happstack.Server.Response (movedPermanently, toResponse)
 import Happstack.Server.Types (HeaderPair(..), Response, rqHeaders, rqQuery, rqUri)
 
 import qualified Hackage.Security.Util.Path as Sec
@@ -96,6 +96,6 @@ requireUserContent ServerEnv {serverUserContentBaseURI, serverRequiredBaseHostHe
           , URI.uriQuery = rqQuery rq
           }
       in
-       seeOther (show uri) (toResponse ())
+       movedPermanently (show uri) (toResponse ())
      else
        pure action

@@ -366,12 +366,19 @@ newtype FlagAss1 = FlagAss1 (FlagName,Bool)
 instance Newtype (FlagName,Bool) FlagAss1
 
 instance Parsec FlagAss1 where
-  parsec = do
-    -- this is subtly different from Cabal's 'FlagName' parser
-    name <- P.munch1 (\c -> Char.isAlphaNum c || c == '_' || c == '-')
-    case name of
-      ('-':flag) -> return $ FlagAss1 (mkFlagName flag, False)
-      flag       -> return $ FlagAss1 (mkFlagName flag, True)
+  parsec = fmap FlagAss1 (posPolarity <|> negPolarity <|> noPolarity)
+    where
+      posPolarity = do
+          P.char '+'
+          (,) <$> flagName <*> pure True
+      negPolarity = do
+          P.char '-'
+          (,) <$> flagName <*> pure False
+      noPolarity =
+          (,) <$> flagName <*> pure True
+
+      -- this is subtly different from Cabal's 'FlagName' parser
+      flagName = mkFlagName <$> P.munch1 (\c -> Char.isAlphaNum c || c == '_' || c == '-')
 
 instance Pretty FlagAss1 where
   pretty (FlagAss1 (fn, True))  = Disp.text (unFlagName fn)

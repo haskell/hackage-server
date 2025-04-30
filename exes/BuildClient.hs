@@ -1,9 +1,10 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import Network.HTTP hiding (password)
-import Network.Browser
+import Network.HTTP.Types.Header
+import Network.HTTP.Types.Status
 import Network.URI (URI(..))
 import Distribution.Client
 import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
@@ -26,6 +27,7 @@ import Control.Applicative as App
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
+import qualified Data.ByteString.Char8      as BSS
 import qualified Data.ByteString.Lazy       as BS
 import qualified Data.Map                   as M
 
@@ -878,9 +880,6 @@ uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath
 uploadResults verbosity config docInfo
               mdocsTarballFile buildReportFile buildLogFile testLogFile coverageFile installOk =
     httpSession verbosity "hackage-build" version $ do
-      -- Make sure we authenticate to Hackage
-      setAuthorityGen (provideAuthInfo (bc_srcURI config)
-                                       (Just (bc_username config, bc_password config)))
       case mdocsTarballFile of
         Nothing              -> return ()
         Just docsTarballFile ->
@@ -888,10 +887,21 @@ uploadResults verbosity config docInfo
 
       putBuildFiles config docInfo buildReportFile buildLogFile testLogFile coverageFile installOk
 
+withAuth :: BuildConfig -> Request -> Request
+withAuth config req =
+    noRedirects $ applyBasicAuth (BSS.pack $ bc_username config) (BSS.pack $ bc_password config) req
+
 putDocsTarball :: BuildConfig -> DocInfo -> FilePath -> HttpSession ()
-putDocsTarball config docInfo docsTarballFile =
-    requestPUTFile (docInfoDocsURI config docInfo)
-      "application/x-tar" (Just "gzip") docsTarballFile
+putDocsTarball config docInfo docsTarballFile = do
+    body <- liftIO $ BS.readFile docsTarballFile
+    req <- withAuth config <$> mkUploadRequest "PUT" uri mimetype mEncoding [] body
+    runRequest req $ \rsp -> do
+        rsp' <- responseReadBSL rsp
+        checkStatus uri rsp'
+  where
+    uri = docInfoDocsURI config docInfo
+    mimetype = "application/x-tar"
+    mEncoding = Just "gzip"
 
 putBuildFiles :: BuildConfig -> DocInfo -> Maybe FilePath
                     -> FilePath -> Maybe FilePath -> Maybe FilePath -> Bool -> HttpSession ()
@@ -902,20 +912,15 @@ putBuildFiles config docInfo reportFile buildLogFile testLogFile coverageFile in
     coverageContent <- liftIO $ traverse readFile coverageFile
     let uri   = docInfoReports config docInfo
         body  = encode $ BR.BuildFiles reportContent (Just logContent) testContent coverageContent (not installOk)
-    setAllowRedirects False
-    (_, response) <- request Request {
-      rqURI     = uri,
-      rqMethod  = PUT,
-      rqHeaders = [Header HdrContentType "application/json",
-                   Header HdrContentLength (show (BS.length body))],
-      rqBody    = body
-    }
-    case rspCode response of
-      --TODO: fix server to not do give 303, 201 is more appropriate
-      (3,0,3) -> return ()
-      _       -> do checkStatus uri response
+    let headers = [ (hAccept, BSS.pack "application/json") ]
+    req <- withAuth config <$> mkUploadRequest (BSS.pack "PUT") uri "application/json" Nothing headers body
+    runRequest req $ \rsp -> do
+        case statusCode $ responseStatus rsp of
+          --TODO: fix server to not do give 303, 201 is more appropriate
+          303 -> return ()
+          _   -> do rsp' <- responseReadBSL rsp
+                    checkStatus uri rsp'
                     fail "Unexpected response from server."
-
 
 
 -------------------------

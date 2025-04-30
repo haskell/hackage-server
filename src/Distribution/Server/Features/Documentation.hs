@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes, FlexibleContexts,
              NamedFieldPuns, RecordWildCards, PatternGuards #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, MultiWayIf #-}
 module Distribution.Server.Features.Documentation (
     DocumentationFeature(..),
     DocumentationResource(..),
@@ -310,12 +310,22 @@ documentationFeature name
                 case dpath of
                   ("..","doc-index.json") : _ -> True
                   _ -> False
-            if mtime < UTCTime (fromGregorian 2025 2 1) 0
-               || isDocIndex
-               || digest == "548d676b3e5a52cbfef06d7424ec065c1f34c230407f9f5dc002c27a9666bec4" -- quick-jump.min.js
-               || digest == "6bd159f6d7b1cfef1bd190f1f5eadcd15d35c6c567330d7465c3c35d5195bc6f" -- quick-jump.css
-               then pure response
-               else requireUserContent env response
+              isQuickJump =
+                case dpath of
+                  ("..","quick-jump.min.js") : _ -> True
+                  ("..","quick-jump.css") : _ -> True
+                  _ -> False
+            if
+              | isDocIndex || mtime < UTCTime (fromGregorian 2025 2 1) 0 -> pure response
+              | isQuickJump ->
+                   if digest == "548d676b3e5a52cbfef06d7424ec065c1f34c230407f9f5dc002c27a9666bec4" -- quick-jump.min.js
+                   || digest == "6bd159f6d7b1cfef1bd190f1f5eadcd15d35c6c567330d7465c3c35d5195bc6f" -- quick-jump.css
+                     then pure response
+                     else
+                       -- Because Quick Jump also runs on the package page, and not just on the user content domain,
+                       -- we cannot accept arbitrary user-uploaded content.
+                       errForbidden "Quick Jump hash is not correct" [MText "Accepted Quick Jump hashes are listed in the hackage-server source code."]
+              | otherwise -> requireUserContent env response
 
     rewriteDocs :: BSL.ByteString -> BSL.ByteString
     rewriteDocs dochtml = case BSL.breakFindAfter (BS.pack "<head>") dochtml of
