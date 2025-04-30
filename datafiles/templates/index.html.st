@@ -117,12 +117,10 @@ at <a href="mailto:hackage-admin@haskell.org">hackage-admin@haskell.org</a></p>
 
 <h2>Credits</h2>
 <p>The current Hackage codebase was spearheaded
- by <a href="https://www.well-typed.com/">Well-Typed</a>. Key funding
- was provided by the <a href="http://ihg.well-typed.com/">Industrial
- Haskell Group</a>, which was a consortium of companies that rely on Haskell.
+ by <a href="https://www.well-typed.com/">Well-Typed</a>.
  The website is maintained by volunteers from the
- Haskell community. Hosting is provided
- by <a href="https://www.packet.com/">Packet</a> and real-time
+ Haskell community, with support from the <a href="https://haskell.foundation/">Haskell Foundation</a>. Hosting is provided
+ by <a href="https://www.digitalocean.com/">DigitalOcean</a> and real-time
  CDN by <a href="https://www.fastly.com">Fastly</a>.</p>
 
 </div>
