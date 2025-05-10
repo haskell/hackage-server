@@ -89,7 +89,7 @@ operate the service in compliance with copyright laws.</p>
 on what is and is not a valid open source license, but we retain the right to
 remove packages that are not under licenses that are open source in spirit, or
 that conflict with our ability to operate this service. (If you want advice,
-see the ones <a href="/package/Cabal/docs/Distribution-License.html">Cabal
+see the ones <a href="/package/Cabal-syntax/docs/Distribution-License.html">Cabal
 recommends</a>.)</p>
 
 <p>The Hackage operators do <em>not</em> need and are <em>not</em> asking for
