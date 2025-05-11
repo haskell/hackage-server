@@ -28,9 +28,10 @@ license:      BSD-3-Clause
 license-file: LICENSE
 
 tested-with:
-  GHC == 9.10.1
-  GHC == 9.8.2
-  GHC == 9.6.5
+  GHC == 9.12.2
+  GHC == 9.10.2
+  GHC == 9.8.4
+  GHC == 9.6.7
   GHC == 9.4.8
   GHC == 9.2.8
   GHC == 9.0.2
@@ -130,10 +131,10 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.13  && < 4.21
+    , base                   >= 4.13  && < 4.22
     , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.10  && < 0.13
-    , containers             >= 0.6.0 && < 0.8
+    , containers             >= 0.6.0 && < 0.9
     , deepseq                >= 1.4   && < 1.6
     , directory              >= 1.3   && < 1.4
     , filepath               >= 1.4   && < 1.6
@@ -142,15 +143,15 @@ common defaults
     , pretty                 >= 1.1   && < 1.2
     , process                >= 1.6   && < 1.7
     , text                  ^>= 1.2.5.0 || >= 2.0 && < 2.2
-    , time                   >= 1.9   && < 1.13
+    , time                   >= 1.9   && < 1.15
     , transformers           >= 0.5   && < 0.7
     , unix                   >= 2.7   && < 2.9
     , scientific
   -- other dependencies shared by most components
   build-depends:
     , aeson                  >= 2.1.0.0 && < 2.3
-    , Cabal                  >= 3.12.1.0 && < 3.14
-    , Cabal-syntax           >= 3.12.1.0 && < 3.14
+    , Cabal                  >= 3.14.2.0 && < 3.16
+    , Cabal-syntax           >= 3.14.2.0 && < 3.16
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
     , fail                  ^>= 4.9.0
@@ -444,12 +445,12 @@ library
         -- haddock-library-1.11.0 changed type of markupOrderedList
         -- see https://github.com/haskell/hackage-server/issues/1128
     , happstack-server      ^>= 7.7.1     || ^>= 7.8.0  || ^>= 7.9.0
-    , hashable              ^>= 1.3       || ^>= 1.4
+    , hashable               >= 1.3       && < 1.6
     , hs-captcha            ^>= 1.0
     , hslogger              ^>= 1.3.1
     , lifted-base           ^>= 0.2.1
     , mime-mail             ^>= 0.5
-    , random                ^>= 1.2
+    , random                 >= 1.2       && < 1.4
     , rss                   ^>= 3000.2.0.7
     , safecopy              ^>= 0.10
     , semigroups            ^>= 0.20
@@ -458,7 +459,7 @@ library
     , stringsearch          ^>= 0.3.6.6
     , tagged                ^>= 0.8.5
     , transformers          ^>= 0.6
-    , xhtml                  >= 3000.2.0.0 && < 3000.4
+    , xhtml                  >= 3000.2.0.0 && < 3000.5
     , xmlgen                ^>= 0.6
     , xss-sanitize          ^>= 0.3.6
 
@@ -600,7 +601,7 @@ test-suite ReverseDependenciesTest
     , tasty-hedgehog ^>= 1.4
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
-    , hedgehog     ^>= 1.4
+    , hedgehog      >= 1.4 && < 1.6
     , exceptions
     , bimap
     , mime-mail
