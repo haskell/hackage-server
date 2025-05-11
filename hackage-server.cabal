@@ -32,11 +32,7 @@ tested-with:
   GHC == 9.10.2
   GHC == 9.8.4
   GHC == 9.6.7
-  GHC == 9.4.8
-  GHC == 9.2.8
-  GHC == 9.0.2
-  GHC == 8.10.7
-  GHC == 8.8.4
+  -- Constraint transformers >= 0.6 forces GHC >= 9.6 for CI
 
 data-dir: datafiles
 data-files:
@@ -131,7 +127,7 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.13  && < 4.22
+    , base                   >= 4.18  && < 4.22
     , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.10  && < 0.13
     , containers             >= 0.6.0 && < 0.9

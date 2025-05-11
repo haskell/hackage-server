@@ -52,31 +52,6 @@ jobs:
             compilerVersion: 9.6.7
             setup-method: ghcup
             allow-failure: false
-          - compiler: ghc-9.4.8
-            compilerKind: ghc
-            compilerVersion: 9.4.8
-            setup-method: ghcup
-            allow-failure: false
-          - compiler: ghc-9.2.8
-            compilerKind: ghc
-            compilerVersion: 9.2.8
-            setup-method: ghcup
-            allow-failure: false
-          - compiler: ghc-9.0.2
-            compilerKind: ghc
-            compilerVersion: 9.0.2
-            setup-method: ghcup
-            allow-failure: false
-          - compiler: ghc-8.10.7
-            compilerKind: ghc
-            compilerVersion: 8.10.7
-            setup-method: ghcup
-            allow-failure: false
-          - compiler: ghc-8.8.4
-            compilerKind: ghc
-            compilerVersion: 8.8.4
-            setup-method: ghcup
-            allow-failure: false
       fail-fast: false
     steps:
       - name: apt-get install
@@ -196,7 +171,7 @@ jobs:
           echo "    ghc-options: -Werror=missing-methods" >> cabal.project
           cat >> cabal.project <<EOF
           EOF
-          $HCPKG list --simple-output --names-only | perl -ne 'for (split /\s+/) { print "constraints: any.$_ installed\n" unless /^(Cabal|Cabal-syntax|hackage-server|parsec|process|text|transformers)$/; }' >> cabal.project.local
+          $HCPKG list --simple-output --names-only | perl -ne 'for (split /\s+/) { print "constraints: any.$_ installed\n" unless /^(Cabal|Cabal-syntax|hackage-server|parsec|process|text)$/; }' >> cabal.project.local
           cat cabal.project
           cat cabal.project.local
       - name: dump install plan
