@@ -1,6 +1,6 @@
 branches: master
 
-installed: +all -Cabal -Cabal-syntax -text -parsec -process
+installed: +all -Cabal -Cabal-syntax -text -parsec -process -transformers
 
 -- Does not work with GHA:
 -- -- allow failures with ghc-7.6 and ghc-7.8
