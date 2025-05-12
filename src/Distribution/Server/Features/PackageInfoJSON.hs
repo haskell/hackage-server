@@ -1,6 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Distribution.Server.Features.PackageInfoJSON (
   PackageInfoJSONFeature(..)
@@ -39,6 +41,7 @@ import           Distribution.Server.Packages.Types             (CabalFileText(.
 import           Distribution.Server.Framework.BackupRestore    (RestoreBackup(..))
 
 import           Distribution.Server.Features.PackageInfoJSON.State (PackageBasicDescription(..),
+                                                                     PackageBasicDescriptionDTO(..),
                                                                      PackageVersions(..),
                                                                      PackageInfoState(..),
                                                                      GetPackageInfo(..),
@@ -54,8 +57,10 @@ import Data.Foldable (toList)
 import Data.Traversable (for)
 import qualified Data.List as List
 import Data.Time (UTCTime)
-import Distribution.Server.Users.Types (UserName, UserInfo(..))
+import Distribution.Server.Users.Types (UserName (..), UserInfo(..))
 import Distribution.Server.Features.Users (UserFeature(lookupUserInfo))
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 
 data PackageInfoJSONFeature = PackageInfoJSONFeature {
@@ -92,17 +97,18 @@ initPackageInfoJSONFeature env = do
                \and the values are whether the version is preferred or not"
         vInfo = "Get basic package information at a specific metadata revision"
 
+        uploaderCache = undefined
         jsonResources = [
           (Framework.extendResource (corePackagePage coreR)) {
                 Framework.resourceDesc = [(Framework.GET, info)]
               , Framework.resourceGet  =
-                  [("json", servePackageBasicDescription coreR userFeature
+                  [("json", servePackageBasicDescription coreR uploaderCache userFeature
                             preferred packageInfoState)]
               }
           , (Framework.extendResource (coreCabalFileRev coreR)) {
                 Framework.resourceDesc = [(Framework.GET, vInfo)]
               , Framework.resourceGet  =
-                  [("json", servePackageBasicDescription coreR userFeature
+                  [("json", servePackageBasicDescription coreR uploaderCache userFeature
                      preferred packageInfoState)]
               }
           ]
@@ -135,15 +141,14 @@ initPackageInfoJSONFeature env = do
 
 -- | Pure function for extracting basic package info from a Cabal file
 getBasicDescription
-  :: UserName
-  -> UTCTime
+  :: UTCTime
     -- ^ Time of upload
   -> CabalFileText
   -> Int
      -- ^ Metadata revision. This will be added to the resulting
      --   @PackageBasicDescription@
   -> Either String PackageBasicDescription
-getBasicDescription uploader uploadedAt (CabalFileText cf) metadataRev =
+getBasicDescription uploadedAt (CabalFileText cf) metadataRev =
   let parseResult = PkgDescr.parseGenericPackageDescription (BS.toStrict cf)
   in case PkgDescr.runParseResult parseResult of
     (_, Right pkg) -> let
@@ -157,7 +162,6 @@ getBasicDescription uploader uploadedAt (CabalFileText cf) metadataRev =
       pbd_homepage          = T.pack . fromShortText $ PkgDescr.homepage pkgd
       pbd_metadata_revision = metadataRev
       pbd_uploaded_at       = uploadedAt
-      pbd_uploader          = uploader
       in
       return $ PackageBasicDescription {..}
     (_, Left (_, perrs)) ->
@@ -165,6 +169,32 @@ getBasicDescription uploader uploadedAt (CabalFileText cf) metadataRev =
        in Left $ "Could not parse cabal file: "
                    <> errs
 
+basicDescriptionToDTO :: UserName -> PackageBasicDescription -> PackageBasicDescriptionDTO
+basicDescriptionToDTO uploader d =
+  PackageBasicDescriptionDTO
+    { license = d.pbd_license
+    , copyright = d.pbd_copyright
+    , synopsis = d.pbd_synopsis
+    , description = d.pbd_description
+    , author = d.pbd_author
+    , homepage = d.pbd_homepage
+    , metadata_revision = d.pbd_metadata_revision
+    , uploaded_at = d.pbd_uploaded_at
+    , uploader
+    }
+
+dtoToBasicDescription :: PackageBasicDescriptionDTO -> PackageBasicDescription
+dtoToBasicDescription dto =
+  PackageBasicDescription
+    { pbd_license = dto.license
+    , pbd_copyright = dto.copyright
+    , pbd_synopsis = dto.synopsis
+    , pbd_description = dto.description
+    , pbd_author = dto.author
+    , pbd_homepage = dto.homepage
+    , pbd_metadata_revision = dto.metadata_revision
+    , pbd_uploaded_at = dto.uploaded_at
+    }
 
 -- | Get a JSON @PackageBasicDescription@ for a particular
 --   package/version/metadata-revision
@@ -172,13 +202,14 @@ getBasicDescription uploader uploadedAt (CabalFileText cf) metadataRev =
 --   A listing of versions and their deprecation states
 servePackageBasicDescription
   :: CoreResource
+  -> Map PackageIdentifier UserName
   -> UserFeature
   -> Preferred.VersionsFeature
   -> Framework.StateComponent Framework.AcidState PackageInfoState
   -> Framework.DynamicPath
      -- ^ URI specifying a package and version `e.g. lens or lens-4.11`
   -> Framework.ServerPartE Framework.Response
-servePackageBasicDescription resource userFeature preferred packageInfoState dpath = do
+servePackageBasicDescription resource uploaderCache userFeature preferred packageInfoState dpath = do
 
   let metadataRev :: Maybe Int = lookup "revision" dpath >>= Framework.fromReqURI
 
@@ -196,15 +227,17 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
       -> Maybe Int
       -> Framework.ServerPartE Framework.Response
     lookupOrInsertDescr pkgid metadataRev = do
-      cachedDescr <- Framework.queryState packageInfoState $
-                     GetDescriptionFor (pkgid, metadataRev)
-      descr :: PackageBasicDescription <- case cachedDescr of
-        Just d  -> return d
+      cachedDescr <- Framework.queryState packageInfoState $ GetDescriptionFor (pkgid, metadataRev)
+      descr :: PackageBasicDescriptionDTO <- case cachedDescr of
+        Just d  -> do
+            uploader <- getPackageUploader pkgid uploaderCache
+            return $ basicDescriptionToDTO uploader d
         Nothing -> do
-          d <- getPackageDescr pkgid metadataRev
+          dto <- getPackageDescr pkgid metadataRev
+          let description = dtoToBasicDescription dto
           Framework.updateState packageInfoState $
-            SetDescriptionFor (pkgid, metadataRev) (Just d)
-          return d
+            SetDescriptionFor (pkgid, metadataRev) (Just description)
+          return dto
       return $ Framework.toResponse $ Aeson.toJSON descr
 
     getPackageDescr pkgid metadataRev = do
@@ -227,10 +260,12 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
           uploadedAt = fst $ uploadInfos Vector.! metadataInd
           uploaderId = snd $ uploadInfos Vector.! metadataInd
       uploader <- userName <$> lookupUserInfo userFeature uploaderId
-      let pkgDescr  = getBasicDescription uploader uploadedAt cabalFile metadataInd
+      let pkgDescr  = getBasicDescription uploadedAt cabalFile metadataInd
       case pkgDescr of
         Left e  -> Framework.errInternalError [Framework.MText e]
-        Right d -> return d
+        Right d -> do
+          let packageInfoDTO =  basicDescriptionToDTO uploader d
+          return packageInfoDTO
 
     lookupOrInsertVersions
       :: PackageName
@@ -255,6 +290,14 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
         . Preferred.classifyVersions prefInfo
         $ fmap packageVersion pkgs
 
+getPackageUploader
+  :: PackageIdentifier
+  -> Map PackageIdentifier UserName
+  -> Framework.ServerPartE UserName
+getPackageUploader pkgId cache =
+  case Map.lookup pkgId cache of
+    Just u -> pure u
+    Nothing -> Framework.errNotFound "Could not find uploader" []
 
 -- | Our backup doesn't produce any entries, and backup restore
 --   returns an empty state. Our responses are cheap enough to
