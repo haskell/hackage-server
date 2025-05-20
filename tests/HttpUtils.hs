@@ -25,6 +25,8 @@ module HttpUtils (
 import Control.Exception
 import Control.Monad
 import Data.Maybe
+import Data.Text (unpack)
+import qualified Data.Text.Encoding as Enc
 import Network.HTTP hiding (user)
 import Network.HTTP.Auth
 import Data.Aeson (Result(..), Value(..), FromJSON(..), (.:), fromJSON)
@@ -242,7 +244,19 @@ jsonHandler :: FromJSON a
             -> Streams.InputStream BS.ByteString
             -> IO a
 jsonHandler _ i = do
-    v <- Streams.parseFromStream json' i
-    case fromJSON v of
-      (Success a) -> return a
-      (Error str) -> fail str
+    -- Note that this might not read the _whole_ input
+    -- But the beginning is often good enough for diagnosing the failure
+    mbByteString <- Streams.read i
+    forM_ mbByteString $ \bs -> Streams.unRead bs i
+    eitherV <- try $ Streams.parseFromStream json' i
+    case fromJSON <$> eitherV of
+      Left ex -> do
+        let
+          _ex :: SomeException
+          _ex = ex
+        forM_ mbByteString $ \bs ->
+          forM_ (Enc.decodeUtf8' bs) $ \text ->
+            putStrLn (unpack text)
+        fail "Response was not JSON"
+      Right (Success a) -> return a
+      Right (Error str) -> fail str

@@ -243,11 +243,11 @@ runPackageTests = do
        unless (tarFile == testpackageTarFileContent) $
            die "Bad tar file"
     do info "Getting testpackage source"
-       hsFile <- getUrl NoAuth ("/package/testpackage/src" </> testpackageHaskellFilename)
+       hsFile <- getUserContentUrl NoAuth ("/package/testpackage/src" </> testpackageHaskellFilename)
        unless (hsFile == testpackageHaskellFileContent) $
            die "Bad Haskell file"
     do info "Getting testpackage source with etag"
-       validateETagHandling ("/package/testpackage/src" </> testpackageHaskellFilename)
+       validateETagHandlingUserContent ("/package/testpackage/src" </> testpackageHaskellFilename)
     do info "Getting testpackage maintainer info"
        xs <- getGroup "/package/testpackage/maintainers/.json"
        unless (map userName (groupMembers xs) == ["HackageTestUser1"]) $
