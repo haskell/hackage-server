@@ -608,10 +608,12 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       case mTarball of
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
-        Right (fp, etag, index) ->
-          tarServeResponse <$> serveTarball (display (packageId pkg) ++ " candidate source tarball")
-                       ["index.html"] (display (packageId pkg)) fp index
-                       [Public, maxAgeMinutes 5] etag Nothing
+        Right (fp, etag, index) -> do
+          tarServe <-
+            serveTarball (display (packageId pkg) ++ " candidate source tarball")
+                         ["index.html"] (display (packageId pkg)) fp index
+                         [Public, maxAgeMinutes 5] etag Nothing
+          requireUserContent userFeatureServerEnv (tarServeResponse tarServe)
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack
