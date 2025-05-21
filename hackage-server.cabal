@@ -162,11 +162,13 @@ common defaults
 
   ghc-options:
     -funbox-strict-fields
-    -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags
-    -Werror=incomplete-patterns -Werror=missing-methods
-
-  if impl(ghc >= 8.10)
-    ghc-options: -Wno-unused-record-wildcards
+    -Wall
+    -Wtabs
+    -Wno-deprecated-flags
+    -Wno-unused-do-bind
+    -Wno-unused-record-wildcards
+    -Werror=incomplete-patterns
+    -Werror=missing-methods
 
   default-extensions: LambdaCase, TupleSections
   other-extensions: CPP, TemplateHaskell
@@ -538,7 +540,10 @@ common test-defaults
 
   build-depends: hackage-server
   hs-source-dirs: tests
-  ghc-options: -threaded -rtsopts -fno-warn-orphans
+  ghc-options:
+    -threaded
+    -rtsopts
+    -Wno-orphans
 
   other-modules:   Paths_hackage_server
   autogen-modules: Paths_hackage_server
