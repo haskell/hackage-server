@@ -33,8 +33,11 @@ Alternatively, open the [`nix develop`](https://nixos.org/manual/nix/stable/comm
     # if state directory does not already exist
     $ cabal v2-run -- hackage-server init --static-dir=datafiles --state-dir=state
 
-    $ cabal v2-run -- hackage-server run --static-dir=datafiles --state-dir=state --base-uri=http://127.0.0.1:8080
-    hackage-server: Ready! Point your browser at http://127.0.0.1:8080
+    $ cabal v2-run -- hackage-server run --static-dir=datafiles --state-dir=state \
+        --base-uri=http://localhost:8080 \
+        --required-base-host-header=localhost:8080 \
+        --user-content-uri=http://127.0.0.1:8080
+    hackage-server: Ready! Point your browser at http://localhost:8080
 
 #### Populate the local package index
 
