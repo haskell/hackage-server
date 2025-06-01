@@ -9,7 +9,7 @@ on:
 jobs:
   nix:
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         os:
         - ubuntu-latest
