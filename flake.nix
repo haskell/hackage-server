@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/haskell-updates";
+    nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
     flake-root.url = "github:srid/flake-root";
@@ -61,6 +61,9 @@
             Diff = { super, ... }:
               { custom = _: super.Diff_1_0_2; };
 
+            threads.check = false;
+            tree-diff.check = false;
+
             ormolu = { super, ... }:
               { custom = _: super.ormolu_0_8_0_0;
                 check = false;
@@ -76,7 +79,8 @@
               { custom = _: super.ghc-lib-parser-ex_9_12_0_0; };
             ghc-lib-parser = { super, ... }:
               {
-                custom = _: super.ghc-lib-parser_9_12_2_20250421;
+                # custom = _: super.ghc-lib-parser_9_12_2_20250421;
+                custom = _: super.ghc-lib-parser_9_12_2_20250320;
               };
           };
           packages = {
