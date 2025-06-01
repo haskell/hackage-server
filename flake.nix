@@ -42,25 +42,53 @@
         };
         packages.default = config.packages.hackage-server;
         haskellProjects.default = {
+          basePackages = pkgs.haskell.packages.ghc910;
           settings = {
             hackage-server.check = false;
-            ap-normalize.check = false;
+
+            cabal-add.jailbreak = true;
+            cabal-install-parsers.jailbreak = true;
             # https://community.flake.parts/haskell-flake/dependency#nixpkgs
-            tar = { super, ... }:
-              { custom = _: super.tar_0_6_3_0; };
-            hackage-security = { super, ... }:
-              { custom = _: super.hackage-security_0_6_2_6; };
+            Cabal-syntax = { super, ... }:
+              { custom = _: super.Cabal-syntax_3_14_2_0; };
+            Cabal = { super, ... }:
+              { custom = _: super.Cabal_3_14_2_0; };
+            fourmolu.check = false;
+            hls-plugin-api.jailbreak = true;
+            ghcide.jailbreak = true;
+            haskell-language-server.jailbreak = true;
+
+            Diff = { super, ... }:
+              { custom = _: super.Diff_1_0_2; };
+
+            ormolu = { super, ... }:
+              { custom = _: super.ormolu_0_8_0_0;
+                check = false;
+              };
+            extensions = { super, ... }:
+              { custom = _: super.extensions_0_1_0_3;
+                jailbreak = true;
+              };
+
+            hlint = { super, ... }:
+              { custom = _: super.hlint_3_10; };
+            ghc-lib-parser-ex = { super, ... }:
+              { custom = _: super.ghc-lib-parser-ex_9_12_0_0; };
+            ghc-lib-parser = { super, ... }:
+              {
+                custom = _: super.ghc-lib-parser_9_12_2_20250421;
+              };
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
             # tls.source = "1.9.0";
+            fourmolu.source = "0.18.0.0";
           };
           devShell = {
             tools = hp: {
               inherit (pkgs)
                 cabal-install
                 ghc
-
                 # https://github.com/haskell/hackage-server/pull/1219#issuecomment-1597140858
                 # glibc
                 icu67
