@@ -698,7 +698,7 @@ test-suite DocTests
   main-is:        DocTestMain.hs
   build-depends:
     , hackage-server
-    , doctest-parallel ^>= 0.3.1.1
+    , doctest-parallel ^>= 0.4
         -- doctest-parallel-0.2.2 is the first to filter out autogen-modules
 
   if !flag(doctests)
