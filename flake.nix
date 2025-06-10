@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs";
+    nixpkgs.url = "github:nixos/nixpkgs/haskell-updates";
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
     flake-root.url = "github:srid/flake-root";
@@ -56,6 +56,7 @@
             fourmolu.check = false;
             hls-plugin-api.jailbreak = true;
             ghcide.jailbreak = true;
+            # stylish-haskell.jailbreak = true;
             haskell-language-server.jailbreak = true;
 
             Diff = { super, ... }:
@@ -79,14 +80,15 @@
               { custom = _: super.ghc-lib-parser-ex_9_12_0_0; };
             ghc-lib-parser = { super, ... }:
               {
-                # custom = _: super.ghc-lib-parser_9_12_2_20250421;
-                custom = _: super.ghc-lib-parser_9_12_2_20250320;
+                custom = _: super.ghc-lib-parser_9_12_2_20250421;
+                # custom = _: super.ghc-lib-parser_9_12_2_20250320;
               };
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
             # tls.source = "1.9.0";
             fourmolu.source = "0.18.0.0";
+            stylish-haskell.source = "0.15.1.0";
           };
           devShell = {
             tools = hp: {
