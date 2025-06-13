@@ -42,7 +42,7 @@
         };
         packages.default = config.packages.hackage-server;
         haskellProjects.default = {
-          basePackages = pkgs.haskell.packages.ghc910;
+          basePackages = pkgs.haskell.packages.ghc912;
           settings = {
             hackage-server.check = false;
 
@@ -63,6 +63,7 @@
               { custom = _: super.Diff_1_0_2; };
 
             threads.check = false;
+            unicode-data.check = false;
             tree-diff.check = false;
 
             ormolu = { super, ... }:
@@ -73,6 +74,9 @@
               { custom = _: super.extensions_0_1_0_3;
                 jailbreak = true;
               };
+
+            brick = { super, ... }:
+              { custom = _: super.brick_2_9; };
 
             hlint = { super, ... }:
               { custom = _: super.hlint_3_10; };
