@@ -19,6 +19,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
+    - uses: wimpysworld/nothing-but-nix@main
+      with:
+        ️hatchet-protocol: 'holster'
     - uses: cachix/install-nix-action@v31
       with:
         extra_nix_config: |
@@ -48,6 +51,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
+    - uses: wimpysworld/nothing-but-nix@main
+      with:
+        ️hatchet-protocol: 'holster'
     - uses: cachix/install-nix-action@v31
       with:
         extra_nix_config: |
