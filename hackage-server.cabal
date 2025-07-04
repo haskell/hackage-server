@@ -457,7 +457,7 @@ library
     , stringsearch          ^>= 0.3.6.6
     , tagged                ^>= 0.8.5
     , transformers          ^>= 0.6
-    , xhtml                  >= 3000.2.0.0 && < 3000.4
+    , xhtml                  >= 3000.2.0.0 && < 3000.5
     , xmlgen                ^>= 0.6
     , xss-sanitize          ^>= 0.3.6
 
