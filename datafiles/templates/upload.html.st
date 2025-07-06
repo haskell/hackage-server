@@ -63,6 +63,15 @@ of that name and version, including <em>package</em><code>.cabal</code>.
 See the notes at the bottom of the page.
 </p>
 
+<p>A Cabal package name can use any alphabetic Unicode code-point, however
+Hackage rejects package names that use alphabetic code-points other than those
+from the Latin alphabet (that is, <code>A</code> to <code>Z</code> and
+<code>a</code> to <code>z</code>). With one exception, the name of a new package
+cannot be the same as the name of an existing package, based on a
+case-insensitive comparison. The exception is if the maintainer uploading the
+new package is a maintainer of the existing package.
+</p>
+
 <div style="font-size: large; text-align: center;"><a href="/packages/upload">Upload a package</a></div>
 <div style="font-size: large; text-align: center;"><a href="/packages/candidates/upload">Upload a package candidate</a></div>
 
