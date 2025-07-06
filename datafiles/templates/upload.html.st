@@ -36,6 +36,15 @@ of that name and version, including <em>package</em><tt>.cabal</tt>.
 See the notes at the bottom of the page.
 </p>
 
+<p>A Cabal package name can use any alphabetic Unicode code-point, however
+Hackage rejects package names that use alphabetic code-points other than those
+from the Latin alphabet (that is, <code>A</code> to <code>Z</code> and
+<code>a</code> to <code>z</code>). With one exception, the name of a new package
+cannot be the same as the name of an existing package, based on a
+case-insensitive comparison. The exception is if the maintainer uploading the
+new package is a maintainer of the existing package.
+</p>
+
 <h3 id="changelogs">Version history and change logs</h3>
 
 <p>If a package includes a ChangeLog file (in either plain text or Markdown format), Hackage will link to it on the corresponding package page. The following filenames are recognized:</p>
@@ -66,11 +75,11 @@ See the notes at the bottom of the page.
 <h3 id="versioning_and_curation">Package versioning and curation</h3>
 
 <p>By default, uploaded packages are <i>curated</i> which means that both maintainers and hackage trustees may revise their metadata (particularly involving version bounds) to guide build tools in producing install-plans. (For more information on revisions, see the <a href="https://github.com/haskell-infra/hackage-trustees/blob/master/revisions-information.md">FAQ</A>).
-  
+
 <p>In order to ensure the integrity and well-functioning of the Hackage/Cabal ecosystem, all curated packages <abbr title="[RFC2119] The word 'should' is intended to denote that there may exist valid reasons in particular circumstances to ignore a particular item, but the full implications MUST be understood and carefully weighed before choosing a different course">should</abbr> follow Haskell's <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</p>
 
 <p>In particular, be aware that although the <a href="https://pvp.haskell.org/">PVP</a> and <a href="http://semver.org/">SemVer</a> are based on the same concepts they differ significantly in structure and consequently are <em>not compatible</em> with each other. Please consult the <a href="https://pvp.haskell.org/faq/#semver">PVP/SemVer FAQ section</a> for more details about the differences and related issues.</p>
-  
+
 <p>Further, an important property of the PVP contract is that it can only be effective and provide strong enough guarantees if it is followed not only by an individual package, but also by that package's transitive dependencies. Consequently, packages which are curated should aim to depend only on other curated packages.</p>
 
 <p>In the course of the curation process, the
@@ -78,13 +87,13 @@ See the notes at the bottom of the page.
 able to contact package maintainers, to inform them about and help to resolve issues with
 their packages (including its meta-data) which affect the Hackage
 ecosystem.</p>
-   
+
 <p>Package uploaders may choose to exclude individual package  uploads from curation, by setting the <tt>x-curation:</tt> field of the package's cabal file to <tt>uncurated</tt>. Packages which are uncurated have no expectations on them regarding versioning policy.  Trustees or maintainers may <i>adopt</i> uncurated packages into the curated layer through metadata revisions. Metadata revisions must not set the value of the <tt>x-curation</tt> field to any variant of <tt>uncurated</tt>.</p>
-    
+
 <p>Two variants of the <tt>uncurated</tt> property are supported. First, <tt>uncurated-no-trustee-contact</tt>, which indicates that maintainers do not wish to be contacted by trustees regarding any metadata issues with the package. (Contact may still occur over issues that are not related to curation, such as licensing, etc.). Second, <tt>uncurated-seeking-adoption</tt>, which indicates that maintainers  would like their package to be adopted in the curated layer, but currently some issue prevents this, which they would like assistance with.</p>
 
-<p>In the future, metadata regarding curation will be made available in the UI of Hackage, and different derived indexes will be provided for the uncurated and curated layers of packages.</p>  
- 
+<p>In the future, metadata regarding curation will be made available in the UI of Hackage, and different derived indexes will be provided for the uncurated and curated layers of packages.</p>
+
 <h3>Open source licenses</h3>
 
 <p>The code and other material you upload and distribute via this site must be
