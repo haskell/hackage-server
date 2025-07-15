@@ -159,6 +159,9 @@ instance (MemSize a, MemSize b, MemSize c) => MemSize (a,b,c) where
 instance (MemSize a, MemSize b, MemSize c, MemSize d) => MemSize (a,b,c,d) where
   memSize (a,b,c,d) = memSize4 a b c d
 
+instance (MemSize a, MemSize b, MemSize c, MemSize d, MemSize e) => MemSize (a,b,c,d,e) where
+  memSize (a,b,c,d,e) = memSize5 a b c d e
+
 instance MemSize a => MemSize (Maybe a) where
   memSize Nothing  = memSize0
   memSize (Just a) = memSize1 a

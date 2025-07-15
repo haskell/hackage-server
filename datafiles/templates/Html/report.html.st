@@ -110,6 +110,14 @@ $else$
 <p>No test log was submitted for this report.</p>
 $endif$
 
+<h3>Test report log</h3>
+
+$if(test)$
+<pre>
+$testReport$</pre>
+$else$
+<p>No test report log was submitted for this report.</p>
+$endif$
 
 </div>
 </body></html>
