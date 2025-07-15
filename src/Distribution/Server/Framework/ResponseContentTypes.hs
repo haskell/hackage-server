@@ -186,6 +186,12 @@ instance ToMessage TestLog where
     toContentType _ = "text/plain"
     toMessage (TestLog bs) = bs
 
+newtype TestReportLog = TestReportLog BS.Lazy.ByteString
+
+instance ToMessage TestReportLog where
+    toContentType _ = "text/plain"
+    toMessage (TestReportLog bs) = bs
+
 newtype BuildCovg = BuildCovg BS.Lazy.ByteString
 
 instance ToMessage BuildCovg where
