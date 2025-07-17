@@ -620,6 +620,7 @@ data BuildFiles = BuildFiles {
   logContent :: Maybe String,
   testContent :: Maybe String,
   coverageContent :: Maybe String,
+  testReportContent :: Maybe String,
   buildFail :: Bool
 } deriving Show
 
@@ -630,6 +631,7 @@ instance Data.Aeson.FromJSON BuildFiles where
       <*> o .:? "log"
       <*> o .:? "test"
       <*> o .:? "coverage"
+      <*> o .:? "testReport"
       <*> o .: "buildFail"
 
 instance Data.Aeson.ToJSON BuildFiles where
@@ -638,6 +640,7 @@ instance Data.Aeson.ToJSON BuildFiles where
     "log"       .= logContent  p,
     "test"      .= testContent p,
     "coverage"  .= coverageContent  p,
+    "testReport".= testReportContent p,
     "buildFail" .= buildFail  p ]
 
 data PkgDetails = PkgDetails {
