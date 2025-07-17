@@ -112,7 +112,7 @@ $endif$
 
 <h3>Test report log</h3>
 
-$if(test)$
+$if(testReport)$
 <pre>
 $testReport$</pre>
 $else$
