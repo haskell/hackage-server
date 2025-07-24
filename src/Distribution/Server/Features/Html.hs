@@ -669,10 +669,10 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         userDb          <- queryGetUserDb
         maintainerlist  <- liftIO $ queryUserGroup maintainers
         let
-          idAndReport = fmap (\(rptId, rpt, _) -> (rptId, rpt)) rptStats
+          idAndReport = fmap (\(rptId, rpt, _, _) -> (rptId, rpt)) rptStats
           install = getInstall $ fmap (fst &&& BR.installOutcome . snd) idAndReport
           test    = getTest    $ fmap (        BR.testsOutcome   . snd) idAndReport
-          covg = getAvgCovg $ (\(_, _, cvg) -> cvg) =<< rptStats
+          covg = getAvgCovg $ (\(_, _, cvg, _) -> cvg) =<< rptStats
           loadDocMeta
             | Just doctarblob <- mdoctarblob
             , Just docIndex   <- mdocIndex
@@ -1113,9 +1113,10 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} UploadFeature{..} UserFeature{..
 
     servePackageReport :: DynamicPath -> ServerPartE Response
     servePackageReport dpath = do
-        (repid, report, mlog, mtest, covg) <- packageReport dpath
+        (repid, report, mlog, mtest, covg, testReportLog) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
         mtest' <- traverse queryTestLog mtest
+        testReportLog' <- traverse queryTestReportLog testReportLog
         let covg' = fmap getCvgDet covg
         pkgid <- packageInPath dpath
         cacheControlWithoutETag [Public, maxAgeDays 30]
@@ -1125,6 +1126,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} UploadFeature{..} UserFeature{..
           , "report" $= (repid, report)
           , "log" $= toMessage <$> mlog'
           , "test" $= toMessage <$> mtest'
+          , "testReport" $= toMessage <$> testReportLog'
           , "covg" $= covg'
           ]
       where

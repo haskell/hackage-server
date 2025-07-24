@@ -8,7 +8,7 @@ module Distribution.Server.Features.BuildReports.Backup (
 
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
 import qualified Distribution.Server.Features.BuildReports.BuildReport as Report
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReports(..), BuildCovg(..), PkgBuildReports(..), BuildReportId(..), BuildLog(..), TestLog(..))
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReports(..), BuildCovg(..), PkgBuildReports(..), BuildReportId(..), BuildLog(..), TestLog(..), TestReportLog)
 import qualified Distribution.Server.Features.BuildReports.BuildReports as Reports
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -94,8 +94,8 @@ packageReportsToExport :: PackageId -> PkgBuildReports -> [BackupEntry]
 packageReportsToExport pkgId pkgReports = concatMap (uncurry $ reportToExport prefix) (Map.toList $ Reports.reports pkgReports)
     where prefix = ["package", display pkgId]
 
-reportToExport :: [FilePath] -> BuildReportId -> (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg ) -> [BackupEntry]
-reportToExport prefix reportId (report, mlog, _, _) = BackupByteString (getPath ".txt") (packUTF8 $ Report.show report) :
+reportToExport :: [FilePath] -> BuildReportId -> (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog) -> [BackupEntry]
+reportToExport prefix reportId (report, mlog, _, _, _) = BackupByteString (getPath ".txt") (packUTF8 $ Report.show report) :
     case mlog of Nothing -> []; Just (BuildLog blobId) -> [blobToBackup (getPath ".log") blobId]
   where
     getPath ext = prefix ++ [display reportId ++ ext]
