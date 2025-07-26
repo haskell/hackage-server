@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 
@@ -41,7 +42,7 @@ import Network.URI
          ( URI(..), URIAuth(..), parseAbsoluteURI )
 import Distribution.Simple.Command
 import Distribution.Simple.Setup
-         ( Flag(..), fromFlag, fromFlagOrDefault, flagToList, flagToMaybe )
+         ( Flag, pattern Flag, pattern NoFlag, fromFlag, fromFlagOrDefault, flagToList, flagToMaybe )
 import Data.Maybe
          ( isNothing )
 import Data.List
