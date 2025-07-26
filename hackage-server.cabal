@@ -165,8 +165,8 @@ common defaults
   -- other dependencies shared by most components
   build-depends:
     , aeson                  >= 2.1.0.0 && < 2.3
-    , Cabal                  >= 3.14.2.0 && < 3.16
-    , Cabal-syntax           >= 3.14.2.0 && < 3.16
+    , Cabal                  >= 3.14.2.0 && < 3.18
+    , Cabal-syntax           >= 3.14.2.0 && < 3.18
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
     , network-bsd           ^>= 2.8
