@@ -274,6 +274,16 @@ data BuildCovg = BuildCovg {
   topLevel          :: (Int,Int)
 } deriving (Eq, Show)
 
+instance Arbitrary BuildCovg where
+  arbitrary =
+    BuildCovg
+      <$> intPair
+      <*> liftA3 BooleanCovg intPair intPair intPair
+      <*> intPair
+      <*> intPair
+      <*> intPair
+    where intPair = liftA2 (,) arbitrary arbitrary
+
 instance MemSize BuildCovg where
     memSize (BuildCovg a (BooleanCovg b c d) e f g) = memSize7 a b c d e f g
 
@@ -498,6 +508,10 @@ instance Arbitrary Outcome where
 
 data BuildStatus = BuildOK | BuildFailCnt Int
   deriving (Eq, Ord, Show)
+
+instance Arbitrary BuildStatus where
+  arbitrary = oneof [ pure BuildOK, BuildFailCnt <$> arbitrary ]
+
 instance ToJSON BuildStatus where
   toJSON (BuildFailCnt a) = toJSON a
   toJSON BuildOK          = toJSON ((-1)::Int)

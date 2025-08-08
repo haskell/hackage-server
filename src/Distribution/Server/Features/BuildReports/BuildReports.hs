@@ -1,11 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell,
              TypeFamilies #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.BuildReports.BuildReports (
     BuildReport(..),
     BuildReports(..),
-    BuildReports_v3,
     BuildReportId(..),
+    PkgBuildReports_v4(..),
     PkgBuildReports(..),
     BuildLog(..),
     TestLog(..),
@@ -54,12 +53,13 @@ import Data.SafeCopy
 import qualified Data.List as L
 import qualified Data.Char as Char
 import Data.Maybe (fromMaybe)
+import Test.QuickCheck (Arbitrary(..))
 
 import Text.StringTemplate (ToSElem(..))
 
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord, Show, MemSize, Pretty)
+  deriving (Eq, Ord, Show, MemSize, Pretty, Arbitrary)
 
 incrementReportId :: BuildReportId -> BuildReportId
 incrementReportId (BuildReportId n) = BuildReportId (n+1)
@@ -81,10 +81,10 @@ instance Parsec BuildReportId where
       f c = Char.ord c - Char.ord '0'
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
-  deriving (Eq, Show, MemSize)
+  deriving (Eq, Show, MemSize, Arbitrary)
 
 newtype TestLog = TestLog BlobStorage.BlobId
-  deriving (Eq, Show, MemSize)
+  deriving (Eq, Show, MemSize, Arbitrary)
 
 newtype TestReportLog = TestReportLog BlobStorage.BlobId
   deriving (Eq, Show, MemSize)
@@ -305,6 +305,10 @@ data PkgBuildReports_v4 = PkgBuildReports_v4 {
     buildStatus_v4  :: !BuildStatus,
     runTests_v4     :: !Bool
 } deriving (Eq, Show)
+
+instance Arbitrary PkgBuildReports_v4 where
+  arbitrary = PkgBuildReports_v4 <$> arbitrary <*> arbitrary
+                                 <*> arbitrary <*> arbitrary
 
 instance SafeCopy PkgBuildReports_v4 where
     version = 4
