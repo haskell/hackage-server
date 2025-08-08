@@ -27,6 +27,7 @@ import qualified Data.ByteString.Char8                 as BS.Char8
 import qualified Data.ByteString.Lazy                  as BS.Lazy
 import           Data.SafeCopy
 import qualified Data.Serialize                        as Ser
+import           Test.QuickCheck (Arbitrary(..))
 
 -- cryptohash
 import qualified Crypto.Hash.MD5                       as MD5
@@ -38,6 +39,9 @@ import           Distribution.Server.Util.ReadDigest
 -- | MD5 digest
 data MD5Digest = MD5Digest {-# UNPACK #-} !Word64 {-# UNPACK #-} !Word64
                deriving (Eq,Ord)
+
+instance Arbitrary MD5Digest where
+  arbitrary = MD5Digest <$> arbitrary <*> arbitrary
 
 instance NFData MD5Digest where
     rnf !_ = () -- 'MD5Digest' has only strict primitive fields, hence WHNF==NF

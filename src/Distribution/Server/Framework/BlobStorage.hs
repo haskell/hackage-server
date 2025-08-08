@@ -53,6 +53,7 @@ import System.Directory
 import System.IO
 import Data.Aeson
 import System.Posix.Files as Posix (createLink)
+import Test.QuickCheck (Arbitrary)
 
 -- For fsync
 import System.Posix.Types (Fd(..))
@@ -71,7 +72,7 @@ import System.Posix.IO (
 -- | An id for a blob. The content of the blob is stable.
 --
 newtype BlobId = BlobId MD5Digest
-  deriving (Eq, Ord, Show, Typeable, MemSize)
+  deriving (Eq, Ord, Show, Typeable, MemSize, Arbitrary)
 
 instance ToJSON BlobId where
   toJSON = toJSON . blobMd5
