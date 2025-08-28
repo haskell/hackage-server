@@ -118,8 +118,28 @@ flag doctests
 
 ----------------------------------------------------------------------------
 
+common language-defaults
+  default-language:
+    Haskell2010
+  default-extensions:
+    LambdaCase
+    TupleSections
+  other-extensions:
+    CPP
+    TemplateHaskell
+
+  ghc-options:
+    -funbox-strict-fields
+    -Wall
+    -Wtabs
+    -Wno-deprecated-flags
+    -Wno-unused-do-bind
+    -Wno-unused-record-wildcards
+    -Werror=incomplete-patterns
+    -Werror=missing-methods
+
 common defaults
-  default-language: Haskell2010
+  import: language-defaults
 
   -- version ranges of pre-installed packages for GHC
   --
@@ -156,19 +176,6 @@ common defaults
     , unordered-containers  ^>= 0.2.10
     , vector                ^>= 0.12 || ^>= 0.13.0.0
     , zlib                  ^>= 0.6.2  || ^>= 0.7.0.0
-
-  ghc-options:
-    -funbox-strict-fields
-    -Wall
-    -Wtabs
-    -Wno-deprecated-flags
-    -Wno-unused-do-bind
-    -Wno-unused-record-wildcards
-    -Werror=incomplete-patterns
-    -Werror=missing-methods
-
-  default-extensions: LambdaCase, TupleSections
-  other-extensions: CPP, TemplateHaskell
 
 
 library
@@ -467,21 +474,35 @@ library
 
 ----------------------------------------------------------------------------
 
-common exe-defaults
-  import: defaults
+common exe-base
+  import: language-defaults
 
-  build-depends: hackage-server
   hs-source-dirs: exes
   ghc-options: -threaded -rtsopts
 
   other-modules:   Paths_hackage_server
   autogen-modules: Paths_hackage_server
 
+  build-depends:
+    , base
+    , hackage-server
+
+common exe-defaults
+  import: defaults
+  import: exe-base
 
 executable hackage-server
-  import: exe-defaults
+  import: exe-base
 
   main-is: Main.hs
+  build-depends:
+    , bytestring
+    , Cabal
+    , directory
+    , filepath
+    , network-uri
+    , parsec
+    , unix
 
   ghc-options: -with-rtsopts=-I00
 
