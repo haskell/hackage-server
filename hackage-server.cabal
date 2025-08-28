@@ -137,7 +137,6 @@ common defaults
     , mtl                    >= 2.2.1 && < 2.4
         -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , pretty                 >= 1.1   && < 1.2
-    , process                >= 1.6   && < 1.7
     , text                  ^>= 1.2.5.0 || >= 2.0 && < 2.2
     , time                   >= 1.9   && < 1.15
     , transformers           >= 0.5   && < 0.7
@@ -150,8 +149,6 @@ common defaults
     , Cabal-syntax           >= 3.14.2.0 && < 3.16
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
-    , fail                  ^>= 4.9.0
-    , network                >= 3 && < 3.3
     , network-bsd           ^>= 2.8
     , network-uri           ^>= 2.6
     , parsec                ^>= 3.1.13
@@ -423,7 +420,6 @@ library
     , bimap                 ^>= 0.5
       --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder
     , blaze-builder         ^>= 0.4
-    , blaze-html            ^>= 0.9
     , cereal                ^>= 0.5
     , commonmark            ^>= 0.2
         -- commonmark-0.2 needed by commonmark-extensions-0.2.2
@@ -433,7 +429,6 @@ library
     , cryptohash-sha256     ^>= 0.11.100
     , csv                   ^>= 0.1
     , ed25519               ^>= 0.0.5
-    , exceptions            ^>= 0.10
     , hackage-security       >= 0.6 && < 0.7
         -- N.B: hackage-security-0.6.2 uses Cabal-syntax-3.8.1.0
         -- see https://github.com/haskell/hackage-server/issues/1130
@@ -451,11 +446,9 @@ library
     , random                 >= 1.2       && < 1.4
     , rss                   ^>= 3000.2.0.7
     , safecopy              ^>= 0.10
-    , semigroups            ^>= 0.20
     , split                 ^>= 0.2
     , stm                   ^>= 2.5.0
     , stringsearch          ^>= 0.3.6.6
-    , tagged                ^>= 0.8.5
     , transformers          ^>= 0.6
     , xhtml                  >= 3000.2.0.0 && < 3000.5
     , xmlgen                ^>= 0.6
@@ -501,6 +494,7 @@ executable hackage-mirror
     -- version constraints inherited from hackage-server
     , HTTP
     , hackage-security
+    , process                >= 1.6   && < 1.7
 
 executable hackage-build
   import: exe-defaults
@@ -510,6 +504,7 @@ executable hackage-build
   build-depends:
     -- version constraints inherited from hackage-server
     , http-types
+    , process                >= 1.6   && < 1.7
 
   -- Runtime dependency only;
   -- TODO: we have no proper support for this kind of dependencies in cabal
