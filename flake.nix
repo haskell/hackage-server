@@ -55,6 +55,7 @@
               { custom = _: super.Cabal_3_14_2_0; };
             fourmolu.check = false;
             doctest.check = false;
+            network.check = false;
             system-filepath.check = false;
             hls-plugin-api.jailbreak = true;
             ghcide.jailbreak = true;
