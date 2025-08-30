@@ -20,6 +20,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: wimpysworld/nothing-but-nix@main
+      if: runner.os == 'Linux'
       with:
         hatchet-protocol: 'rampage'
         nix-permission-edict: true
@@ -54,6 +55,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: wimpysworld/nothing-but-nix@main
+      if: runner.os == 'Linux'
       with:
         hatchet-protocol: 'rampage'
         nix-permission-edict: true
