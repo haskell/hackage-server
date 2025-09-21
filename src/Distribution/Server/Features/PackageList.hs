@@ -95,13 +95,13 @@ data PackageItem = PackageItem {
     -- Hotness = recent downloads + stars + 2 * no rev deps
     itemHotness :: !Float,
     -- Reference version (non-deprecated highest numbered version)
-    itemReferenceVersion :: !String
+    itemReferenceVersion :: !String,
     -- heuristic way to sort packages
     itemPackageRank :: !Float
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k l _m n o) = memSize11 a b c d e f g h i j (k, l, n, o)
+    memSize (PackageItem a b c d e f g h i j k l _m n o r) = memSize12 a b c d e f g h i j (k, l, n, o) r
 
 
 emptyPackageItem :: PackageName -> PackageItem
@@ -121,7 +121,8 @@ emptyPackageItem pkg =
       itemNumBenchmarks = 0,
       itemLastUpload = UTCTime (toEnum 0) 0,
       itemHotness = 0,
-      itemReferenceVersion = ""
+      itemReferenceVersion = "",
+      itemPackageRank = 0
   }
 
 initListFeature :: ServerEnv
