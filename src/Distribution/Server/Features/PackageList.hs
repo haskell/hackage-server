@@ -230,7 +230,7 @@ listFeature :: CoreFeature
                 PackageName -> IO ())
 
 listFeature CoreFeature{..}
-            ReverseFeature{revDirectCount}
+            ReverseFeature{revDirectCount, revPackageStats}
             DownloadFeature{..}
             VotesFeature{..}
             TagsFeature{..}
@@ -299,7 +299,7 @@ listFeature CoreFeature{..}
             desc = pkgDesc pkg
             pkg = last pkgs
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
-        intRevDirectCount <- revDirectCount pkgname
+        revCount@(ReverseCount intRevDirectCount _) <- revPackageStats pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
         downs <- recentPackageDownloads
@@ -307,8 +307,8 @@ listFeature CoreFeature{..}
         deprs <- queryGetDeprecatedFor pkgname
         maintainers <- queryUserGroup (maintainersGroup pkgname)
         prefsinfo <- queryGetPreferredInfo pkgname
-        packageR <- rankPackage versions (cmFind pkgname downs)
-            (UserIdSet.size maintainers) documentation tar env pkgs (safeLast pkgs)
+        packageR <- rankPackage versions (cmFind pkgname downs) (UserIdSet.size maintainers)
+                                documentation tar env pkgs (safeLast pkgs) revCount
 
         return $ (,) pkgname . updateReferenceVersion prefsinfo [pkgVersion (pkgInfoId pkg)] $ (updateDescriptionItem desc $ emptyPackageItem pkgname) {
             itemTags       = tags

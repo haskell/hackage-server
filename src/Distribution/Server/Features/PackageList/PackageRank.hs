@@ -8,6 +8,7 @@ import           Distribution.PackageDescription
 import           Distribution.Server.Features.Documentation
                                                 ( DocumentationFeature(..) )
 import           Distribution.Server.Features.PackageList.MStats
+import           Distribution.Server.Features.ReverseDependencies (ReverseCount(..))
 import           Distribution.Server.Features.PreferredVersions
 import           Distribution.Server.Features.PreferredVersions.State
 import           Distribution.Server.Features.TarIndexCache
@@ -270,19 +271,21 @@ baseScore vers maintainers docs env tarCache versionList lastUploads pkgI = do
   documHas = queryHasDocumentation docs pkgId
 
 temporalScore
-  :: PackageDescription -> [CL.UTCTime] -> [Version] -> Int -> IO Scorer
-temporalScore p lastUploads versionList recentDownloads = do
+  :: PackageDescription -> [CL.UTCTime] -> [Version] -> Int -> ReverseCount -> IO Scorer
+temporalScore p lastUploads versionList recentDownloads (ReverseCount dir tot) = do
   fresh <- freshnessScore
   tract <- tractionScore
-  -- Reverse dependencies are added
-  return $ tract <> fresh <> downloadScore
+  return $ tract <> fresh <> downloadScore <> (if isApp then scorer 0 2 else dirScore <> indirScore)
  where
   isApp         = (isNothing . library) p && (not . null . executables) p
   downloadScore = calcDownScore recentDownloads
+  dirScore = fracScor 5 (logBase 2 (int2Float $ max 0 (dir - 32) + 32) - 5)
+  indirScore = fracScor 2 (logBase 2 (int2Float $ max 0 (tot - dir - 32) + 32)
+                              - 5 / 3)
   calcDownScore i = fracScor
     5
-    ( (logBase 2 (int2Float $ max 0 (i - 32) + 32) - 5)
-    / (if isApp then 6 else 8)
+    ( logBase 2 (int2Float $ max 0 (i - 16) + 16)
+      - (if isApp then 3 else 4)
     )
   packageFreshness = case safeHead lastUploads of
     Nothing  -> return 0
@@ -302,11 +305,12 @@ rankPackage
   -> ServerEnv
   -> [PkgInfo]
   -> Maybe PkgInfo
+  -> ReverseCount
   -> IO Float
-rankPackage _ _ _ _ _ _ _ Nothing = return 0
-rankPackage versions recentDownloads maintainers docs tarCache env pkgs (Just pkgUsed)
+rankPackage _ _ _ _ _ _ _ Nothing _ = return 0
+rankPackage versions recentDownloads maintainers docs tarCache env pkgs (Just pkgUsed) revCount
   = do
-    t <- temporalScore pkgD uploads versionList recentDownloads
+    t <- temporalScore pkgD uploads versionList recentDownloads revCount
 
     b <- baseScore versions
                    maintainers
