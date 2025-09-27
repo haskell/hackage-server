@@ -173,6 +173,11 @@
               <td class="word-wrap">$package.maintainer$</td>
             </tr>
 
+            <tr>
+              <th>Uploaded</th>
+              <td>$hackage.uploadTime$</td>
+            </tr>
+
             $if(hackage.hasUpdateTime)$
             <tr>
               <th>Revised</th>
@@ -219,12 +224,6 @@
               <td class="word-wrap">$package.optional.sourceRepository$</td>
             </tr>
             $endif$
-
-            <tr>
-              <th>Uploaded</th>
-              <td>$hackage.uploadTime$</td>
-            </tr>
-
 
             $if(hackage.hasDistributions)$
             <tr>
