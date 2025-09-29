@@ -667,7 +667,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     serveLegacyPackagesIndexTarGz _ = do
       tarball <- indexTarballLegacyGz <$> readAsyncCache cacheIndexTarball
       let tarballmd5 = show $ tarGzHashMD5 tarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      cacheControl [Public, NoTransform, maxAgeMinutes 1] (ETag tarballmd5)
       enableRange
       return $ toResponse tarball
 
@@ -675,7 +675,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     serveIncremPackagesIndexTarGz _ = do
       tarball <- indexTarballIncremGz <$> readAsyncCache cacheIndexTarball
       let tarballmd5 = show $ tarGzHashMD5 tarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      cacheControl [Public, NoTransform, maxAgeMinutes 1] (ETag tarballmd5)
       enableRange
       return $ toResponse tarball
 
@@ -683,7 +683,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     serveIncremPackagesIndexTar _ = do
       tarball <- indexTarballIncremUn <$> readAsyncCache cacheIndexTarball
       let tarballmd5 = show $ tarHashMD5 tarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      cacheControl [Public, NoTransform, maxAgeMinutes 1] (ETag tarballmd5)
       enableRange
       return $ toResponse tarball
 
