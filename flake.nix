@@ -27,7 +27,9 @@
             hackage-server run \
               --static-dir=datafiles \
               --state-dir=state \
-              --base-uri=http://127.0.0.1:8080
+              --base-uri=http://127.0.0.1:8080 \
+              --required-base-host-header=localhost:8080 \
+              --user-content-uri=http://127.0.0.1:8080
           '';
         };
         apps.mirror-hackage-server.program = pkgs.writeShellApplication {
