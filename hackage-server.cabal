@@ -348,6 +348,8 @@ library
       Distribution.Server.Features.PackageCandidates.Backup
       Distribution.Server.Features.PackageFeed
       Distribution.Server.Features.PackageList
+      Distribution.Server.Features.PackageList.PackageRank
+      Distribution.Server.Features.PackageList.MStats
       Distribution.Server.Features.Distro
       Distribution.Server.Features.Distro.Distributions
       Distribution.Server.Features.Distro.Backup
