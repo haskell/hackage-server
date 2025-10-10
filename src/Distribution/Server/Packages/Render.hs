@@ -42,6 +42,7 @@ import Distribution.Types.VersionInterval.Legacy
   -- I criticized this unfortunate development at length at:
   -- https://github.com/haskell/cabal/issues/7916
 import Distribution.ModuleName as ModuleName
+import Distribution.Types.LibraryVisibility (LibraryVisibility(LibraryVisibilityPublic))
 
 -- hackage-server
 import Distribution.Server.Framework.CacheControl (ETag)
@@ -148,7 +149,7 @@ doPackageRender users info = PackageRender
                                else NotBuildable
 
     renderModules :: Maybe TarIndex -> [(LibraryName, ModSigIndex)]
-    renderModules docindex = flip fmap (allLibraries flatDesc) $ \lib ->
+    renderModules docindex = flip fmap (filter isPublicLibrary $ allLibraries flatDesc) $ \lib ->
       let mod_ix = mkForest $ exposedModules lib
                            -- Assumes that there is an HTML per reexport
                            ++ map moduleReexportName (reexportedModules lib)
@@ -156,6 +157,10 @@ doPackageRender users info = PackageRender
           sig_ix = mkForest $ signatures lib
           mkForest = moduleForest . map (\m -> (m, moduleHasDocs docindex m))
       in (libName lib, ModSigIndex { modIndex = mod_ix, sigIndex = sig_ix })
+      where
+        -- Only show main library or internal libraries with public visibility
+        isPublicLibrary lib = libName lib == LMainLibName 
+                           || libVisibility lib == LibraryVisibilityPublic
 
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
