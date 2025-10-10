@@ -194,8 +194,15 @@ doPackageRender users info = PackageRender
     renderComponentName name@(CNotLibName _) = componentNameRaw name
 
 allCondLibs :: GenericPackageDescription -> [(LibraryName, CondTree ConfVar [Dependency] Library)]
-allCondLibs desc = maybeToList ((LMainLibName,) <$> condLibrary desc)
+allCondLibs desc = filter (isPublicCondLib . snd) $
+  maybeToList ((LMainLibName,) <$> condLibrary desc)
   ++ (first LSubLibName <$> condSubLibraries desc)
+  where
+    -- Check if a conditional library tree contains a public library
+    -- We check the root node since visibility is a property of the library itself
+    isPublicCondLib condTree = 
+      let lib = condTreeData condTree
+      in libName lib == LMainLibName || libVisibility lib == LibraryVisibilityPublic
 
 type DependencyTree = CondTree ConfVar [Dependency] IsBuildable
 
