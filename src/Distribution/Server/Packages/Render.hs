@@ -159,8 +159,7 @@ doPackageRender users info = PackageRender
       in (libName lib, ModSigIndex { modIndex = mod_ix, sigIndex = sig_ix })
       where
         -- Only show main library or internal libraries with public visibility
-        isPublicLibrary lib = libName lib == LMainLibName 
-                           || libVisibility lib == LibraryVisibilityPublic
+        isPublicLibrary lib = libVisibility lib == LibraryVisibilityPublic
 
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
@@ -194,18 +193,8 @@ doPackageRender users info = PackageRender
     renderComponentName name@(CNotLibName _) = componentNameRaw name
 
 allCondLibs :: GenericPackageDescription -> [(LibraryName, CondTree ConfVar [Dependency] Library)]
-allCondLibs desc = filter (isPublicCondLib . snd) $
-  maybeToList ((LMainLibName,) <$> condLibrary desc)
+allCondLibs desc = maybeToList ((LMainLibName,) <$> condLibrary desc)
   ++ (first LSubLibName <$> condSubLibraries desc)
-  where
-    -- Check if a conditional library tree contains a public library
-    -- We need to check all branches since visibility can be conditional
-    isPublicCondLib :: CondTree ConfVar [Dependency] Library -> Bool
-    isPublicCondLib (CondNode lib _ branches) = 
-      let rootIsPublic = libName lib == LMainLibName || libVisibility lib == LibraryVisibilityPublic
-          branchIsPublic (CondBranch _ thenTree elseTree) =
-            isPublicCondLib thenTree || maybe False isPublicCondLib elseTree
-      in rootIsPublic || any branchIsPublic branches
 
 type DependencyTree = CondTree ConfVar [Dependency] IsBuildable
 
