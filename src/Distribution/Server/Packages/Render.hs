@@ -199,10 +199,13 @@ allCondLibs desc = filter (isPublicCondLib . snd) $
   ++ (first LSubLibName <$> condSubLibraries desc)
   where
     -- Check if a conditional library tree contains a public library
-    -- We check the root node since visibility is a property of the library itself
-    isPublicCondLib condTree = 
-      let lib = condTreeData condTree
-      in libName lib == LMainLibName || libVisibility lib == LibraryVisibilityPublic
+    -- We need to check all branches since visibility can be conditional
+    isPublicCondLib :: CondTree ConfVar [Dependency] Library -> Bool
+    isPublicCondLib (CondNode lib _ branches) = 
+      let rootIsPublic = libName lib == LMainLibName || libVisibility lib == LibraryVisibilityPublic
+          branchIsPublic (CondBranch _ thenTree elseTree) =
+            isPublicCondLib thenTree || maybe False isPublicCondLib elseTree
+      in rootIsPublic || any branchIsPublic branches
 
 type DependencyTree = CondTree ConfVar [Dependency] IsBuildable
 
