@@ -6,7 +6,7 @@ module Distribution.Server.Features.BuildReports (
     initBuildReportsFeature
   ) where
 
-import Distribution.Server.Framework hiding (BuildLog, TestLog, BuildCovg)
+import Distribution.Server.Framework hiding (BuildLog, TestLog, TestReportLog, BuildCovg)
 
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload
@@ -16,7 +16,7 @@ import Distribution.Server.Features.BuildReports.Backup
 import Distribution.Server.Features.BuildReports.State
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildCovg(..), BuildLog(..), TestLog(..))
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildCovg(..), BuildLog(..), TestLog(..), TestReportLog(..))
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Packages.Types
@@ -42,13 +42,14 @@ data ReportsFeature = ReportsFeature {
     reportsFeatureInterface :: HackageFeature,
 
     packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response,
-    packageReport  :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg),
+    packageReport  :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog),
 
     queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
     queryTestLog        :: forall m. MonadIO m => TestLog   -> m Resource.TestLog,
+    queryTestReportLog  :: forall m. MonadIO m => TestReportLog -> m Resource.TestReportLog,
     pkgReportDetails    :: forall m. MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails,
-    queryLastReportStats:: forall m. MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg)),
+    queryLastReportStats:: forall m. MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg, Maybe TestReportLog)),
     queryRunTests       :: forall m. MonadIO m =>  PackageId -> m Bool,
     reportsResource :: ReportsResource
 }
@@ -199,7 +200,7 @@ buildReportsFeature name
           guardValidPackageId pkgid
           queryPackageReports pkgid >>= continue
 
-    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg)
+    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog)
     packageReport dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
@@ -207,12 +208,12 @@ buildReportsFeature name
       mreport  <- queryState reportsState $ LookupReportCovg pkgid reportId
       case mreport of
         Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
-        Just (report, mlog, mtest, covg) -> return (reportId, report, mlog, mtest, covg)
+        Just (report, mlog, mtest, covg, testReportLog) -> return (reportId, report, mlog, mtest, covg, testReportLog)
 
     queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)]
     queryPackageReports pkgid = do
         reports <- queryState reportsState $ LookupPackageReports pkgid
-        return $ map (second (\(a, _, _) -> a)) reports
+        return $ map (second (\(a, _, _, _) -> a)) reports
 
     queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog
     queryBuildLog (BuildLog blobId) = do
@@ -224,6 +225,11 @@ buildReportsFeature name
         file <- liftIO $ BlobStorage.fetch store blobId
         return $ Resource.TestLog file
 
+    queryTestReportLog :: MonadIO m => TestReportLog -> m Resource.TestReportLog
+    queryTestReportLog (TestReportLog blobId) = do
+        file <- liftIO $ BlobStorage.fetch store blobId
+        return $ Resource.TestReportLog file
+
     pkgReportDetails :: MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails--(PackageIdentifier, Bool, Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
     pkgReportDetails (pkgid, docs) = do
       failCnt   <- queryState reportsState $ LookupFailCount pkgid
@@ -231,17 +237,17 @@ buildReportsFeature name
       runTests  <- fmap Just . queryState reportsState $ LookupRunTests pkgid
       (time, ghcId) <- case latestRpt of
         Nothing -> return (Nothing,Nothing)
-        Just (_, brp, _, _, _) -> do
+        Just (_, brp, _, _, _, _) -> do
           let (CompilerId _ vrsn) = compiler brp
           return (time brp, Just vrsn)
       return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId runTests)
 
-    queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg))
+    queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg, Maybe TestReportLog))
     queryLastReportStats pkgid = do
       lookupRes <- queryState reportsState $ LookupLatestReport pkgid
       case lookupRes of
         Nothing -> return Nothing
-        Just (rptId, rpt, _, _, covg) -> return (Just (rptId, rpt, covg))
+        Just (rptId, rpt, _, _, covg, testReportLog) -> return (Just (rptId, rpt, covg, testReportLog))
 
     queryRunTests :: MonadIO m =>  PackageId -> m Bool
     queryRunTests pkgid = queryState reportsState $ LookupRunTests pkgid
@@ -251,13 +257,13 @@ buildReportsFeature name
     textPackageReports dpath = packageReports dpath $ return . toResponse . show
 
     textPackageReport dpath = do
-      (_, report, _, _, _) <- packageReport dpath
+      (_, report, _, _, _, _) <- packageReport dpath
       return . toResponse $ BuildReport.show report
 
     -- result: not-found error or text file
     serveBuildLog :: DynamicPath -> ServerPartE Response
     serveBuildLog dpath = do
-      (repid, _, mlog, _, _) <- packageReport dpath
+      (repid, _, mlog, _, _, _) <- packageReport dpath
       case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
         Just logId -> do
@@ -267,7 +273,7 @@ buildReportsFeature name
     -- result: not-found error or text file
     serveTestLog :: DynamicPath -> ServerPartE Response
     serveTestLog dpath = do
-      (repid, _, _, mtest, _) <- packageReport dpath
+      (repid, _, _, mtest, _, _) <- packageReport dpath
       case mtest of
         Nothing -> errNotFound "Test log not found" [MText $ "Test log for report " ++ display repid ++ " not found"]
         Just logId -> do
@@ -410,6 +416,7 @@ buildReportsFeature name
           logBody     = BuildReport.logContent buildFiles
           testBody    = BuildReport.testContent buildFiles
           covgBody    = BuildReport.coverageContent buildFiles
+          testReportBody = BuildReport.testReportContent buildFiles
           failStatus  = BuildReport.buildFail buildFiles
 
       updateState reportsState $ SetFailStatus pkgid failStatus
@@ -424,8 +431,9 @@ buildReportsFeature name
               report'   <- liftIO $ BuildReport.affixTimestamp report
               logBlob   <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) logBody
               testBlob  <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) testBody
+              testReportBlob <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) testReportBody
               reportId  <- updateState reportsState $
-                                  AddRptLogTestCovg pkgid (report', (fmap BuildLog logBlob), (fmap TestLog testBlob),  (fmap BuildReport.parseCovg covgBody))
+                                  AddRptLogTestCovg pkgid (report', (fmap BuildLog logBlob), (fmap TestLog testBlob), (fmap BuildReport.parseCovg covgBody), (fmap TestReportLog testReportBlob))
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
