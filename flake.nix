@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/haskell-updates";
+    nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
     flake-root.url = "github:srid/flake-root";
@@ -48,55 +48,18 @@
           settings = {
             hackage-server.check = false;
 
-            cabal-add.jailbreak = true;
-            cabal-install-parsers.jailbreak = true;
-            # https://community.flake.parts/haskell-flake/dependency#nixpkgs
             Cabal-syntax = { super, ... }:
-              { custom = _: super.Cabal-syntax_3_14_2_0; };
+              { custom = _: super.Cabal-syntax_3_16_0_0; };
             Cabal = { super, ... }:
-              { custom = _: super.Cabal_3_14_2_0; };
-            fourmolu.check = false;
-            doctest.check = false;
-            system-filepath.check = false;
-            hls-plugin-api.jailbreak = true;
-            ghcide.jailbreak = true;
-            # stylish-haskell.jailbreak = true;
-            haskell-language-server.jailbreak = true;
+              { custom = _: super.Cabal_3_16_0_0; };
 
-            Diff = { super, ... }:
-              { custom = _: super.Diff_1_0_2; };
+            sandwich.check = false;
 
-            threads.check = false;
             unicode-data.check = false;
-            tree-diff.check = false;
-
-            ormolu = { super, ... }:
-              { custom = _: super.ormolu_0_8_0_0;
-                check = false;
-              };
-            extensions = { super, ... }:
-              { custom = _: super.extensions_0_1_0_3;
-                jailbreak = true;
-              };
-
-            brick = { super, ... }:
-              { custom = _: super.brick_2_9; };
-
-            hlint = { super, ... }:
-              { custom = _: super.hlint_3_10; };
-            ghc-lib-parser-ex = { super, ... }:
-              { custom = _: super.ghc-lib-parser-ex_9_12_0_0; };
-            ghc-lib-parser = { super, ... }:
-              {
-                custom = _: super.ghc-lib-parser_9_12_2_20250421;
-                # custom = _: super.ghc-lib-parser_9_12_2_20250320;
-              };
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
             # tls.source = "1.9.0";
-            fourmolu.source = "0.18.0.0";
-            stylish-haskell.source = "0.15.1.0";
           };
           devShell = {
             tools = hp: {
