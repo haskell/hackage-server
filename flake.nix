@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/haskell-updates";
+    nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
     flake-root.url = "github:srid/flake-root";
@@ -46,47 +46,18 @@
           settings = {
             hackage-server.check = false;
 
-            # cabal-add.jailbreak = true;
-            # cabal-install-parsers.jailbreak = true;
-
-            # https://community.flake.parts/haskell-flake/dependency#nixpkgs
-            # Cabal-syntax = { super, ... }:
-            #   { custom = _: super.Cabal-syntax_3_14_2_0; };
-            # Cabal = { super, ... }:
-            #   { custom = _: super.Cabal_3_14_2_0; };
-
-
             Cabal-syntax = { super, ... }:
               { custom = _: super.Cabal-syntax_3_16_0_0; };
             Cabal = { super, ... }:
               { custom = _: super.Cabal_3_16_0_0; };
 
+            sandwich.check = false;
 
-            # fourmolu.check = false;
-            doctest.check = false;
-            system-filepath.check = false;
-            # hls-plugin-api.jailbreak = true;
-            # ghcide.jailbreak = true;
-            # haskell-language-server.jailbreak = true;
-
-            threads.check = false;
             unicode-data.check = false;
-            tree-diff.check = false;
-
-            extensions = { super, ... }:
-              { custom = _: super.extensions_0_1_1_0;
-                jailbreak = true;
-              };
-
-            brick = { super, ... }:
-              { custom = _: super.brick_2_10; };
-
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
             # tls.source = "1.9.0";
-            # fourmolu.source = "0.19.0.1";
-            stylish-haskell.source = "0.15.1.0";
           };
           devShell = {
             tools = hp: {
