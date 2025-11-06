@@ -51,6 +51,8 @@ import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
 import qualified Distribution.SPDX.LicenseId as SPDX.LId
 import qualified Distribution.License as License
+import Distribution.Pretty
+         ( prettyShow )
 
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
@@ -60,9 +62,13 @@ import Control.Monad.Writer
          ( WriterT(..), MonadWriter, tell )
 import Data.Bits
          ( (.&.) )
+import Data.Bitraversable
+         ( bitraverse )
 import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
+import Data.Foldable
+         ( traverse_ )
 import Data.List
          ( nub, partition, isPrefixOf )
 import qualified Data.Map.Strict as Map
@@ -217,7 +223,7 @@ specVersionChecks specVerOk specVer = do
     throwError "'cabal-version' must be at least 1.2"
 
   -- To keep people from uploading packages most users cannot use. Disabled for now.
-{-  
+{-
   unless (specVer <= CabalSpecV3_6) $
     throwError "'cabal-version' must be at most 3.6"
 -}
@@ -317,11 +323,18 @@ extraChecks genPkgDesc pkgId tarIndex = do
   mapM_ (warn . ppPackageCheck) warnings
 
   -- Proprietary License check (only active in central-server branch)
-  unless (allowAllRightsReserved || isAcceptableLicense pkgDesc) $
-    throwError $ "This server does not accept packages with 'license' "
-              ++ "field set to e.g. AllRightsReserved. See "
-              ++ "https://hackage.haskell.org/upload for more information "
-              ++ "about accepted licenses."
+  unless allowAllRightsReserved $
+    traverse_
+      ( \badLicense ->
+         throwError $ "This server does not accept packages with 'license' "
+                   ++ "field containing "
+                   ++ either prettyShow prettyShow badLicense
+                   ++ ". See https://hackage.haskell.org/upload for more "
+                   ++ "information about accepted licenses. (if the license "
+                   ++ "shown above contains “OR”, only one of the alternatives "
+                   ++ "needs be be acceptable.)"
+      )
+      $ extractUnacceptableLicense pkgDesc
 
   -- Check for an existing x-revision
   when (isJust (lookup "x-revision" (customFieldsPD pkgDesc))) $
@@ -502,37 +515,70 @@ quote s = "'" ++ s ++ "'"
 startsWithBOM :: ByteString -> Bool
 startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
 
--- | Licence acceptance predicate (only used on central-server)
+-- | This is a list of licences that are accepted, even though they aren’t OSI-
+--   or FSF-approved.
+allowedLicenses :: [SPDX.LicenseId]
+allowedLicenses =
+  [ SPDX.CC0_1_0, -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
+    SPDX.Bzip2_1_0_5, -- not OSI approved, but make an exception: https://github.com/haskell/hackage-server/issues/1294
+    SPDX.Bzip2_1_0_6  -- same as above
+  ]
+
+rejectedLicenseExceptions :: [SPDX.LicenseExceptionId]
+rejectedLicenseExceptions =
+  [
+  ]
+
+-- | Licence acceptance predicate – `Nothing` represents an acceptable license.
+--   (only used on central-server)
 --
 -- * NONE is rejected
 --
--- * "or later" syntax (+ postfix) is rejected
+-- * license refs are rejected
 --
--- * "WITH exc" exceptions are rejected
+-- * specific SPDX license ids (other than those that are OSI- or FSF-approved)
+--   can be added to `allowedLicenses` above
 --
--- * There should be a way to interpert license as (conjunction of)
---   OSI-accepted licenses or CC0
---
-isAcceptableLicense :: PackageDescription -> Bool
-isAcceptableLicense = either goSpdx goLegacy . licenseRaw
+-- * specific SPDX license exception ids can be added to
+--   `rejectedLicenseExceptions` above
+extractUnacceptableLicense ::
+  PackageDescription -> Maybe (Either SPDX.License License.License)
+extractUnacceptableLicense = bitraverse goSpdx goLegacy . licenseRaw
   where
     -- `cabal-version: 2.2` and later
-    goSpdx :: SPDX.License -> Bool
-    goSpdx SPDX.NONE = False
-    goSpdx (SPDX.License expr) = goExpr expr
+    goSpdx :: SPDX.License -> Maybe SPDX.License
+    goSpdx SPDX.NONE = pure SPDX.NONE
+    goSpdx (SPDX.License expr) = SPDX.License <$> goExpr expr
       where
-        goExpr (SPDX.EAnd a b)            = goExpr a && goExpr b
-        goExpr (SPDX.EOr a b)             = goExpr a || goExpr b
-        goExpr (SPDX.ELicense _ (Just _)) = False -- Don't allow exceptions
-        goExpr (SPDX.ELicense s Nothing)  = goSimple s
+        goExpr (SPDX.EAnd a b) = case (goExpr a, goExpr b) of
+          (Nothing, Nothing) -> Nothing
+          (Just l, Nothing) -> pure l
+          (Nothing, Just l) -> pure l
+          (Just l, Just l') -> pure $ SPDX.EAnd l l'
+        goExpr (SPDX.EOr a b) = case (goExpr a, goExpr b) of
+          (Just l, Just l') -> pure $ SPDX.EOr l l'
+          (_, _) -> Nothing
+        goExpr l@(SPDX.ELicense s e) = case (goSimple s, goException <$> e) of
+          (False, Just False) -> pure l
+          -- TODO: This case should _only_ return the exception, but it includes  both
+          (True, Just False) -> pure $ SPDX.ELicense s e
+          (False, _) -> pure $ SPDX.ELicense s Nothing
+          (True, _) -> Nothing
 
-        goSimple (SPDX.ELicenseRef _)      = False -- don't allow referenced licenses
-        goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
-        goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
-        goSimple (SPDX.ELicenseId SPDX.Bzip2_1_0_5) = True -- not OSI approved, but make an exception: https://github.com/haskell/hackage-server/issues/1294
-        goSimple (SPDX.ELicenseId SPDX.Bzip2_1_0_6) = True -- same as above
-        goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid || SPDX.LId.licenseIsFsfLibre lid -- allow only OSI or FSF approved licenses.
+        goException eid =
+          -- most exceptions grant additional rights – reject specific ones
+          not $ eid `elem` rejectedLicenseExceptions
+        goSimple (SPDX.ELicenseRef _) = False -- don't allow referenced licenses
+        -- TODO: Reject GNU license ids with a `+`, because they should use
+        --       `-only` or `-or-later` instead.
+        goSimple (SPDX.ELicenseIdPlus lid) = goId lid
+        goSimple (SPDX.ELicenseId lid) = goId lid
+        goId lid =
+          -- allow only OSI or FSF approved licenses (plus some specific execeptions).
+          lid `elem` allowedLicenses
+          || SPDX.licenseIsOsiApproved lid
+          || SPDX.LId.licenseIsFsfLibre lid
 
     -- pre `cabal-version: 2.2`
-    goLegacy License.AllRightsReserved = False
-    goLegacy _                         = True
+    goLegacy License.AllRightsReserved = pure License.AllRightsReserved
+    goLegacy _                         = Nothing
