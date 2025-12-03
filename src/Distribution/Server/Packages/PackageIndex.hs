@@ -69,6 +69,7 @@ import Distribution.Package
 import Distribution.Types.Dependency
 import Distribution.Version ( withinRange )
 import Distribution.Simple.Utils (lowercase)
+import qualified Data.List.NonEmpty as NonEmpty
 
 -- | The collection of information about packages from one or more 'PackageDB's.
 --
@@ -155,9 +156,9 @@ fromList pkgs = mkPackageIndex
   where
     fixBucket = -- out of groups of duplicates, later ones mask earlier ones
                 -- but Map.fromListWith (++) constructs groups in reverse order
-                map head
+                map NonEmpty.head
                 -- Eq instance for PackageIdentifier is wrong, so use Ord:
-              . groupBy (\a b -> EQ == comparing packageId a b)
+              . NonEmpty.groupBy (\a b -> EQ == comparing packageId a b)
                 -- relies on sortBy being a stable sort so we
                 -- can pick consistently among duplicates
               . sortBy (comparing packageId)
