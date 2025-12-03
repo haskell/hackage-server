@@ -168,6 +168,6 @@ instance ToSElem Change where
     where
       -- TODO/FIXME: stringly hack
       what = case what0 of
-        ('a':'d':'d':'e':'d':_)         -> 'A' : tail what0
-        ('r':'e':'m':'o':'v':'e':'d':_) -> 'R' : tail what0
-        _                               -> "Changed " ++ what0
+        ('a':what1@('d':'d':'e':'d':_))         -> 'A' : what1
+        ('r':what1@('e':'m':'o':'v':'e':'d':_)) -> 'R' : what1
+        _                                       -> "Changed " ++ what0
