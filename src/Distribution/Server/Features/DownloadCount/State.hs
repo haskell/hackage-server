@@ -176,9 +176,9 @@ updateHistory (InMemStats day perPkg) (OnDiskStats (NCM _ m)) =
     updatesMap :: Map.Map PackageName OnDiskPerPkg
     updatesMap = Map.fromList
       [ (pkgname, applyUpdates pkgs)
-      | pkgs <- groupBy ((==) `on` (packageName . fst))
-                        (cmToList perPkg :: [(PackageId, Int)])
-      , let pkgname = packageName (fst (head pkgs))
+      | pkgs@((pkgId, _):_) <- groupBy ((==) `on` (packageName . fst))
+                                (cmToList perPkg :: [(PackageId, Int)])
+      , let pkgname = packageName pkgId
       ]
 
     applyUpdates :: [(PackageId, Int)] -> OnDiskPerPkg
