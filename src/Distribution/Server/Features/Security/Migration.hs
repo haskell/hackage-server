@@ -172,8 +172,9 @@ readPrecomputedHashes env@ServerEnv{ serverVerbosity = verbosity } = do
                                                   else throwIO err
 
     parseEntry :: String -> (MD5, (SHA256, Length))
-    parseEntry line = let [md5, sha256, len] = words line
-                      in (md5, (sha256, read len))
+    parseEntry line = case words line of
+                        [md5, sha256, len] -> (md5, (sha256, read len))
+                        _                  -> error $ "Invalid precomputed hash line: " <> show line
 
 {-------------------------------------------------------------------------------
   Migration infrastructure
