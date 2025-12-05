@@ -304,12 +304,12 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       where
         cpiToJSON :: [CandPkgInfo] -> Value
         cpiToJSON [] = Null -- should never happen
-        cpiToJSON pkgs = object
+        cpiToJSON pkgs@(pkg:_) = object
             [ Key.fromString "name" .= pn
             , Key.fromString "candidates" .= pvs
             ]
           where
-            pn = T.pack . display . pkgName . candInfoId . head $ pkgs
+            pn = T.pack . display . pkgName . candInfoId $ pkg
             pvs = [ object [ Key.fromString "version" .= (T.pack . display . packageVersion . candInfoId) p
                            , Key.fromString "sha256"  .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
                            ]

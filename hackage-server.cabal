@@ -135,6 +135,8 @@ common language-defaults
     -Wno-deprecated-flags
     -Wno-unused-do-bind
     -Wno-unused-record-wildcards
+    -- TODO remove all Typeable derivings and remove this flag. Safe since GHC 7.10
+    -Wno-deriving-typeable
     -Werror=incomplete-patterns
     -Werror=missing-methods
 

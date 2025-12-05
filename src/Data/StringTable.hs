@@ -28,7 +28,7 @@ import Distribution.Server.Framework.MemSize
 data StringTable id
          = StringTable
                !BS.ByteString          -- all the strings concatenated
-               !(A.UArray Int Word32)  -- offset table
+               !(A.UArray Int Word32)  -- ^ Invariant: the lower bound of the array is 0
   deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''StringTable)
@@ -42,7 +42,7 @@ instance MemSize (StringTable id) where
 lookup :: Enum id => StringTable id -> String -> Maybe id
 lookup (StringTable bs tbl) str = binarySearch 0 (topBound-1) (BS.pack str)
   where
-    (0, topBound) = A.bounds tbl
+    (_assumedZero, topBound) = A.bounds tbl
 
     binarySearch a b key
       | a > b     = Nothing
@@ -81,12 +81,12 @@ construct strs = StringTable bs tbl
 
 enumStrings :: Enum id => StringTable id -> [String]
 enumStrings (StringTable bs tbl) = map (BS.unpack . index' bs tbl) [0..h-1]
-  where (0,h) = A.bounds tbl
+  where (_assumedZero, h) = A.bounds tbl
 
 
 enumIds :: Enum id => StringTable id -> [id]
 enumIds (StringTable _ tbl) = map toEnum [0..h-1]
-  where (0,h) = A.bounds tbl
+  where (_assumedZero, h) = A.bounds tbl
 
 prop :: [String] -> Bool
 prop strs =

@@ -1,6 +1,7 @@
 module Distribution.Server.Util.Merge where
 
 import Data.Map
+import qualified Data.Map.Merge.Strict as MapMerge
 
 
 data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b
@@ -17,4 +18,8 @@ mergeBy cmp = merge
         LT -> OnlyInLeft  x   : merge xs  (y:ys)
 
 mergeMaps :: Ord k => Map k a -> Map k b -> Map k (MergeResult a b)
-mergeMaps m1 m2 = unionWith (\(OnlyInLeft a) (OnlyInRight b) -> InBoth a b) (fmap OnlyInLeft m1) (fmap OnlyInRight m2)
+mergeMaps =
+  MapMerge.merge
+    (MapMerge.mapMissing $ const OnlyInLeft)
+    (MapMerge.mapMissing $ const OnlyInRight)
+    (MapMerge.zipWithMatched $ const InBoth)

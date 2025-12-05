@@ -274,7 +274,7 @@ responseReadBSL rsp =
     traverse (fmap BS.fromChunks . brConsume) rsp
 
 httpSession :: Verbosity -> String -> Version -> HttpSession a -> IO a
-httpSession verbosity agent version (HttpSession action) = do
+httpSession _verbosity agent version (HttpSession action) = do
     manager <- newTlsManager
     let env = HttpEnv { httpManager = manager
                       , initialHeaders = [ (hUserAgent, BSS.pack $ agent ++ "/" ++ showVersion version) ]

@@ -1,6 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+-- for instance MemSize Dependency
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Distribution.Server.Features.ReverseDependencies.State
   ( NodeId

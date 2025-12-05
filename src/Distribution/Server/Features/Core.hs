@@ -763,7 +763,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     serveCabalFileRevisionName :: DynamicPath -> ServerPartE Response
     serveCabalFileRevisionName dpath = do
-      pkgid1 <- packageTarballInPath dpath
+      -- TODO bug? Maybe something to do with #1439
+      _pkgid1 <- packageTarballInPath dpath
       pkgid2 <- packageInPath dpath
       guard (pkgVersion pkgid2 == pkgVersion pkgid2)
       pkginfo <- packageInPath dpath >>= lookupPackageId
