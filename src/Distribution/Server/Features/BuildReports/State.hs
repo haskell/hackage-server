@@ -5,7 +5,7 @@
 module Distribution.Server.Features.BuildReports.State where
 
 import Distribution.Server.Features.BuildReports.BuildReports
-                (BuildReportId, BuildLog, TestLog, BuildReport, BuildReports,BuildCovg, BuildStatus)
+                (BuildReportId, BuildLog, TestLog, TestReportLog, BuildReport, BuildReports,BuildCovg, BuildStatus)
 import qualified Distribution.Server.Features.BuildReports.BuildReports as BuildReports
 
 import Distribution.Package
@@ -39,10 +39,10 @@ deleteReport pkgid reportId = do
         Nothing -> return False
         Just reports -> State.put reports >> return True
 
-lookupReport :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe TestLog))
+lookupReport :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe TestReportLog))
 lookupReport pkgid reportId = asks (BuildReports.lookupReport pkgid reportId)
 
-lookupPackageReports :: PackageId -> Query BuildReports [(BuildReportId, (BuildReport, Maybe BuildLog, Maybe TestLog))]
+lookupPackageReports :: PackageId -> Query BuildReports [(BuildReportId, (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe TestReportLog))]
 lookupPackageReports pkgid = asks (BuildReports.lookupPackageReports pkgid)
 
 getBuildReports :: Query BuildReports BuildReports
@@ -51,14 +51,14 @@ getBuildReports = ask
 replaceBuildReports :: BuildReports -> Update BuildReports ()
 replaceBuildReports = State.put
 
-addRptLogCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe BuildCovg ) -> Update BuildReports BuildReportId
-addRptLogCovg pkgid (bRpt, blog, bcovg) = do
+addRptLogCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe BuildCovg, Maybe TestReportLog) -> Update BuildReports BuildReportId
+addRptLogCovg pkgid (bRpt, blog, bcovg, testReportLog) = do
     buildReports <- State.get
-    let (reports, reportId) = BuildReports.addRptLogTestCovg pkgid (bRpt, blog, Nothing, bcovg) buildReports
+    let (reports, reportId) = BuildReports.addRptLogTestCovg pkgid (bRpt, blog, Nothing, bcovg, testReportLog) buildReports
     State.put reports
     return reportId
 
-lookupReportCovg :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg))
+lookupReportCovg :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog))
 lookupReportCovg pkgid reportId = asks (BuildReports.lookupReportCovg pkgid reportId)
 
 setFailStatus :: PackageId -> Bool -> Update BuildReports ()
@@ -77,13 +77,13 @@ resetFailCount pkgid = do
 lookupFailCount :: PackageId -> Query BuildReports (Maybe BuildStatus)
 lookupFailCount pkgid = asks (BuildReports.lookupFailCount pkgid)
 
-lookupLatestReport :: PackageId -> Query BuildReports (Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg))
+lookupLatestReport :: PackageId -> Query BuildReports (Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog))
 lookupLatestReport pkgid = asks (BuildReports.lookupLatestReport pkgid)
 
-addRptLogTestCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg ) -> Update BuildReports BuildReportId
-addRptLogTestCovg pkgid (bRpt, blog, btest, bcovg) = do
+addRptLogTestCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog) -> Update BuildReports BuildReportId
+addRptLogTestCovg pkgid (bRpt, blog, btest, bcovg, testReportLog) = do
     buildReports <- State.get
-    let (reports, reportId) = BuildReports.addRptLogTestCovg pkgid (bRpt, blog, btest, bcovg) buildReports
+    let (reports, reportId) = BuildReports.addRptLogTestCovg pkgid (bRpt, blog, btest, bcovg, testReportLog) buildReports
     State.put reports
     return reportId
 
