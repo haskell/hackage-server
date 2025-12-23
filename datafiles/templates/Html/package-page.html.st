@@ -29,7 +29,7 @@
 <body>
   $hackagePageHeader()$
 
-  <div id="content">
+  <main id="content">
     <h1><a href="$baseurl$/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
     <div style="font-size: small">
       [ $tags$ ]
@@ -95,34 +95,11 @@
           $downloadSection$
         </div>
 
-        <div id="maintainer-corner">
-          <h4>Maintainer's Corner</h4>
-          <p><a href="$package.maintainerURL$">Package maintainers</a></p>
-          <ul>
-            <li>
-              $maintainers$
-            </li>
-          </ul>
-          <p>For package maintainers and hackage trustees</p>
-          <ul>
-            <li>
-              <a href="$baseurl$/package/$package.name$/maintain">
-                edit package information
-              </a>
-            </li>
-          </ul>
-          <p>Candidates</p>
-          <ul>
-            <li>
-              $candidates$
-            </li>
-          </ul>
-        </div>
 
       </div><!-- /left-pane -->
 
 
-      <div id="properties">
+      <aside id="properties">
         <table class="properties">
           <tbody>
 
@@ -282,9 +259,34 @@
               <th>Status</th>
               <td>$buildStatus$</td>
             </tr>
+            <tr>
+              <th>Maintainer's Corner</th>
+              <td>
+                <p><a href="$package.maintainerURL$">Package maintainers</a></p>
+                <ul>
+                  <li>
+                    $maintainers$
+                  </li>
+                </ul>
+                <p>For package maintainers and hackage trustees</p>
+                <ul>
+                  <li>
+                    <a href="$baseurl$/package/$package.name$/maintain">
+                      edit package information
+                    </a>
+                  </li>
+                </ul>
+                <p>Candidates</p>
+                <ul>
+                  <li>
+                    $candidates$
+                  </li>
+                </ul>
+              </td>
+            </tr>
           </tbody>
         </table>
-      </div> <!-- /properties -->
+      </aside> <!-- /properties -->
     </div><!-- /flex-container -->
 
     $if(package.optional.hasReadme)$
@@ -297,7 +299,7 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs@v1.29.0/components/prism-core.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@v1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     $endif$
-  </div> <!-- /content -->
+  </main> <!-- /content -->
 
   $packagePageAssets()$
   <div style="clear:both"></div>
