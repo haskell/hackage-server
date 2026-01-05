@@ -60,6 +60,7 @@
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
             # tls.source = "1.9.0";
+            tar.source = "0.7.0.0";
           };
           devShell = {
             tools = hp: {

@@ -19,7 +19,7 @@ deriving instance Eq CombinedTarErrs
 
 -- | Test that check permissions does the right thing
 testPermissions :: FilePath                              -- ^ .tar.gz file to test
-                -> (Tar.GenEntry FilePath FilePath -> Maybe CombinedTarErrs)  -- ^ Converter to create errors if necessary
+                -> (Tar.GenEntry BL.ByteString FilePath FilePath -> Maybe CombinedTarErrs)  -- ^ Converter to create errors if necessary
                 -> Assertion
 testPermissions tarPath mangler = do
     entries <- Tar.read . GZip.decompress <$> BL.readFile tarPath

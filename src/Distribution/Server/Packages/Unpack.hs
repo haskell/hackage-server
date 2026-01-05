@@ -341,14 +341,14 @@ warn msg = tell [msg]
 runUploadMonad :: UploadMonad a -> Either String (a, [String])
 runUploadMonad (UploadMonad m) = runIdentity . runExceptT . runWriterT $ m
 
-selectEntries :: forall tarPath linkTarget err a.
+selectEntries :: forall content tarPath linkTarget err a.
                  (err -> String)
-              -> (Tar.GenEntry tarPath linkTarget -> Maybe a)
-              -> Tar.GenEntries tarPath linkTarget err
+              -> (Tar.GenEntry content tarPath linkTarget -> Maybe a)
+              -> Tar.GenEntries content tarPath linkTarget err
               -> UploadMonad [a]
 selectEntries formatErr select = extract []
   where
-    extract :: [a] -> Tar.GenEntries tarPath linkTarget err -> UploadMonad [a]
+    extract :: [a] -> Tar.GenEntries content tarPath linkTarget err -> UploadMonad [a]
     extract _        (Tar.Fail err)           = throwError (formatErr err)
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) =
@@ -366,7 +366,7 @@ data CombinedTarErrs =
 
 tarballChecks :: Bool -> UTCTime -> FilePath
               -> Tar.Entries Tar.FormatError
-              -> Tar.GenEntries FilePath FilePath CombinedTarErrs
+              -> Tar.GenEntries ByteString FilePath FilePath CombinedTarErrs
 tarballChecks lax now expectedDir =
     (if not lax then checkFutureTimes now else id)
   . checkTarbomb expectedDir
@@ -385,15 +385,15 @@ tarballChecks lax now expectedDir =
     fmapTarError f = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
 
 checkFutureTimes :: UTCTime
-                 -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
-                 -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
+                 -> Tar.GenEntries content FilePath linkTarget CombinedTarErrs
+                 -> Tar.GenEntries content FilePath linkTarget CombinedTarErrs
 checkFutureTimes now =
     checkEntries checkEntry
   where
     -- Allow 30s for client clock skew
     now' = addUTCTime 30 now
 
-    checkEntry :: Tar.GenEntry FilePath linkTarget -> Maybe CombinedTarErrs
+    checkEntry :: Tar.GenEntry content FilePath linkTarget -> Maybe CombinedTarErrs
     checkEntry entry
       | entryUTCTime > now'
       = Just (FutureTimeError posixPath entryUTCTime now')
@@ -405,8 +405,8 @@ checkFutureTimes now =
 
 checkTarbomb
   :: FilePath
-  -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
-  -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
+  -> Tar.GenEntries content FilePath linkTarget CombinedTarErrs
+  -> Tar.GenEntries content FilePath linkTarget CombinedTarErrs
 checkTarbomb expectedTopDir =
     checkEntries checkEntry
   where
@@ -416,8 +416,8 @@ checkTarbomb expectedTopDir =
         _ -> Just $ TarBombError (Tar.entryTarPath entry) expectedTopDir
 
 checkUselessPermissions
-  :: Tar.GenEntries FilePath linkTarget CombinedTarErrs
-  -> Tar.GenEntries FilePath linkTarget CombinedTarErrs
+  :: Tar.GenEntries content FilePath linkTarget CombinedTarErrs
+  -> Tar.GenEntries content FilePath linkTarget CombinedTarErrs
 checkUselessPermissions =
     checkEntries checkEntry
   where
@@ -434,9 +434,9 @@ checkUselessPermissions =
 
 
 checkEntries
-  :: (Tar.GenEntry tarPath linkTarget -> Maybe e)
-  -> Tar.GenEntries tarPath linkTarget e
-  -> Tar.GenEntries tarPath linkTarget e
+  :: (Tar.GenEntry content tarPath linkTarget -> Maybe e)
+  -> Tar.GenEntries content tarPath linkTarget e
+  -> Tar.GenEntries content tarPath linkTarget e
 checkEntries checkEntry =
   Tar.foldEntries (\entry rest -> maybe (Tar.Next entry rest) Tar.Fail
                                         (checkEntry entry))
