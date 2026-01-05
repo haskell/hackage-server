@@ -83,6 +83,7 @@ doit root
          unless (db1 == db2) $ die "Databases don't match"
          info "Checking server still works, and data is intact"
          withServerRunning root runPackageTests
+         withServerRunning root runRevisionTests
 
 
 runUserTests :: IO ()
@@ -190,6 +191,23 @@ runPackageUploadTests = do
     uploadTime = "Tue Oct 18 20:54:28 UTC 2010"
     uploadTimeISO = "2010-10-18T20:54:28Z"
     uploadTimeISO2 = "2020-10-18T20:54:28Z"
+
+runRevisionTests :: IO ()
+runRevisionTests = do
+    do info "Revising testpackage"
+       post (Auth "HackageTestUser1" "testpass1") "/package/testpackage-1.0.0.0/testpackage.cabal/edit"
+         [ ("cabalfile", revisedCabalFileContent)
+         , ("publish", "Publish new revision")
+         ]
+    do info "Checking revision exists"
+       xs <- getUrl NoAuth "/package/testpackage-1.0.0.0/revision/1.cabal"
+       unless (xs == revisedCabalFileContent) $
+           die "Bad revised cabal file content"
+  where
+    (_, _, _, testpackageCabalFileContent, _, _) = testpackage
+    revisedCabalFileContent =
+      "x-revision: 1\ndescription: a description added by revision\n"
+         ++ testpackageCabalFileContent
 
 runPackageTests :: IO ()
 runPackageTests = do
