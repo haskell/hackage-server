@@ -19,8 +19,6 @@ module Data.IntTrie (
 
 import Prelude hiding (lookup)
 
-import Data.Typeable (Typeable)
-
 import qualified Data.Array.Unboxed as A
 import Data.Array.IArray  ((!))
 import qualified Data.Bits as Bits
@@ -42,7 +40,7 @@ import Control.Applicative ((<$>), (<*>))
 -- | A compact mapping from sequences of small ints to small ints.
 --
 newtype IntTrie k v = IntTrie (A.UArray Word32 Word32)
-    deriving (Show, Typeable)
+    deriving (Show)
 
 -- Version 0 used 16-bit integers and is no longer supported
 -- (To upgrade, DELETE /server-status/tarindices to wipe the tar indices state)

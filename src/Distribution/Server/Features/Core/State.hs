@@ -51,7 +51,7 @@ data PackagesState = PackagesState {
     -- for the moment the update log is a 'Either', to help with the transition
     -- we can change that later
   }
-  deriving (Eq, Typeable, Show)
+  deriving (Eq, Show)
 
 -- transient type used for migration which holds the fields for
 -- 'ExtraEntry' carried over from 'PackagesState_v1'
@@ -322,7 +322,7 @@ data PackagesState_v1 = PackagesState_v1 {
     -- for the moment the update log is a Maybe, to help with the transition
     -- we can change that later
   }
-  deriving (Eq, Typeable, Show)
+  deriving (Eq, Show)
 
 instance Migrate PackagesState_v1 where
     type MigrateFrom PackagesState_v1 = PackagesState_v0

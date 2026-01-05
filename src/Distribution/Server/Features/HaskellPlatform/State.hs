@@ -9,7 +9,6 @@ import qualified Data.Map as Map
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Typeable
 
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
@@ -22,7 +21,7 @@ import Control.Monad.State (put, modify)
 
 newtype PlatformPackages = PlatformPackages {
     blessedPackages :: Map PackageName (Set Version)
-} deriving (Show, Typeable, Eq, MemSize)
+} deriving (Show, Eq, MemSize)
 
 emptyPlatformPackages :: PlatformPackages
 emptyPlatformPackages = PlatformPackages Map.empty

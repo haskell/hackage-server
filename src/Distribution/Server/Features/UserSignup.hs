@@ -32,7 +32,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Char8 as BS -- Only used for ASCII data
 import qualified Data.ByteString.Lazy as BSL
-import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put, modify)
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -105,10 +104,10 @@ data SignupResetInfo = SignupInfo {
                          resetUserId        :: !UserId,
                          nonceTimestamp     :: !UTCTime
                      }
-  deriving (Eq, Show, Typeable)
+  deriving (Eq, Show)
 
 newtype SignupResetTable = SignupResetTable (Map Nonce SignupResetInfo)
-  deriving (Eq, Show, Typeable, MemSize)
+  deriving (Eq, Show, MemSize)
 
 emptySignupResetTable :: SignupResetTable
 emptySignupResetTable = SignupResetTable Map.empty

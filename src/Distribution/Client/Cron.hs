@@ -13,7 +13,6 @@ import System.Random (randomRIO)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
 import Data.Time.LocalTime (getCurrentTimeZone, utcToZonedTime)
-import Data.Typeable (Typeable)
 
 import qualified System.Posix.Signals as Posix
 
@@ -21,13 +20,13 @@ import Distribution.Verbosity (Verbosity)
 import Distribution.Simple.Utils hiding (warn)
 
 data ReceivedSignal = ReceivedSignal Signal UTCTime
-  deriving (Show, Typeable)
+  deriving (Show)
 
 data Signal = SIGABRT
             | SIGINT
             | SIGQUIT
             | SIGTERM
-  deriving (Show, Typeable)
+  deriving (Show)
 
 instance Exception ReceivedSignal
 

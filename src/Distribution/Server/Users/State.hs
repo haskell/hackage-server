@@ -14,7 +14,6 @@ import qualified Distribution.Server.Users.Users as Users
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable (Typeable)
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
@@ -104,7 +103,7 @@ $(makeAcidic ''Users.Users [ 'addUserEnabled
 
 data HackageAdmins = HackageAdmins {
     adminList :: !Group.UserIdSet
-} deriving (Typeable, Eq, Show)
+} deriving (Eq, Show)
 
 $(deriveSafeCopy 0 'base ''HackageAdmins)
 
@@ -142,7 +141,7 @@ $(makeAcidic ''HackageAdmins
 --------------------------------------------------------------------------
 data MirrorClients = MirrorClients {
     mirrorClients :: !Group.UserIdSet
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 $(deriveSafeCopy 0 'base ''MirrorClients)
 

@@ -14,7 +14,6 @@ import Data.Maybe
 import Data.SafeCopy
 import Data.Time
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-import Data.Typeable
 import qualified Control.Monad.State  as State
 import qualified Data.ByteString.Lazy as BS.Lazy
 
@@ -52,7 +51,7 @@ data SecurityState =
      , securityTimestampTime    :: !UTCTime  -- ^ when the snapshot.json and
                                              -- timestamp.json last got updated
     }
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 data SecurityStateFiles =
      SecurityStateFiles {
@@ -65,7 +64,7 @@ data SecurityStateFiles =
      , securitySnapshot     ::  Snapshot       -- ^ content of snapshot.json
      , securityTimestamp    ::  Timestamp      -- ^ content of timestamp.json
      }
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 deriveSafeCopy 0 'base      ''SecurityStateFiles
 
@@ -251,7 +250,7 @@ data TUFUpdate = TUFUpdate {
   , tufUpdateInfoTarGz   :: FileInfo
   , tufUpdateInfoTar     :: FileInfo
   }
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 deriveSafeCopy 0 'base ''TUFUpdate
 
@@ -374,7 +373,7 @@ data SecurityState_v0 = SecurityState_v0 {
   , v0_securityTimestampVersion :: Sec.FileVersion
   , v0_securitySnapshotVersion  :: Sec.FileVersion
   }
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 deriveSafeCopy 0 'base ''SecurityState_v0
 
@@ -395,7 +394,7 @@ data SecurityState_v1 = SecurityState_v1 {
   , v1_securitySnapshotVersion  :: Sec.FileVersion
   , v1_securityLastUpdate       :: Maybe TUFUpdate
   }
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 deriveSafeCopy 1 'extension ''SecurityState_v1
 

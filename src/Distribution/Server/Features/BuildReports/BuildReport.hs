@@ -106,8 +106,6 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map as Map
 import Data.Time
          ( UTCTime, getCurrentTime )
-import Data.Typeable
-         ( Typeable )
 import Control.Applicative
 import Control.Monad
 
@@ -166,7 +164,7 @@ data BuildReport
     -- | Configure outcome, did configure work ok?
     testsOutcome    :: Outcome
   }
-  deriving (Eq, Typeable, Show)
+  deriving (Eq,  Show)
 
 packageL :: Lens' BuildReport PackageIdentifier
 packageL f s = fmap (\x -> s { package = x }) (f (package s))
@@ -266,7 +264,7 @@ data BooleanCovg = BooleanCovg {
   guards        :: (Int,Int),
   ifConditions  :: (Int,Int),
   qualifiers    :: (Int,Int)
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 data BuildCovg = BuildCovg {
   expressions       :: (Int,Int),
@@ -274,7 +272,7 @@ data BuildCovg = BuildCovg {
   alternatives      :: (Int,Int),
   localDeclarations :: (Int,Int),
   topLevel          :: (Int,Int)
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 instance MemSize BuildCovg where
     memSize (BuildCovg a (BooleanCovg b c d) e f g) = memSize7 a b c d e f g
@@ -499,7 +497,7 @@ instance Arbitrary Outcome where
   arbitrary = elements [ NotTried, Failed, Ok ]
 
 data BuildStatus = BuildOK | BuildFailCnt Int
-  deriving (Eq, Ord, Typeable, Show)
+  deriving (Eq, Ord, Show)
 instance ToJSON BuildStatus where
   toJSON (BuildFailCnt a) = toJSON a
   toJSON BuildOK          = toJSON ((-1)::Int)

@@ -11,7 +11,6 @@ module Distribution.Server.Features.Security.FileInfo (
   ) where
 
 -- stdlib
-import Data.Typeable
 import Data.SafeCopy
 import qualified Data.Map as Map
 
@@ -41,7 +40,7 @@ data FileInfo = FileInfo {
   , fileInfoSHA256 :: !SHA256Digest
   , fileInfoMD5    :: !(Maybe MD5Digest)
   }
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 data FileInfo_v0 = FileInfo_v0 Sec.Int54 SHA256Digest
 

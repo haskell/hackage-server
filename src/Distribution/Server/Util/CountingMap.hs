@@ -37,12 +37,12 @@ data NestedCountingMap a b = NCM {
     nestedTotalCount  :: !Int
   , nestedCountingMap :: !(Map a b)
   }
-  deriving (Show, Eq, Ord, Typeable)
+  deriving (Show, Eq, Ord)
 
 newtype SimpleCountingMap a = SCM {
     simpleCountingMap :: NestedCountingMap a Int
   }
-  deriving (Show, Eq, Ord, Typeable)
+  deriving (Show, Eq, Ord)
 
 class CountingMap k a | a -> k where
   cmEmpty  :: a

@@ -16,7 +16,6 @@ module Distribution.Server.Features.Security.ResponseContentTypes (
 -- stdlib
 import Happstack.Server
 import Control.DeepSeq
-import Data.Typeable
 import Data.SafeCopy
 import qualified Data.ByteString.Lazy as BS.Lazy
 
@@ -36,7 +35,7 @@ data TUFFile = TUFFile {
   , _tufFileHashMD5    :: !MD5Digest
   , _tufFileHashSHA256 :: !SHA256Digest
   }
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 deriveSafeCopy 0 'base ''TUFFile
 
@@ -86,19 +85,19 @@ instance IsTUFFile TUFFile where
   tufFileHashSHA256 TUFFile{..} = _tufFileHashSHA256
 
 newtype Timestamp = Timestamp { timestampFile :: TUFFile }
-  deriving (Typeable, Show, Eq, NFData, MemSize,
+  deriving (Show, Eq, NFData, MemSize,
             ToMessage, IsTUFFile, HasFileInfo)
 
 newtype Snapshot = Snapshot { snapshotFile :: TUFFile }
-  deriving (Typeable, Show, Eq, NFData, MemSize,
+  deriving (Show, Eq, NFData, MemSize,
             ToMessage, IsTUFFile, HasFileInfo)
 
 newtype Root = Root { rootFile :: TUFFile }
-  deriving (Typeable, Show, Eq, NFData, MemSize,
+  deriving (Show, Eq, NFData, MemSize,
             ToMessage, IsTUFFile, HasFileInfo)
 
 newtype Mirrors = Mirrors { mirrorsFile :: TUFFile }
-  deriving (Typeable, Show, Eq, NFData, MemSize,
+  deriving (Show, Eq, NFData, MemSize,
             ToMessage, IsTUFFile, HasFileInfo)
 
 deriveSafeCopy 0 'base ''Timestamp

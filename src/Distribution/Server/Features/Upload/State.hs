@@ -12,7 +12,6 @@ import Distribution.Server.Users.Group (UserIdSet)
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Maybe (fromMaybe)
@@ -22,7 +21,7 @@ import qualified Data.Map as Map
 -------------------------------- Maintainer list
 data PackageMaintainers = PackageMaintainers {
     maintainers :: Map.Map PackageName UserIdSet
-} deriving (Eq, Show, Typeable)
+} deriving (Eq, Show)
 
 deriveSafeCopy 0 'base ''PackageMaintainers
 
@@ -66,7 +65,7 @@ makeAcidic ''PackageMaintainers ['getPackageMaintainers
 -- this could be reasonably merged into the above, as a PackageGroups data structure
 data HackageTrustees = HackageTrustees {
     trusteeList :: !UserIdSet
-} deriving (Show, Typeable, Eq)
+} deriving (Show, Eq)
 
 deriveSafeCopy 0 'base ''HackageTrustees
 
@@ -104,7 +103,7 @@ makeAcidic ''HackageTrustees ['getHackageTrustees
 -------------------------------- Uploader list
 data HackageUploaders = HackageUploaders {
     uploaderList :: !UserIdSet
-} deriving (Show, Typeable, Eq)
+} deriving (Show, Eq)
 
 $(deriveSafeCopy 0 'base ''HackageUploaders)
 

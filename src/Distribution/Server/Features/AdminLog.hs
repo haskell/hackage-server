@@ -13,7 +13,6 @@ import Distribution.Server.Pages.AdminLog
 import Distribution.Server.Features.Users
 
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable
 import Data.Maybe(mapMaybe)
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
@@ -50,7 +49,7 @@ mkAdminAction gd isAdd uid = (if isAdd then Admin_GroupAddUser else Admin_GroupD
 
 newtype AdminLog = AdminLog {
       adminLog :: [(UTCTime,UserId,AdminAction,BS.ByteString)]
-} deriving (Typeable, Show, MemSize)
+} deriving (Show, MemSize)
 
 deriveSafeCopy 0 'base ''AdminLog
 

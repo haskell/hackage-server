@@ -16,7 +16,6 @@ import qualified Data.List as List
 import qualified Data.Array.Unboxed as A
 import Data.Array.Unboxed ((!))
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable (Typeable)
 import qualified Data.ByteString.Char8 as BS
 import Data.Word (Word32)
 
@@ -29,7 +28,7 @@ data StringTable id
          = StringTable
                !BS.ByteString          -- all the strings concatenated
                !(A.UArray Int Word32)  -- offset table
-  deriving (Show, Typeable)
+  deriving (Show)
 
 $(deriveSafeCopy 0 'base ''StringTable)
 
