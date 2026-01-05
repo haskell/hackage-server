@@ -25,7 +25,7 @@ stored separately.
   </tr>
   $revisions:{revision|
     <tr>
-      <td valign="top"><a href="/package/$pkgid$/revision/$revision.number$.cabal">-r$revision.number$</a> (<a href="/package/$pkgid$/revision/$pkgid$-$revision.number$.cabal">$pkgid$-r$revision.number$</a>)</td>
+      <td valign="top"><a href="/package/$pkgid$/revision/$revision.number$.cabal">-r$revision.number$</a></td>
       <td valign="top">$revision.htmltime$</td>
       <td valign="top"><a href="/user/$revision.user$">$revision.user$</td>
       <td valign="top">$revision.sha256$</th>
