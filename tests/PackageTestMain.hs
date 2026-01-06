@@ -153,8 +153,9 @@ successTestTGZ pkg tar = do
 
 tarGzFile :: String -> IO ByteString
 tarGzFile name = do
-  entries <- Tar.pack "tests/unpack-checks" [name]
-  return (GZip.compress (Tar.write entries))
+  entries <- Tar.pack' "tests/unpack-checks" [name]
+  tarcontents <- Tar.write' entries
+  return (GZip.compress tarcontents)
 
 -- | Remove all Tar.Entries that are not files.
 keepOnlyFiles :: ByteString -> ByteString
