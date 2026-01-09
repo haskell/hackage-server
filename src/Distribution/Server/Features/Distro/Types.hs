@@ -27,12 +27,11 @@ import qualified Text.PrettyPrint as Disp
 import qualified Data.Char as Char
 
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable
 
 
 -- | Distribution names may contain letters, numbers and punctuation.
 newtype DistroName = DistroName String
- deriving (Eq, Ord, Read, Show, Typeable, MemSize)
+ deriving (Eq, Ord, Read, Show, MemSize)
 
 instance Pretty DistroName where
   pretty (DistroName name) = Disp.text name
@@ -44,21 +43,21 @@ instance Parsec DistroName where
 data Distributions = Distributions {
     nameMap :: !(Map.Map DistroName UserIdSet)
 }
- deriving (Eq, Typeable, Show)
+ deriving (Eq, Show)
 
 -- | Listing of which distributions have which versions of particular
 -- packages.
 data DistroVersions = DistroVersions {
     packageDistroMap :: !(Map.Map PackageName (Map.Map DistroName DistroPackageInfo)),
     distroMap  :: !(Map.Map DistroName (Set.Set PackageName))
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 data DistroPackageInfo
     = DistroPackageInfo
       { distroVersion :: Version.Version
       , distroUrl     :: String
       }
- deriving (Eq, Typeable, Show)
+ deriving (Eq, Show)
 
 $(deriveSafeCopy 0 'base ''DistroName)
 $(deriveSafeCopy 0 'base ''Distributions)

@@ -24,18 +24,17 @@ import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Compat.CharParsing as P
 
 import Data.SafeCopy
-import Data.Typeable (Typeable)
 
 -- | Contains the original token which will be shown to the user
 -- once and is NOT stored on the server. The user is expected
 -- to provide this token on each request that should be
 -- authed by it
 newtype OriginalToken = OriginalToken Nonce
-    deriving (Eq, Ord, Show, Typeable)
+    deriving (Eq, Ord, Show)
 
 -- | Contains a hash of the original token
 newtype AuthToken = AuthToken BSS.ShortByteString
-    deriving (Eq, Ord, Read, Show, Typeable, MemSize)
+    deriving (Eq, Ord, Read, Show, MemSize)
 
 convertToken :: OriginalToken -> AuthToken
 convertToken (OriginalToken bs) =

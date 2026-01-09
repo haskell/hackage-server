@@ -10,7 +10,6 @@ import Distribution.Version
 
 import Data.Acid  (Query, Update, makeAcidic)
 import Data.Maybe (fromMaybe, isNothing)
-import Data.Typeable (Typeable)
 import Control.Arrow (second)
 import Control.Monad (ap)
 import Control.Monad.State (put, modify)
@@ -25,13 +24,13 @@ data PreferredVersions = PreferredVersions {
     preferredMap  :: Map PackageName PreferredInfo,
     deprecatedMap :: Map PackageName [PackageName],
     migratedEphemeralPrefs :: Bool
-} deriving (Typeable, Show, Eq)
+} deriving (Show, Eq)
 
 data PreferredInfo = PreferredInfo {
     preferredRanges :: [VersionRange],
     deprecatedVersions :: [Version],
     sumRange :: Maybe VersionRange -- cached form of 'consolidateRanges' below
-} deriving (Typeable, Show, Eq)
+} deriving (Show, Eq)
 
 emptyPreferredInfo :: PreferredInfo
 emptyPreferredInfo = PreferredInfo [] [] Nothing
@@ -43,7 +42,7 @@ consolidateRanges ranges depr =
         then Nothing
         else Just range
 
-data VersionStatus = NormalVersion | DeprecatedVersion | UnpreferredVersion deriving (Show, Typeable, Eq, Ord, Enum)
+data VersionStatus = NormalVersion | DeprecatedVersion | UnpreferredVersion deriving (Show, Eq, Ord, Enum)
 
 getVersionStatus :: PreferredInfo -> Version -> VersionStatus
 getVersionStatus info version

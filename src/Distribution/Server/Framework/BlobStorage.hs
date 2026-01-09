@@ -71,7 +71,7 @@ import System.Posix.IO (
 -- | An id for a blob. The content of the blob is stable.
 --
 newtype BlobId = BlobId MD5Digest
-  deriving (Eq, Ord, Show, Typeable, MemSize)
+  deriving (Eq, Ord, Show, MemSize)
 
 instance ToJSON BlobId where
   toJSON = toJSON . blobMd5

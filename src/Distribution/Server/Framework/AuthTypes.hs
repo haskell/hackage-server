@@ -4,7 +4,6 @@ module Distribution.Server.Framework.AuthTypes where
 import Distribution.Server.Framework.MemSize
 
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable (Typeable)
 
 -- | A plain, unhashed password. Careful what you do with them.
 --
@@ -19,7 +18,7 @@ newtype PasswdPlain = PasswdPlain String
 -- us to use either the basic or digest HTTP authentication methods.
 --
 newtype PasswdHash = PasswdHash String
-  deriving (Eq, Ord, Show, Typeable, MemSize)
+  deriving (Eq, Ord, Show, MemSize)
 
 newtype RealmName = RealmName String
   deriving (Show, Eq)

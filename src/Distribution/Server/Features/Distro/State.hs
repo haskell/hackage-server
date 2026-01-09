@@ -16,7 +16,6 @@ import Distribution.Server.Framework.MemSize
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable
 
 import Data.Maybe (fromMaybe)
 import Control.Monad (liftM)
@@ -27,7 +26,7 @@ data Distros = Distros {
     distDistros  :: !Distributions,
     distVersions :: !DistroVersions
 }
- deriving (Eq, Typeable, Show)
+ deriving (Eq, Show)
 
 deriveSafeCopy 0 'base ''Distros
 

@@ -14,7 +14,6 @@ import qualified Distribution.Server.Users.Users as Users
 import Happstack.Server
 
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable (Typeable)
 
 import qualified Data.ByteString.Char8 as BS -- TODO: Verify that we don't need to worry about UTF8 here
 
@@ -31,7 +30,7 @@ import qualified Data.ByteString.Char8 as BS -- TODO: Verify that we don't need 
 -- Not the same as the new hashes we store in 'PasswdHash'.
 --
 newtype HtPasswdHash = HtPasswdHash String
-  deriving (Eq, Show, Typeable, MemSize)
+  deriving (Eq, Show, MemSize)
 
 $(deriveSafeCopy 0 'base ''HtPasswdHash)
 

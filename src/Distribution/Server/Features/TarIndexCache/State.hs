@@ -10,7 +10,6 @@ module Distribution.Server.Features.TarIndexCache.State (
 
 -- TODO: use strict map? (Can we rely on containers >= 0.5?)
 
-import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask, asks)
 import Control.Monad.State (put, modify)
 import Data.Map (Map)
@@ -25,7 +24,7 @@ import Distribution.Server.Framework.MemSize
 data TarIndexCache = TarIndexCache {
     tarIndexCacheMap :: Map BlobId BlobId
   }
-  deriving (Eq, Show, Typeable)
+  deriving (Eq, Show)
 
 $(deriveSafeCopy 0 'base ''TarIndexCache)
 

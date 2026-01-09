@@ -70,7 +70,7 @@ data PkgInfo = PkgInfo {
     --
     pkgTarballRevisions :: !(Vec.Vector (PkgTarball, UploadInfo))
 
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 data PkgInfo_v2 = PkgInfo_v2 {
     v2_pkgInfoId            :: !PackageIdentifier,
@@ -95,7 +95,7 @@ data BlobInfo = BlobInfo {
     blobInfoId         :: !BlobId,
     blobInfoLength     :: !Int,
     blobInfoHashSHA256 :: !SHA256Digest
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 blobInfoHashMD5 :: BlobInfo -> MD5Digest
 blobInfoHashMD5 = BlobStorage.blobMd5Digest . blobInfoId
@@ -109,12 +109,12 @@ data PkgTarball =
   -- translation from PkgTarball_v1 to this PkgTarball requires access to the blob
   -- store and is therefore not pure.)
   | PkgTarball_v2_v1 PkgTarball_v1
-  deriving (Eq, Typeable, Show)
+  deriving (Eq, Show)
 
 data PkgTarball_v1 = PkgTarball_v1 {
    v1_pkgTarballGz   :: !BlobId,
    v1_pkgTarballNoGz :: !BlobId
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 data PkgTarball_v0 = PkgTarball_v0 !BlobId_v0 !BlobId_v0
 

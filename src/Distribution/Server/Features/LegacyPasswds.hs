@@ -29,7 +29,6 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.ByteString.Lazy.Char8 as LBS -- ASCII data only (password hashes)
 
-import Data.Typeable (Typeable)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put)
@@ -58,7 +57,7 @@ instance IsHackageFeature LegacyPasswdsFeature where
 --
 
 newtype LegacyPasswdsTable = LegacyPasswdsTable (IntMap LegacyAuth.HtPasswdHash)
-  deriving (Eq, Show, Typeable)
+  deriving (Eq, Show)
 
 emptyLegacyPasswdsTable :: LegacyPasswdsTable
 emptyLegacyPasswdsTable = LegacyPasswdsTable IntMap.empty

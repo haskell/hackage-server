@@ -20,7 +20,6 @@ import Distribution.Server.Framework.MemSize (MemSize)
 import Distribution.Server.Users.State ()
 
 import Data.Text (Text)
-import Data.Typeable (Typeable)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import Data.Acid     (Query, Update, makeAcidic)
@@ -36,13 +35,13 @@ newtype AnalyticsPixel = AnalyticsPixel
     {
         analyticsPixelUrl :: Text
     }
-    deriving (Show, Eq, Ord, NFData, Typeable, MemSize)
+    deriving (Show, Eq, Ord, NFData, MemSize)
 
 newtype AnalyticsPixelsState = AnalyticsPixelsState
     {
         analyticsPixels :: Map PackageName (Set AnalyticsPixel)
     }
-  deriving (Show, Eq, NFData, Typeable, MemSize)
+  deriving (Show, Eq, NFData, MemSize)
 
 -- SafeCopy instances
 $(deriveSafeCopy 0 'base ''AnalyticsPixel)

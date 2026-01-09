@@ -4,7 +4,6 @@
 module Distribution.Server.Features.DownloadCount.State where
 
 import Data.Time.Calendar (Day(..))
-import Data.Typeable (Typeable)
 import Data.Foldable (forM_)
 import Control.Arrow (first)
 import Control.Monad (liftM)
@@ -51,7 +50,7 @@ data InMemStats = InMemStats {
     inMemToday  :: !Day
   , inMemCounts :: !(SimpleCountingMap PackageId)
   }
-  deriving (Show, Eq, Typeable)
+  deriving (Show, Eq)
 
 newtype OnDiskStats = OnDiskStats {
     onDiskStats :: NestedCountingMap PackageName OnDiskPerPkg

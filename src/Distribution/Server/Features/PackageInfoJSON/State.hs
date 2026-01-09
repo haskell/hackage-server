@@ -26,7 +26,6 @@ import           Data.SafeCopy        (SafeCopy(..), base, contain,
                                        deriveSafeCopy, safeGet, safePut)
 import           Data.Serialize       (Get, get, getListOf, getTwoOf, put,
                                        putListOf, putTwoOf)
-import           Data.Typeable        (Typeable)
 import           Data.Word            (Word8)
 import           Distribution.License (licenseToSPDX)
 import           Distribution.Text    (display, simpleParse)
@@ -195,7 +194,7 @@ data PackageInfoState = PackageInfoState {
     descriptions          :: !(Map.Map (PackageIdentifier, Maybe Int) PackageBasicDescription)
   , versions              :: !(Map.Map PackageName PackageVersions)
   , migratedEphemeralData :: Bool
-  } deriving (Show, Typeable, Eq)
+  } deriving (Show, Eq)
 
 getDescriptionFor
   :: (PackageIdentifier, Maybe Int)

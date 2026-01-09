@@ -16,7 +16,6 @@ import Distribution.Server.Framework.MemSize
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
 
-import Data.Typeable (Typeable)
 import Data.SafeCopy
 
 
@@ -34,7 +33,7 @@ data CandPkgInfo = CandPkgInfo {
     candWarnings   :: ![String],
     -- | Whether to allow non-maintainers to view the page or not.
     candPublic :: !Bool
-} deriving (Show, Typeable, Eq)
+} deriving (Show, Eq)
 
 candInfoId :: CandPkgInfo -> PackageIdentifier
 candInfoId = pkgInfoId . candPkgInfo

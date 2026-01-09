@@ -18,7 +18,6 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad (liftM2)
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable (Typeable)
 import qualified Data.Char as Char
 import Data.Functor ( (<&>) )
 import Data.Maybe (fromMaybe)
@@ -27,7 +26,7 @@ import Control.Monad.State (get, put, modify)
 import Control.Monad.Reader (ask, asks)
 import Control.DeepSeq
 
-newtype TagList = TagList [Tag] deriving (Show, Typeable)
+newtype TagList = TagList [Tag] deriving (Show)
 
 instance Pretty TagList where
     pretty (TagList tags) = Disp.hsep . Disp.punctuate Disp.comma $ map pretty tags
@@ -36,7 +35,7 @@ instance Parsec TagList where
 
 -- A tag is a string describing a package; presently the preferred word-separation
 -- character is the dash.
-newtype Tag = Tag String deriving (Show, Typeable, Ord, Eq, NFData, MemSize)
+newtype Tag = Tag String deriving (Show, Ord, Eq, NFData, MemSize)
 
 instance Pretty Tag where
     pretty (Tag tag) = Disp.text tag
@@ -72,10 +71,10 @@ data PackageTags = PackageTags {
     tagPackages :: Map Tag (Set PackageName),
     -- Packagename (Proposed Additions, Proposed Deletions)
     reviewTags :: Map PackageName (Set Tag, Set Tag)
-} deriving (Eq, Show, Typeable)
+} deriving (Eq, Show)
 
 
-data TagAlias = TagAlias (Map Tag (Set Tag)) deriving (Eq, Show, Typeable)
+data TagAlias = TagAlias (Map Tag (Set Tag)) deriving (Eq, Show)
 
 addTagAlias :: Tag -> Tag -> Update TagAlias ()
 addTagAlias tag alias = do

@@ -75,7 +75,6 @@ import Data.Ord (Down(..), comparing)
 import Data.SafeCopy (Migrate(migrate), MigrateFrom, base, deriveSafeCopy, extension)
 import Data.Time (UTCTime(..), addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
 import Data.Time.Format.Internal (buildTime)
-import Data.Typeable (Typeable)
 import Distribution.Text (display)
 import Network.Mail.Mime
 import Network.URI (uriAuthority, uriPath, uriRegName)
@@ -122,7 +121,7 @@ data NotifyPref_v0 = NotifyPref_v0
                     v0notifyDocBuilderReport :: Bool,
                     v0notifyPendingTags :: Bool
                   }
-                  deriving (Eq, Read, Show, Typeable)
+                  deriving (Eq, Read, Show)
 data NotifyPref = NotifyPref
                   {
                     notifyOptOut :: Bool,
@@ -134,7 +133,7 @@ data NotifyPref = NotifyPref
                     notifyDependencyForMaintained :: Bool,
                     notifyDependencyTriggerBounds :: NotifyTriggerBounds
                   }
-                  deriving (Eq, Read, Show, Typeable)
+                  deriving (Eq, Read, Show)
 
 defaultNotifyPrefs :: NotifyPref
 defaultNotifyPrefs = NotifyPref {
@@ -148,7 +147,7 @@ defaultNotifyPrefs = NotifyPref {
                        notifyDependencyTriggerBounds = NewIncompatibility
                      }
 
-data NotifyRevisionRange = NotifyAllVersions | NotifyNewestVersion | NoNotifyRevisions deriving (Bounded, Enum, Eq, Read, Show, Typeable)
+data NotifyRevisionRange = NotifyAllVersions | NotifyNewestVersion | NoNotifyRevisions deriving (Bounded, Enum, Eq, Read, Show)
 instance MemSize NotifyRevisionRange where
   memSize _ = 1
 
@@ -165,7 +164,7 @@ data NotifyTriggerBounds
   = Always
   | BoundsOutOfRange
   | NewIncompatibility
-  deriving (Bounded, Enum, Eq, Read, Show, Typeable)
+  deriving (Bounded, Enum, Eq, Read, Show)
 
 instance MemSize NotifyTriggerBounds where
   memSize _ = 1
@@ -179,7 +178,7 @@ instance MemSize NotifyPref    where memSize NotifyPref{..} = memSize8 notifyOpt
                                                                        notifyDocBuilderReport notifyPendingTags notifyDependencyForMaintained
                                                                        notifyDependencyTriggerBounds
 
-data NotifyData = NotifyData {unNotifyData :: (Map.Map UserId NotifyPref, UTCTime)} deriving (Eq, Show, Typeable)
+data NotifyData = NotifyData {unNotifyData :: (Map.Map UserId NotifyPref, UTCTime)} deriving (Eq, Show)
 
 instance MemSize NotifyData where memSize (NotifyData x) = memSize x
 
@@ -249,7 +248,7 @@ data NotifyPrefUI
     , ui_notifyDependencyForMaintained :: OK
     , ui_notifyDependencyTriggerBounds :: NotifyTriggerBounds
     }
-  deriving (Eq, Show, Typeable)
+  deriving (Eq, Show)
 
 $(deriveJSON (compatAesonOptionsDropPrefix "ui_") ''NotifyPrefUI)
 

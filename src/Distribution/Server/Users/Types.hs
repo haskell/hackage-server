@@ -25,30 +25,29 @@ import qualified Data.List as L
 
 import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
-import Data.Typeable (Typeable)
 import Data.Hashable
 import Data.Serialize (Serialize)
 
 
 newtype UserId = UserId Int
-  deriving newtype (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Pretty)
+  deriving newtype (Eq, Ord, Read, Show, MemSize, ToJSON, FromJSON, Pretty)
 
 newtype UserName  = UserName String
-  deriving newtype (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Hashable, Serialize)
+  deriving newtype (Eq, Ord, Read, Show, MemSize, ToJSON, FromJSON, Hashable, Serialize)
 
 data UserInfo = UserInfo {
                   userName   :: !UserName,
                   userStatus :: !UserStatus,
                   userTokens :: !(M.Map AuthToken T.Text) -- tokens and descriptions
-                } deriving (Eq, Show, Typeable)
+                } deriving (Eq, Show)
 
 data UserStatus = AccountEnabled  UserAuth
                 | AccountDisabled (Maybe UserAuth)
                 | AccountDeleted
-    deriving (Eq, Show, Typeable)
+    deriving (Eq, Show)
 
 newtype UserAuth = UserAuth PasswdHash
-    deriving (Show, Eq, Typeable)
+    deriving (Show, Eq)
 
 isActiveAccount :: UserStatus -> Bool
 isActiveAccount (AccountEnabled  _) = True
@@ -93,7 +92,7 @@ isValidUserNameChar c = (c < '\127' && Char.isAlphaNum c) || (c == '_')
 data UserInfo_v0 = UserInfo_v0 {
                   userName_v0   :: !UserName,
                   userStatus_v0 :: !UserStatus
-                } deriving (Eq, Show, Typeable)
+                } deriving (Eq, Show)
 
 $(deriveSafeCopy 0 'base ''UserId)
 $(deriveSafeCopy 0 'base ''UserName)
