@@ -866,13 +866,14 @@ pruneHaddockFiles dir = do
 
 tarGzDirectory :: FilePath -> IO BS.ByteString
 tarGzDirectory dir = do
-    res <- liftM (GZip.compress . Tar.write) $
-               Tar.pack containing_dir [nested_dir]
-    -- This seq is extremely important! Tar.pack is lazy, scanning
-    -- directories as entries are demanded.
+    entries <- Tar.pack' containing_dir [nested_dir]
+    tarcontents <- Tar.write' entries
+    let gzipped = GZip.compress tarcontents
+    -- This seq is extremely important! Tar.write' is lazy, reading
+    -- files as entries are demanded.
     -- This interacts very badly with the renameDirectory stuff with
     -- which tarGzDirectory gets wrapped.
-    BS.length res `seq` return res
+    BS.length gzipped `seq` return gzipped
   where (containing_dir, nested_dir) = splitFileName dir
 
 uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath

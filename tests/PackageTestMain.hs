@@ -43,16 +43,16 @@ tarPermissions =
         (testPermissions "tests/permissions-tarballs/bad-dir-perms.tar.gz" badDirMangler)
     ]
 
-goodMangler :: (Tar.GenEntry tarPath linkTarget -> Maybe CombinedTarErrs)
+goodMangler :: (Tar.GenEntry content tarPath linkTarget -> Maybe CombinedTarErrs)
 goodMangler = const Nothing
 
-badFileMangler :: (Tar.GenEntry FilePath linkTarget -> Maybe CombinedTarErrs)
+badFileMangler :: (Tar.GenEntry content FilePath linkTarget -> Maybe CombinedTarErrs)
 badFileMangler entry =
   case Tar.entryContent entry of
     (Tar.NormalFile _ _) -> Just $ PermissionsError (Tar.entryTarPath entry) 0o600
     _ -> Nothing
 
-badDirMangler :: (Tar.GenEntry FilePath linkTarget -> Maybe CombinedTarErrs)
+badDirMangler :: (Tar.GenEntry content FilePath linkTarget -> Maybe CombinedTarErrs)
 badDirMangler entry =
   case Tar.entryContent entry of
     Tar.Directory -> Just $ PermissionsError (Tar.entryTarPath entry) 0o700
@@ -153,8 +153,9 @@ successTestTGZ pkg tar = do
 
 tarGzFile :: String -> IO ByteString
 tarGzFile name = do
-  entries <- Tar.pack "tests/unpack-checks" [name]
-  return (GZip.compress (Tar.write entries))
+  entries <- Tar.pack' "tests/unpack-checks" [name]
+  tarcontents <- Tar.write' entries
+  return (GZip.compress tarcontents)
 
 -- | Remove all Tar.Entries that are not files.
 keepOnlyFiles :: ByteString -> ByteString
