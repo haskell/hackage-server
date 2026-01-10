@@ -51,7 +51,6 @@
     $endif$
 
     <div id="flex-container">
-
       <div id="left-pane">
 
         <div id="description">

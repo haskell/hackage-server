@@ -150,7 +150,7 @@ abstractAcidStateComponent' :: MemSize st
                             -> StateComponent AcidState st -> AbstractStateComponent
 abstractAcidStateComponent' cmp st = AbstractStateComponent {
     abstractStateDesc       = stateDesc st
-  , abstractStateCheckpoint = createCheckpoint (stateHandle st)
+  , abstractStateCheckpoint = createCheckpoint (stateHandle st) *> createArchive (stateHandle st)
   , abstractStateClose      = closeAcidState (stateHandle st)
   , abstractStateBackup     = \t -> liftM (backupState st t) (getState st)
   , abstractStateRestore    = abstractRestoreBackup (putState st) (restoreState st)

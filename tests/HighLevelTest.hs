@@ -215,6 +215,7 @@ runPackageTests = do
        xs <- map packageName `liftM` getPackages
        unless (xs == ["testpackage"]) $
            die ("Bad package list: " ++ show xs)
+
     do info "Getting package index"
        targz <- getUrl NoAuth "/packages/index.tar.gz"
        let tar = GZip.decompress $ LBS.pack targz
@@ -229,6 +230,7 @@ runPackageTests = do
                return ()
            _ ->
                die "Bad index contents"
+
     do info "Getting package index with etag"
        validateETagHandling "/packages/index.tar.gz"
 
