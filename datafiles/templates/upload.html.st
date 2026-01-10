@@ -44,7 +44,7 @@ cannot be the same as the name of an existing package, based on a
 case-insensitive comparison. The exception is if the maintainer uploading the
 new package is a maintainer of the existing package.
 </p>
-
+  
 <h3 id="changelogs">Version history and change logs</h3>
 
 <p>If a package includes a ChangeLog file (in either plain text or Markdown format), Hackage will link to it on the corresponding package page. The following filenames are recognized:</p>

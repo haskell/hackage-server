@@ -12,7 +12,6 @@ import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 
 import Distribution.Server.Users.State ()
 
-import Data.Typeable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List
@@ -29,7 +28,7 @@ type Score = Int
 newtype VotesState_v0 = VotesState_v0 { votesMap :: Map PackageName UserIdSet }
 
 newtype VotesState = VotesState (Map PackageName (Map UserId Score))
-  deriving (Show, Eq, Typeable, MemSize)
+  deriving (Show, Eq, MemSize)
 
 -- SafeCopy instances
 deriveSafeCopy 0 'base      ''VotesState_v0

@@ -16,7 +16,6 @@ module Data.TarIndex (
   ) where
 
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable (Typeable)
 
 import Codec.Archive.Tar (Entry, GenEntry(..), GenEntryContent(..), Entries, GenEntries(..), entryPath)
 import qualified Data.StringTable as StringTable
@@ -56,16 +55,16 @@ data TarIndex = TarIndex
 
   !(StringTable PathComponentId)            -- ^ The mapping of filepath components as strings to ids.
   !(IntTrie PathComponentId TarEntryOffset) -- ^ Mapping of sequences of filepath component ids to tar entry offsets.
-  deriving (Show, Typeable)
+  deriving (Show)
 
 
 data TarIndexEntry = TarFileEntry !TarEntryOffset
                    | TarDir [(FilePath, TarIndexEntry)]
-  deriving (Show, Typeable)
+  deriving (Show)
 
 
 newtype PathComponentId = PathComponentId Int
-  deriving (Eq, Ord, Enum, Show, Typeable)
+  deriving (Eq, Ord, Enum, Show)
 
 type TarEntryOffset = Int
 

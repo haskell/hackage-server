@@ -237,7 +237,7 @@ data MirrorError = MirrorIOError IOError
                  | PutPackageError PackageId ErrorResponse
                  | Interrupted
                  | InvalidOption String
-  deriving (Typeable,Show)
+  deriving (Show)
 
 instance Exception MirrorError
 

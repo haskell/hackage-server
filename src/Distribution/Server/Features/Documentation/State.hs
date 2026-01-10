@@ -9,7 +9,6 @@ import Distribution.Server.Framework.MemSize
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 
@@ -18,7 +17,7 @@ import qualified Data.Map as Map
 ---------------------------------- Documentation
 data Documentation = Documentation {
      documentation :: !(Map.Map PackageIdentifier BlobId)
-   } deriving (Typeable, Show, Eq)
+   } deriving (Show, Eq)
 
 deriveSafeCopy 0 'base ''Documentation
 

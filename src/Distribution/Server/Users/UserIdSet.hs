@@ -29,7 +29,7 @@ import Data.Aeson (ToJSON)
 -- anywhere a set of users identified by 'UserId' is needed.
 --
 newtype UserIdSet = UserIdSet IntSet.IntSet
-  deriving (Eq, Semigroup, Monoid, Typeable, Show, NFData, MemSize, ToJSON)
+  deriving (Eq, Semigroup, Monoid, Show, NFData, MemSize, ToJSON)
 
 empty :: UserIdSet
 empty = UserIdSet IntSet.empty

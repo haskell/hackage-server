@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/haskell-updates";
+    nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
     flake-root.url = "github:srid/flake-root";
@@ -27,7 +27,9 @@
             hackage-server run \
               --static-dir=datafiles \
               --state-dir=state \
-              --base-uri=http://127.0.0.1:8080
+              --base-uri=http://127.0.0.1:8080 \
+              --required-base-host-header=localhost:8080 \
+              --user-content-uri=http://127.0.0.1:8080
           '';
         };
         apps.mirror-hackage-server.program = pkgs.writeShellApplication {
@@ -42,25 +44,29 @@
         };
         packages.default = config.packages.hackage-server;
         haskellProjects.default = {
+          basePackages = pkgs.haskell.packages.ghc912;
           settings = {
             hackage-server.check = false;
-            ap-normalize.check = false;
-            # https://community.flake.parts/haskell-flake/dependency#nixpkgs
-            tar = { super, ... }:
-              { custom = _: super.tar_0_6_3_0; };
-            hackage-security = { super, ... }:
-              { custom = _: super.hackage-security_0_6_2_6; };
+
+            Cabal-syntax = { super, ... }:
+              { custom = _: super.Cabal-syntax_3_16_0_0; };
+            Cabal = { super, ... }:
+              { custom = _: super.Cabal_3_16_0_0; };
+
+            sandwich.check = false;
+
+            unicode-data.check = false;
           };
           packages = {
             # https://community.flake.parts/haskell-flake/dependency#path
             # tls.source = "1.9.0";
+            tar.source = "0.7.0.0";
           };
           devShell = {
             tools = hp: {
               inherit (pkgs)
                 cabal-install
                 ghc
-
                 # https://github.com/haskell/hackage-server/pull/1219#issuecomment-1597140858
                 # glibc
                 icu67

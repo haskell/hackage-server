@@ -50,7 +50,6 @@ import Data.List  (sort, group, foldl')
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..))
-import Data.Typeable (Typeable)
 import Control.Exception (assert)
 import qualified Data.Text as T
 
@@ -68,7 +67,7 @@ data Users = Users {
     -- | A map from 'AuthToken' to 'UserId' for quick token based auth
     authTokenMap :: !(Map.Map AuthToken UserId)
   }
-  deriving (Eq, Typeable, Show)
+  deriving (Eq, Show)
 
 instance MemSize Users where
   memSize (Users a b c d) = memSize4 a b c d
@@ -147,11 +146,11 @@ emptyUsers = Users {
   }
 
 -- error codes
-data ErrUserNameClash = ErrUserNameClash deriving Typeable
-data ErrUserIdClash   = ErrUserIdClash   deriving Typeable
-data ErrNoSuchUserId  = ErrNoSuchUserId  deriving Typeable
-data ErrDeletedUser   = ErrDeletedUser   deriving Typeable
-data ErrTokenNotOwned = ErrTokenNotOwned deriving Typeable
+data ErrUserNameClash = ErrUserNameClash
+data ErrUserIdClash   = ErrUserIdClash
+data ErrNoSuchUserId  = ErrNoSuchUserId
+data ErrDeletedUser   = ErrDeletedUser
+data ErrTokenNotOwned = ErrTokenNotOwned
 
 $(deriveSafeCopy 0 'base ''ErrUserNameClash)
 $(deriveSafeCopy 0 'base ''ErrUserIdClash)
@@ -377,7 +376,7 @@ data Users_v0 = Users_v0 {
     -- | The next available UserId
     nextId_v0      :: !UserId
   }
-  deriving (Eq, Typeable, Show)
+  deriving (Eq, Show)
 
 $(deriveSafeCopy 0 'base ''Users_v0)
 

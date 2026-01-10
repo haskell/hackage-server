@@ -84,7 +84,7 @@ newtype PackageIndex pkg = PackageIndex
   --
   (Map PackageName [pkg])
 
-  deriving (Show, Read, Typeable, MemSize)
+  deriving (Show, Read, MemSize)
 
 instance Eq pkg => Eq (PackageIndex pkg) where
   PackageIndex m1 == PackageIndex m2 = flip Foldable.all (mergeMaps m1 m2) $ \mr -> case mr of

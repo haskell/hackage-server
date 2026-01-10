@@ -28,14 +28,11 @@ license:      BSD-3-Clause
 license-file: LICENSE
 
 tested-with:
-  GHC == 9.10.1
-  GHC == 9.8.2
-  GHC == 9.6.5
-  GHC == 9.4.8
-  GHC == 9.2.8
-  GHC == 9.0.2
-  GHC == 8.10.7
-  GHC == 8.8.4
+  GHC == 9.12.2
+  GHC == 9.10.2
+  GHC == 9.8.4
+  GHC == 9.6.7
+  -- Constraint transformers >= 0.6 forces GHC >= 9.6 for CI
 
 data-dir: datafiles
 data-files:
@@ -121,8 +118,28 @@ flag doctests
 
 ----------------------------------------------------------------------------
 
+common language-defaults
+  default-language:
+    Haskell2010
+  default-extensions:
+    LambdaCase
+    TupleSections
+  other-extensions:
+    CPP
+    TemplateHaskell
+
+  ghc-options:
+    -funbox-strict-fields
+    -Wall
+    -Wtabs
+    -Wno-deprecated-flags
+    -Wno-unused-do-bind
+    -Wno-unused-record-wildcards
+    -Werror=incomplete-patterns
+    -Werror=missing-methods
+
 common defaults
-  default-language: Haskell2010
+  import: language-defaults
 
   -- version ranges of pre-installed packages for GHC
   --
@@ -130,48 +147,34 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.13  && < 4.21
+    , base                   >= 4.18  && < 4.22
     , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.10  && < 0.13
-    , containers             >= 0.6.0 && < 0.8
+    , containers             >= 0.6.0 && < 0.9
     , deepseq                >= 1.4   && < 1.6
     , directory              >= 1.3   && < 1.4
     , filepath               >= 1.4   && < 1.6
     , mtl                    >= 2.2.1 && < 2.4
     , pretty                 >= 1.1   && < 1.2
-    , process                >= 1.6   && < 1.7
     , text                  ^>= 1.2.5.0 || >= 2.0 && < 2.2
-    , time                   >= 1.9   && < 1.13
+    , time                   >= 1.9   && < 1.15
     , transformers           >= 0.5   && < 0.7
     , unix                   >= 2.7   && < 2.9
     , scientific
   -- other dependencies shared by most components
   build-depends:
     , aeson                  >= 2.1.0.0 && < 2.3
-    , Cabal                  >= 3.12.1.0 && < 3.14
-    , Cabal-syntax           >= 3.12.1.0 && < 3.14
+    , Cabal                  >= 3.14.2.0 && < 3.18
+    , Cabal-syntax           >= 3.14.2.0 && < 3.18
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
-    , fail                  ^>= 4.9.0
-    , network                >= 3 && < 3.3
     , network-bsd           ^>= 2.8
     , network-uri           ^>= 2.6
     , parsec                ^>= 3.1.13
-    , tar                   ^>= 0.6
+    , tar                   ^>= 0.7
     , unordered-containers  ^>= 0.2.10
     , vector                ^>= 0.12 || ^>= 0.13.0.0
     , zlib                  ^>= 0.6.2  || ^>= 0.7.0.0
-
-  ghc-options:
-    -funbox-strict-fields
-    -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags
-    -Werror=incomplete-patterns -Werror=missing-methods
-
-  if impl(ghc >= 8.10)
-    ghc-options: -Wno-unused-record-wildcards
-
-  default-extensions: LambdaCase, TupleSections
-  other-extensions: CPP, TemplateHaskell
 
 
 library
@@ -423,7 +426,6 @@ library
     , bimap                 ^>= 0.5
       --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder
     , blaze-builder         ^>= 0.4
-    , blaze-html            ^>= 0.9
     , cereal                ^>= 0.5
     , commonmark            ^>= 0.2
         -- commonmark-0.2 needed by commonmark-extensions-0.2.2
@@ -433,7 +435,6 @@ library
     , cryptohash-sha256     ^>= 0.11.100
     , csv                   ^>= 0.1
     , ed25519               ^>= 0.0.5
-    , exceptions            ^>= 0.10
     , hackage-security       >= 0.6 && < 0.7
         -- N.B: hackage-security-0.6.2 uses Cabal-syntax-3.8.1.0
         -- see https://github.com/haskell/hackage-server/issues/1130
@@ -443,19 +444,17 @@ library
         -- haddock-library-1.11.0 changed type of markupOrderedList
         -- see https://github.com/haskell/hackage-server/issues/1128
     , happstack-server      ^>= 7.7.1     || ^>= 7.8.0  || ^>= 7.9.0
-    , hashable              ^>= 1.3       || ^>= 1.4
+    , hashable               >= 1.3       && < 1.6
     , hs-captcha            ^>= 1.0
     , hslogger              ^>= 1.3.1
     , lifted-base           ^>= 0.2.1
     , mime-mail             ^>= 0.5
-    , random                ^>= 1.2
+    , random                 >= 1.2       && < 1.4
     , rss                   ^>= 3000.2.0.7
     , safecopy              ^>= 0.10
-    , semigroups            ^>= 0.20
     , split                 ^>= 0.2
     , stm                   ^>= 2.5.0
     , stringsearch          ^>= 0.3.6.6
-    , tagged                ^>= 0.8.5
     , transformers          ^>= 0.6
     , xhtml                  >= 3000.2.0.0 && < 3000.5
     , xmlgen                ^>= 0.6
@@ -474,21 +473,35 @@ library
 
 ----------------------------------------------------------------------------
 
-common exe-defaults
-  import: defaults
+common exe-base
+  import: language-defaults
 
-  build-depends: hackage-server
   hs-source-dirs: exes
   ghc-options: -threaded -rtsopts
 
   other-modules:   Paths_hackage_server
   autogen-modules: Paths_hackage_server
 
+  build-depends:
+    , base
+    , hackage-server
+
+common exe-defaults
+  import: defaults
+  import: exe-base
 
 executable hackage-server
-  import: exe-defaults
+  import: exe-base
 
   main-is: Main.hs
+  build-depends:
+    , bytestring
+    , Cabal
+    , directory
+    , filepath
+    , network-uri
+    , parsec
+    , unix
 
   ghc-options: -with-rtsopts=-I00
 
@@ -501,6 +514,7 @@ executable hackage-mirror
     -- version constraints inherited from hackage-server
     , HTTP
     , hackage-security
+    , process                >= 1.6   && < 1.7
 
 executable hackage-build
   import: exe-defaults
@@ -510,6 +524,7 @@ executable hackage-build
   build-depends:
     -- version constraints inherited from hackage-server
     , http-types
+    , process                >= 1.6   && < 1.7
 
   -- Runtime dependency only;
   -- TODO: we have no proper support for this kind of dependencies in cabal
@@ -540,7 +555,10 @@ common test-defaults
 
   build-depends: hackage-server
   hs-source-dirs: tests
-  ghc-options: -threaded -rtsopts -fno-warn-orphans
+  ghc-options:
+    -threaded
+    -rtsopts
+    -Wno-orphans
 
   other-modules:   Paths_hackage_server
   autogen-modules: Paths_hackage_server
@@ -599,7 +617,7 @@ test-suite ReverseDependenciesTest
     , tasty-hedgehog ^>= 1.4
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
-    , hedgehog     ^>= 1.4
+    , hedgehog      >= 1.4 && < 1.6
     , exceptions
     , bimap
     , mime-mail
@@ -695,7 +713,7 @@ test-suite DocTests
   main-is:        DocTestMain.hs
   build-depends:
     , hackage-server
-    , doctest-parallel ^>= 0.3.0
+    , doctest-parallel ^>= 0.4
         -- doctest-parallel-0.2.2 is the first to filter out autogen-modules
 
   if !flag(doctests)

@@ -29,7 +29,6 @@ import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
 import Data.Aeson.TH
 
-import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put)
 
@@ -61,14 +60,14 @@ data AccountDetails = AccountDetails {
                         accountKind         :: Maybe AccountKind,
                         accountAdminNotes   :: !Text
                       }
-  deriving (Eq, Show, Typeable)
+  deriving (Eq, Show)
 
 
 data AccountKind = AccountKindRealUser | AccountKindSpecial
-  deriving (Eq, Show, Typeable, Enum, Bounded)
+  deriving (Eq, Show, Enum, Bounded)
 
 newtype UserDetailsTable = UserDetailsTable (IntMap AccountDetails)
-  deriving (Eq, Show, Typeable)
+  deriving (Eq, Show)
 
 data NameAndContact = NameAndContact { ui_name  :: Text, ui_contactEmailAddress :: Text }
 data AdminInfo      = AdminInfo      { ui_accountKind :: Maybe AccountKind, ui_notes :: Text }

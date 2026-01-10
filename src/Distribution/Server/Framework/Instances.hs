@@ -250,7 +250,9 @@ instance SafeCopy CompilerFlavor where
     putCopy JHC               = contain $ putWord8 7
     putCopy LHC               = contain $ putWord8 8
     putCopy UHC               = contain $ putWord8 9
+#if !MIN_VERSION_Cabal_syntax(3,16,0)
     putCopy (HaskellSuite s)  = contain $ putWord8 10 >> safePut s
+#endif
     putCopy GHCJS             = contain $ putWord8 11
     putCopy Eta               = contain $ putWord8 12
 #if MIN_VERSION_Cabal_syntax(3,12,1)
@@ -270,7 +272,9 @@ instance SafeCopy CompilerFlavor where
         7  -> return JHC
         8  -> return LHC
         9  -> return UHC
+#if !MIN_VERSION_Cabal_syntax(3,16,0)
         10 -> return HaskellSuite <*> safeGet
+#endif
         11 -> return GHCJS
         12 -> return Eta
 #if MIN_VERSION_Cabal_syntax(3,12,1)
@@ -411,7 +415,9 @@ instance Arbitrary CompilerFlavor where
     , pure JHC
     , pure LHC
     , pure UHC
+#if !MIN_VERSION_Cabal_syntax(3,16,0)
     , pure HaskellSuite <*> vectorOf 3 (choose ('A', 'Z'))
+#endif
     , pure GHCJS
     , pure Eta
 #if MIN_VERSION_Cabal_syntax(3,12,1)

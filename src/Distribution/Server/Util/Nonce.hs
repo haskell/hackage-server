@@ -14,14 +14,13 @@ import Distribution.Server.Framework.MemSize
 
 import Data.ByteString (ByteString)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
-import Data.Typeable
 import System.IO
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BS -- Only used for ASCII data
 import qualified Data.Char as Char
 
 newtype Nonce = Nonce ByteString
-  deriving (Eq, Ord, Show, Typeable, MemSize)
+  deriving (Eq, Ord, Show, MemSize)
 
 newRandomNonce :: Int -> IO Nonce
 newRandomNonce len =
@@ -46,7 +45,7 @@ parseNonceM = either fail return . parseNonce
 -- | Nonce and Nonce_v0 have the same type, but the "new" nonce is
 -- internally NOT base16 encoded
 newtype Nonce_v0 = Nonce_v0 ByteString
-  deriving (Eq, Ord, Show, Typeable, MemSize)
+  deriving (Eq, Ord, Show,  MemSize)
 
 $(deriveSafeCopy 0 'base ''Nonce_v0)
 

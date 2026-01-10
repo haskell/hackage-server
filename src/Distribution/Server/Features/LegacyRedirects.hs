@@ -82,7 +82,7 @@ serveLegacyGets = msum
         (fileName', ".gz") -> case Posix.splitExtension fileName' of
           (packageStr, ".tar") -> case simpleParse packageStr of
             Just pkgid ->
-              movedPermanently (packageTarball pkgid) $ toResponse ""
+              movedPermanently (packageTarball pkgid) $ contentLength $ toResponse ()
             _ -> mzero
           _ -> mzero
         _ -> mzero

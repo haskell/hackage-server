@@ -226,7 +226,6 @@ data CoreResource = CoreResource {
     corePackageTarball  :: Resource,
     -- | A Cabal file metatada revision.
     coreCabalFileRev    :: Resource,
-    coreCabalFileRevName    :: Resource,
 
     -- Rendering resources.
     -- | URI for `corePackagesPage`, given a format (blank for none).
@@ -405,7 +404,6 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           , coreCabalFile
           , coreCabalFileRevs
           , coreCabalFileRev
-          , coreCabalFileRevName
           , coreUserDeauth
           , coreAdminDeauth
           , corePackUserDeauth
@@ -459,11 +457,6 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
         resourceDesc = [(GET, "Get package .cabal file revision")]
       , resourceGet  = [("cabal", serveCabalFileRevision)]
       }
-    coreCabalFileRevName = (resourceAt "/package/:package/revision/:tarball-:revision.:format") {
-        resourceDesc = [(GET, "Get package .cabal file revision with name")]
-      , resourceGet  = [("cabal", serveCabalFileRevisionName)]
-      }
-
 
     coreUserDeauth = (resourceAt "/packages/deauth") {
         resourceDesc = [(GET,  "Deauth Package user")]
@@ -667,7 +660,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     serveLegacyPackagesIndexTarGz _ = do
       tarball <- indexTarballLegacyGz <$> readAsyncCache cacheIndexTarball
       let tarballmd5 = show $ tarGzHashMD5 tarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      cacheControl [Public, NoTransform, maxAgeMinutes 1] (ETag tarballmd5)
       enableRange
       return $ toResponse tarball
 
@@ -675,7 +668,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     serveIncremPackagesIndexTarGz _ = do
       tarball <- indexTarballIncremGz <$> readAsyncCache cacheIndexTarball
       let tarballmd5 = show $ tarGzHashMD5 tarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      cacheControl [Public, NoTransform, maxAgeMinutes 1] (ETag tarballmd5)
       enableRange
       return $ toResponse tarball
 
@@ -683,7 +676,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     serveIncremPackagesIndexTar _ = do
       tarball <- indexTarballIncremUn <$> readAsyncCache cacheIndexTarball
       let tarballmd5 = show $ tarHashMD5 tarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      cacheControl [Public, NoTransform, maxAgeMinutes 1] (ETag tarballmd5)
       enableRange
       return $ toResponse tarball
 
@@ -751,21 +744,6 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     serveCabalFileRevision :: DynamicPath -> ServerPartE Response
     serveCabalFileRevision dpath = do
-      pkginfo <- packageInPath dpath >>= lookupPackageId
-      let mrev      = lookup "revision" dpath >>= fromReqURI
-          revisions = pkgMetadataRevisions pkginfo
-      case mrev >>= \rev -> revisions Vec.!? rev of
-        Just (fileRev, (utime, _uid)) -> return $ toResponse cabalfile
-          where
-            cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
-        Nothing -> errNotFound "Package revision not found"
-                     [MText "Cannot parse revision, or revision out of range."]
-
-    serveCabalFileRevisionName :: DynamicPath -> ServerPartE Response
-    serveCabalFileRevisionName dpath = do
-      pkgid1 <- packageTarballInPath dpath
-      pkgid2 <- packageInPath dpath
-      guard (pkgVersion pkgid2 == pkgVersion pkgid2)
       pkginfo <- packageInPath dpath >>= lookupPackageId
       let mrev      = lookup "revision" dpath >>= fromReqURI
           revisions = pkgMetadataRevisions pkginfo

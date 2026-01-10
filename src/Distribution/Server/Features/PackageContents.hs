@@ -74,7 +74,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
                                     }
                                   }
                        TarIndexCacheFeature{packageTarball, findToplevelFile}
-                       UserFeature{queryGetUserDb}
+                       UserFeature{queryGetUserDb, userFeatureServerEnv}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
@@ -205,10 +205,12 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
       case mTarball of
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
-        Right (fp, etag, index) ->
-          tarServeResponse <$> serveTarball (display (packageId pkg) ++ " source tarball")
-                       [] (display (packageId pkg)) fp index
-                       [Public, maxAgeDays 30] etag Nothing
+        Right (fp, etag, index) -> do
+          tarServe <-
+            serveTarball (display (packageId pkg) ++ " source tarball")
+                         [] (display (packageId pkg)) fp index
+                         [Public, maxAgeDays 30] etag Nothing
+          requireUserContent userFeatureServerEnv (tarServeResponse tarServe)
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack

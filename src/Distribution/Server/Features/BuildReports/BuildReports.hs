@@ -50,7 +50,6 @@ import qualified Data.Map as Map
 import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize, get, put)
 import Data.SafeCopy
-import Data.Typeable (Typeable)
 import qualified Data.List as L
 import qualified Data.Char as Char
 import Data.Maybe (fromMaybe)
@@ -59,7 +58,7 @@ import Text.StringTemplate (ToSElem(..))
 
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord, Typeable, Show, MemSize, Pretty)
+  deriving (Eq, Ord, Show, MemSize, Pretty)
 
 incrementReportId :: BuildReportId -> BuildReportId
 incrementReportId (BuildReportId n) = BuildReportId (n+1)
@@ -81,10 +80,10 @@ instance Parsec BuildReportId where
       f c = Char.ord c - Char.ord '0'
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
-  deriving (Eq, Typeable, Show, MemSize)
+  deriving (Eq, Show, MemSize)
 
 newtype TestLog = TestLog BlobStorage.BlobId
-  deriving (Eq, Typeable, Show, MemSize)
+  deriving (Eq, Show, MemSize)
 
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
@@ -96,12 +95,12 @@ data PkgBuildReports = PkgBuildReports {
     nextReportId :: !BuildReportId,
     buildStatus :: !BuildStatus,
     runTests     :: !Bool
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 data BuildReports = BuildReports {
     reportsIndex :: !(Map.Map PackageId PkgBuildReports)
 
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 emptyPkgReports :: PkgBuildReports
 emptyPkgReports = PkgBuildReports {
@@ -300,7 +299,7 @@ data PkgBuildReports_v3 = PkgBuildReports_v3 {
     reports_v3      :: !(Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg )),
     nextReportId_v3 :: !BuildReportId,
     buildStatus_v3 :: !BuildStatus
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 instance SafeCopy PkgBuildReports_v3 where
     version = 3
@@ -320,7 +319,7 @@ instance MemSize PkgBuildReports_v3 where
 data PkgBuildReports_v2 = PkgBuildReports_v2 {
     reports_v2      :: !(Map BuildReportId (BuildReport, Maybe BuildLog)),
     nextReportId_v2 :: !BuildReportId
-} deriving (Eq, Typeable, Show)
+} deriving (Eq, Show)
 
 instance SafeCopy PkgBuildReports_v2 where
     version = 2
@@ -397,7 +396,7 @@ instance Serialize BuildReports_v0 where
 
 data BuildReports_v2 = BuildReports_v2
   { reportsIndex_v2 :: !(Map.Map PackageId PkgBuildReports_v2)
-  } deriving (Eq, Typeable, Show)
+  } deriving (Eq, Show)
 
 instance Migrate BuildReports_v2 where
      type MigrateFrom BuildReports_v2 = BuildReports_v0
@@ -411,7 +410,7 @@ deriveSafeCopy 2 'extension ''BuildReports_v2
 
 data BuildReports_v3 = BuildReports_v3
   { reportsIndex_v3 :: !(Map.Map PackageId PkgBuildReports_v3)
-  } deriving (Eq, Typeable, Show)
+  } deriving (Eq, Show)
 
 instance Migrate BuildReports_v3 where
     type MigrateFrom BuildReports_v3 = BuildReports_v2

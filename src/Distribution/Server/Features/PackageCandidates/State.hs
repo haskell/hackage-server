@@ -2,8 +2,6 @@
 
 module Distribution.Server.Features.PackageCandidates.State where
 
-import Distribution.Server.Prelude
-
 import Distribution.Server.Features.PackageCandidates.Types
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Packages.Types
@@ -24,11 +22,11 @@ data CandidatePackages = CandidatePackages {
 
     -- | Did we do the migration for PkgTarball, computing hashes for candidates?
   , candidateMigratedPkgTarball :: Bool
-  } deriving (Typeable, Show, Eq)
+  } deriving (Show, Eq)
 
 data CandidatePackages_v0 = CandidatePackages_v0 {
     candidateList_v0 :: !(PackageIndex.PackageIndex CandPkgInfo)
-  } deriving (Typeable, Show, Eq)
+  } deriving (Show, Eq)
 
 deriveSafeCopy 0 'base ''CandidatePackages_v0
 
