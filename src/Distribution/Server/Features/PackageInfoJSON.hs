@@ -59,8 +59,6 @@ import qualified Data.List as List
 import Data.Time (UTCTime)
 import Distribution.Server.Users.Types (UserName (..), UserInfo(..))
 import Distribution.Server.Features.Users (UserFeature(lookupUserInfo))
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 
 data PackageInfoJSONFeature = PackageInfoJSONFeature {
@@ -97,18 +95,17 @@ initPackageInfoJSONFeature env = do
                \and the values are whether the version is preferred or not"
         vInfo = "Get basic package information at a specific metadata revision"
 
-        uploaderCache = undefined
         jsonResources = [
           (Framework.extendResource (corePackagePage coreR)) {
                 Framework.resourceDesc = [(Framework.GET, info)]
               , Framework.resourceGet  =
-                  [("json", servePackageBasicDescription coreR uploaderCache userFeature
+                  [("json", servePackageBasicDescription coreR userFeature
                             preferred packageInfoState)]
               }
           , (Framework.extendResource (coreCabalFileRev coreR)) {
                 Framework.resourceDesc = [(Framework.GET, vInfo)]
               , Framework.resourceGet  =
-                  [("json", servePackageBasicDescription coreR uploaderCache userFeature
+                  [("json", servePackageBasicDescription coreR userFeature
                      preferred packageInfoState)]
               }
           ]
@@ -202,14 +199,13 @@ dtoToBasicDescription dto =
 --   A listing of versions and their deprecation states
 servePackageBasicDescription
   :: CoreResource
-  -> Map PackageIdentifier UserName
   -> UserFeature
   -> Preferred.VersionsFeature
   -> Framework.StateComponent Framework.AcidState PackageInfoState
   -> Framework.DynamicPath
      -- ^ URI specifying a package and version `e.g. lens or lens-4.11`
   -> Framework.ServerPartE Framework.Response
-servePackageBasicDescription resource uploaderCache userFeature preferred packageInfoState dpath = do
+servePackageBasicDescription resource userFeature preferred packageInfoState dpath = do
 
   let metadataRev :: Maybe Int = lookup "revision" dpath >>= Framework.fromReqURI
 
@@ -228,19 +224,6 @@ servePackageBasicDescription resource uploaderCache userFeature preferred packag
       -> Framework.ServerPartE Framework.Response
     lookupOrInsertDescr pkgid metadataRev = do
       cachedDescr <- Framework.queryState packageInfoState $ GetDescriptionFor (pkgid, metadataRev)
-      descr :: PackageBasicDescriptionDTO <- case cachedDescr of
-        Just d  -> do
-            uploader <- getPackageUploader pkgid uploaderCache
-            return $ basicDescriptionToDTO uploader d
-        Nothing -> do
-          dto <- getPackageDescr pkgid metadataRev
-          let description = dtoToBasicDescription dto
-          Framework.updateState packageInfoState $
-            SetDescriptionFor (pkgid, metadataRev) (Just description)
-          return dto
-      return $ Framework.toResponse $ Aeson.toJSON descr
-
-    getPackageDescr pkgid metadataRev = do
       guardValidPackageId resource pkgid
       pkg <- lookupPackageId resource pkgid
 
@@ -248,6 +231,20 @@ servePackageBasicDescription resource uploaderCache userFeature preferred packag
           uploadInfos  = snd <$> pkgMetadataRevisions pkg
           nMetadata    = Vector.length metadataRevs
           metadataInd  = fromMaybe (nMetadata - 1) metadataRev
+      descr :: PackageBasicDescriptionDTO <- case cachedDescr of
+        Just d  -> do
+          let uploaderId = snd $ uploadInfos Vector.! metadataInd
+          uploader <- userName <$> lookupUserInfo userFeature uploaderId
+          return $ basicDescriptionToDTO uploader d
+        Nothing -> do
+          dto <- getPackageDescr metadataInd nMetadata metadataRevs uploadInfos
+          let description = dtoToBasicDescription dto
+          Framework.updateState packageInfoState $
+            SetDescriptionFor (pkgid, metadataRev) (Just description)
+          return dto
+      return $ Framework.toResponse $ Aeson.toJSON descr
+
+    getPackageDescr metadataInd nMetadata metadataRevs uploadInfos = do
 
       when (metadataInd < 0 || metadataInd >= nMetadata)
         (Framework.errNotFound "Revision not found"
@@ -289,15 +286,6 @@ servePackageBasicDescription resource uploaderCache userFeature preferred packag
         . PackageVersions
         . Preferred.classifyVersions prefInfo
         $ fmap packageVersion pkgs
-
-getPackageUploader
-  :: PackageIdentifier
-  -> Map PackageIdentifier UserName
-  -> Framework.ServerPartE UserName
-getPackageUploader pkgId cache =
-  case Map.lookup pkgId cache of
-    Just u -> pure u
-    Nothing -> Framework.errNotFound "Could not find uploader" []
 
 -- | Our backup doesn't produce any entries, and backup restore
 --   returns an empty state. Our responses are cheap enough to
