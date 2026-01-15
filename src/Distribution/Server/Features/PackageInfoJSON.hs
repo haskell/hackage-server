@@ -180,19 +180,6 @@ basicDescriptionToDTO uploader d =
     , uploader
     }
 
-dtoToBasicDescription :: PackageBasicDescriptionDTO -> PackageBasicDescription
-dtoToBasicDescription dto =
-  PackageBasicDescription
-    { pbd_license = dto.license
-    , pbd_copyright = dto.copyright
-    , pbd_synopsis = dto.synopsis
-    , pbd_description = dto.description
-    , pbd_author = dto.author
-    , pbd_homepage = dto.homepage
-    , pbd_metadata_revision = dto.metadata_revision
-    , pbd_uploaded_at = dto.uploaded_at
-    }
-
 -- | Get a JSON @PackageBasicDescription@ for a particular
 --   package/version/metadata-revision
 --      OR
@@ -223,7 +210,6 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
       -> Maybe Int
       -> Framework.ServerPartE Framework.Response
     lookupOrInsertDescr pkgid metadataRev = do
-      cachedDescr <- Framework.queryState packageInfoState $ GetDescriptionFor (pkgid, metadataRev)
       guardValidPackageId resource pkgid
       pkg <- lookupPackageId resource pkgid
 
@@ -231,21 +217,10 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
           uploadInfos  = snd <$> pkgMetadataRevisions pkg
           nMetadata    = Vector.length metadataRevs
           metadataInd  = fromMaybe (nMetadata - 1) metadataRev
-      descr :: PackageBasicDescriptionDTO <- case cachedDescr of
-        Just d  -> do
-          let uploaderId = snd $ uploadInfos Vector.! metadataInd
-          uploader <- userName <$> lookupUserInfo userFeature uploaderId
-          return $ basicDescriptionToDTO uploader d
-        Nothing -> do
-          dto <- getPackageDescr metadataInd nMetadata metadataRevs uploadInfos
-          let description = dtoToBasicDescription dto
-          Framework.updateState packageInfoState $
-            SetDescriptionFor (pkgid, metadataRev) (Just description)
-          return dto
+      descr <- getPackageDescr metadataInd nMetadata metadataRevs uploadInfos
       return $ Framework.toResponse $ Aeson.toJSON descr
 
     getPackageDescr metadataInd nMetadata metadataRevs uploadInfos = do
-
       when (metadataInd < 0 || metadataInd >= nMetadata)
         (Framework.errNotFound "Revision not found"
          [Framework.MText
