@@ -217,11 +217,6 @@ data PackageInfoState = PackageInfoState {
   , migratedEphemeralData :: Bool
   } deriving (Show, Eq)
 
-getDescriptionFor
-  :: (PackageIdentifier, Maybe Int)
-  -> Query PackageInfoState (Maybe PackageBasicDescription)
-getDescriptionFor pkgId = asks $ Map.lookup pkgId . descriptions
-
 getVersionsFor
   :: PackageName
   -> Query PackageInfoState (Maybe PackageVersions)
@@ -272,9 +267,7 @@ initialPackageInfoState freshDB = PackageInfoState
   }
 
 makeAcidic ''PackageInfoState
-  [ 'getDescriptionFor
-  , 'getVersionsFor
-  , 'setDescriptionFor
+  [ 'getVersionsFor
   , 'setVersionsFor
   , 'getPackageInfo
   , 'replacePackageInfo

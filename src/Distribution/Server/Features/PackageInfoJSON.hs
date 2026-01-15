@@ -46,8 +46,6 @@ import           Distribution.Server.Features.PackageInfoJSON.State (PackageBasi
                                                                      PackageInfoState(..),
                                                                      GetPackageInfo(..),
                                                                      ReplacePackageInfo(..),
-                                                                     GetDescriptionFor(..),
-                                                                     SetDescriptionFor(..),
                                                                      GetVersionsFor(..),
                                                                      SetVersionsFor(..),
                                                                      initialPackageInfoState
@@ -118,8 +116,6 @@ initPackageInfoJSONFeature env = do
                    (packageChangeHook core)
                    isPackageChangeAny $ \(pkgid, _) -> do
 
-          Framework.updateState packageInfoState $
-            SetDescriptionFor (pkgid, Nothing) Nothing
           Framework.updateState packageInfoState $
             SetVersionsFor (packageName pkgid) Nothing
 
