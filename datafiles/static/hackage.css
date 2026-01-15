@@ -1307,3 +1307,16 @@ a.deprecated[href]:visited {
     background: #222;
   }
 }
+
+
+@media (prefer-color-scheme: dark) {
+  thead th{
+      background-color: #5E5184;
+      color: #e0e0e0;
+  }
+
+  tbody td{
+      background-color: #926efa;
+      color: white;
+  }
+}
