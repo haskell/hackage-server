@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:         hackage-server
-version:      0.5.1
+version:      0.6
 
 category:     Distribution
 synopsis:     The Hackage web server
