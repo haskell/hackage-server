@@ -61,7 +61,7 @@ $hackagePageHeader()$
 <p>Guidelines for Hackage Packages:</p>
 <ul>
 <li>Hackage accepts uploads
-  of <a href="https://cabal.readthedocs.io/en/latest/intro.html#what-s-in-a-package">Cabal
+  of <a href="https://cabal.readthedocs.io/en/latest/cabal-context.html#what-s-in-a-package">Cabal
     packages</a></li>
 <li>Packages must be in the standard compressed tarball form produced by Cabal's
 <a href="https://cabal.readthedocs.io/en/3.4/cabal-commands.html#cabal-v2-sdist">sdist</a>
