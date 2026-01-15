@@ -1,6 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Distribution.Server.Features.PackageInfoJSON (
   PackageInfoJSONFeature(..)
@@ -15,47 +17,101 @@ import Prelude ()
 import Distribution.Server.Prelude
 
 import qualified Data.Aeson                 as Aeson
+import           Data.Aeson                 ((.=))
+import qualified Data.Aeson.Key             as Key
 import qualified Data.ByteString.Lazy.Char8 as BS (toStrict)
+import qualified Data.Map.Strict      as Map
 import qualified Data.Text                  as T
 import qualified Data.Vector                as Vector
 
 import           Distribution.License                         (licenseToSPDX)
 import           Distribution.Package                         (PackageIdentifier(..),
-                                                               PackageName, packageName,
                                                                packageVersion)
 import qualified Distribution.Parsec                          as Parsec
 import qualified Distribution.PackageDescription.Parsec       as PkgDescr
+import           Distribution.Text                            (display)
 import qualified Distribution.Types.GenericPackageDescription as PkgDescr
 import qualified Distribution.Types.PackageDescription        as PkgDescr
-import           Distribution.Version                         (nullVersion)
+import qualified Distribution.Pretty       as Pretty
+import           Distribution.SPDX.License                    (License)
+import           Distribution.Version                         (nullVersion, Version)
 
-import           Distribution.Server.Framework                  ((</>))
-import qualified Distribution.Server.Framework                  as Framework
-import           Distribution.Server.Features.Core              (CoreFeature(..),
-                                                                 CoreResource(..),
-                                                                 isPackageChangeAny)
+import qualified Distribution.Server.Framework                as Framework
+import           Distribution.Server.Features.Core            (CoreFeature(..),
+                                                               CoreResource(..))
 import qualified Distribution.Server.Features.PreferredVersions as Preferred
-import           Distribution.Server.Packages.Types             (CabalFileText(..), pkgMetadataRevisions)
-import           Distribution.Server.Framework.BackupRestore    (RestoreBackup(..))
+import           Distribution.Server.Packages.Types           (CabalFileText(..), pkgMetadataRevisions)
 
-import           Distribution.Server.Features.PackageInfoJSON.State (PackageBasicDescription(..),
-                                                                     PackageVersions(..),
-                                                                     PackageInfoState(..),
-                                                                     GetPackageInfo(..),
-                                                                     ReplacePackageInfo(..),
-                                                                     GetDescriptionFor(..),
-                                                                     SetDescriptionFor(..),
-                                                                     GetVersionsFor(..),
-                                                                     SetVersionsFor(..),
-                                                                     initialPackageInfoState
-                                                                    )
 import Distribution.Utils.ShortText (fromShortText)
 import Data.Foldable (toList)
 import Data.Traversable (for)
 import qualified Data.List as List
 import Data.Time (UTCTime)
-import Distribution.Server.Users.Types (UserName, UserInfo(..))
+import Distribution.Server.Users.Types (UserName (..), UserInfo(..))
 import Distribution.Server.Features.Users (UserFeature(lookupUserInfo))
+
+data PackageBasicDescription = PackageBasicDescription
+  { pbd_license           :: !License
+  , pbd_copyright         :: !T.Text
+  , pbd_synopsis          :: !T.Text
+  , pbd_description       :: !T.Text
+  , pbd_author            :: !T.Text
+  , pbd_homepage          :: !T.Text
+  , pbd_metadata_revision :: !Int
+  , pbd_uploaded_at       :: !UTCTime
+  } deriving (Eq, Show)
+
+
+
+-- | Data type used in the `/package/:packagename` JSON endpoint
+data PackageBasicDescriptionDTO = PackageBasicDescriptionDTO
+  { license           :: !License
+  , copyright         :: !T.Text
+  , synopsis          :: !T.Text
+  , description       :: !T.Text
+  , author            :: !T.Text
+  , homepage          :: !T.Text
+  , metadata_revision :: !Int
+  , uploaded_at       :: !UTCTime
+  , uploader          :: !UserName
+  } deriving (Eq, Show)
+
+instance Aeson.ToJSON PackageBasicDescriptionDTO where
+  toJSON PackageBasicDescriptionDTO {..} =
+    Aeson.object
+      [ Key.fromString "license"           .= Pretty.prettyShow license
+      , Key.fromString "copyright"         .= copyright
+      , Key.fromString "synopsis"          .= synopsis
+      , Key.fromString "description"       .= description
+      , Key.fromString "author"            .= author
+      , Key.fromString "homepage"          .= homepage
+      , Key.fromString "metadata_revision" .= metadata_revision
+      , Key.fromString "uploaded_at"       .= uploaded_at
+      , Key.fromString "uploader"          .= uploader
+      ]
+
+
+-- | An index of versions for one Hackage package
+--   and their preferred/deprecated status
+newtype PackageVersions = PackageVersions {
+  unPackageVersions :: [(Version, Preferred.VersionStatus)]
+  } deriving (Eq, Show)
+
+-- | This encoding of @PackageVersions@ is used in the
+-- `/package/$package` endpoint (when the URI doesn't specify)
+-- a version. Any change here is an API change.
+instance Aeson.ToJSON PackageVersions where
+  toJSON (PackageVersions p) =
+    Aeson.toJSON
+    $ Map.mapKeys display
+    $ fmap encodeStatus
+    $ Map.fromList p
+    where
+      encodeStatus = \case
+        Preferred.NormalVersion      -> "normal"
+        Preferred.DeprecatedVersion  -> "deprecated"
+        Preferred.UnpreferredVersion -> "unpreferred"
+
 
 
 data PackageInfoJSONFeature = PackageInfoJSONFeature {
@@ -76,14 +132,10 @@ data PackageInfoJSONResource = PackageInfoJSONResource {
 -- | Initializing our feature involves adding JSON variants to the
 -- endpoints that serve basic information about a package-version,
 -- and a packages version deprecation status.
--- Additionally we set up caching for these endpoints,
--- and attach a package change hook that invalidates the cache
--- line for a package when it changes
 initPackageInfoJSONFeature
   :: Framework.ServerEnv
   -> IO (CoreFeature -> Preferred.VersionsFeature -> UserFeature -> IO PackageInfoJSONFeature)
-initPackageInfoJSONFeature env = do
-  packageInfoState <- packageInfoStateComponent False (Framework.serverStateDir env)
+initPackageInfoJSONFeature _env = do
   return $ \core preferred userFeature -> do
 
     let coreR = coreResource core
@@ -97,28 +149,15 @@ initPackageInfoJSONFeature env = do
                 Framework.resourceDesc = [(Framework.GET, info)]
               , Framework.resourceGet  =
                   [("json", servePackageBasicDescription coreR userFeature
-                            preferred packageInfoState)]
+                            preferred)]
               }
           , (Framework.extendResource (coreCabalFileRev coreR)) {
                 Framework.resourceDesc = [(Framework.GET, vInfo)]
               , Framework.resourceGet  =
                   [("json", servePackageBasicDescription coreR userFeature
-                     preferred packageInfoState)]
+                     preferred)]
               }
           ]
-
-        -- When a package is modified in any way, delet all its
-        -- PackageInfoState cache lines.
-        -- They will be recalculated next time the endpoint
-        -- is hit
-        postInit = Framework.registerHookJust
-                   (packageChangeHook core)
-                   isPackageChangeAny $ \(pkgid, _) -> do
-
-          Framework.updateState packageInfoState $
-            SetDescriptionFor (pkgid, Nothing) Nothing
-          Framework.updateState packageInfoState $
-            SetVersionsFor (packageName pkgid) Nothing
 
     return $ PackageInfoJSONFeature {
       packageInfoJSONFeatureInterface =
@@ -126,24 +165,22 @@ initPackageInfoJSONFeature env = do
             { Framework.featureDesc      = "Provide JSON endpoints for basic package descriptions"
             , Framework.featureResources = jsonResources
             , Framework.featureCaches    = []
-            , Framework.featurePostInit  = postInit
-            , Framework.featureState     =
-                [Framework.abstractAcidStateComponent packageInfoState]
+            , Framework.featurePostInit  = pure ()
+            , Framework.featureState     = []
             }
       }
 
 
 -- | Pure function for extracting basic package info from a Cabal file
 getBasicDescription
-  :: UserName
-  -> UTCTime
+  :: UTCTime
     -- ^ Time of upload
   -> CabalFileText
   -> Int
      -- ^ Metadata revision. This will be added to the resulting
      --   @PackageBasicDescription@
   -> Either String PackageBasicDescription
-getBasicDescription uploader uploadedAt (CabalFileText cf) metadataRev =
+getBasicDescription uploadedAt (CabalFileText cf) metadataRev =
   let parseResult = PkgDescr.parseGenericPackageDescription (BS.toStrict cf)
   in case PkgDescr.runParseResult parseResult of
     (_, Right pkg) -> let
@@ -157,7 +194,6 @@ getBasicDescription uploader uploadedAt (CabalFileText cf) metadataRev =
       pbd_homepage          = T.pack . fromShortText $ PkgDescr.homepage pkgd
       pbd_metadata_revision = metadataRev
       pbd_uploaded_at       = uploadedAt
-      pbd_uploader          = uploader
       in
       return $ PackageBasicDescription {..}
     (_, Left (_, perrs)) ->
@@ -165,6 +201,19 @@ getBasicDescription uploader uploadedAt (CabalFileText cf) metadataRev =
        in Left $ "Could not parse cabal file: "
                    <> errs
 
+basicDescriptionToDTO :: UserName -> PackageBasicDescription -> PackageBasicDescriptionDTO
+basicDescriptionToDTO uploader d =
+  PackageBasicDescriptionDTO
+    { license = d.pbd_license
+    , copyright = d.pbd_copyright
+    , synopsis = d.pbd_synopsis
+    , description = d.pbd_description
+    , author = d.pbd_author
+    , homepage = d.pbd_homepage
+    , metadata_revision = d.pbd_metadata_revision
+    , uploaded_at = d.pbd_uploaded_at
+    , uploader
+    }
 
 -- | Get a JSON @PackageBasicDescription@ for a particular
 --   package/version/metadata-revision
@@ -174,11 +223,10 @@ servePackageBasicDescription
   :: CoreResource
   -> UserFeature
   -> Preferred.VersionsFeature
-  -> Framework.StateComponent Framework.AcidState PackageInfoState
   -> Framework.DynamicPath
      -- ^ URI specifying a package and version `e.g. lens or lens-4.11`
   -> Framework.ServerPartE Framework.Response
-servePackageBasicDescription resource userFeature preferred packageInfoState dpath = do
+servePackageBasicDescription resource userFeature preferred dpath = do
 
   let metadataRev :: Maybe Int = lookup "revision" dpath >>= Framework.fromReqURI
 
@@ -186,28 +234,16 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
   guardValidPackageName resource name
 
   if version /= nullVersion
-    then lookupOrInsertDescr pkgid metadataRev
-    else lookupOrInsertVersions name
+    then fetchDescr pkgid metadataRev
+    else Framework.toResponse . Aeson.toJSON <$> getVersionListing name
 
   where
 
-    lookupOrInsertDescr
+    fetchDescr
       :: PackageIdentifier
       -> Maybe Int
       -> Framework.ServerPartE Framework.Response
-    lookupOrInsertDescr pkgid metadataRev = do
-      cachedDescr <- Framework.queryState packageInfoState $
-                     GetDescriptionFor (pkgid, metadataRev)
-      descr :: PackageBasicDescription <- case cachedDescr of
-        Just d  -> return d
-        Nothing -> do
-          d <- getPackageDescr pkgid metadataRev
-          Framework.updateState packageInfoState $
-            SetDescriptionFor (pkgid, metadataRev) (Just d)
-          return d
-      return $ Framework.toResponse $ Aeson.toJSON descr
-
-    getPackageDescr pkgid metadataRev = do
+    fetchDescr pkgid metadataRev = do
       guardValidPackageId resource pkgid
       pkg <- lookupPackageId resource pkgid
 
@@ -215,7 +251,10 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
           uploadInfos  = snd <$> pkgMetadataRevisions pkg
           nMetadata    = Vector.length metadataRevs
           metadataInd  = fromMaybe (nMetadata - 1) metadataRev
+      descr <- getPackageDescr metadataInd nMetadata metadataRevs uploadInfos
+      return $ Framework.toResponse $ Aeson.toJSON descr
 
+    getPackageDescr metadataInd nMetadata metadataRevs uploadInfos = do
       when (metadataInd < 0 || metadataInd >= nMetadata)
         (Framework.errNotFound "Revision not found"
          [Framework.MText
@@ -227,25 +266,12 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
           uploadedAt = fst $ uploadInfos Vector.! metadataInd
           uploaderId = snd $ uploadInfos Vector.! metadataInd
       uploader <- userName <$> lookupUserInfo userFeature uploaderId
-      let pkgDescr  = getBasicDescription uploader uploadedAt cabalFile metadataInd
+      let pkgDescr  = getBasicDescription uploadedAt cabalFile metadataInd
       case pkgDescr of
         Left e  -> Framework.errInternalError [Framework.MText e]
-        Right d -> return d
-
-    lookupOrInsertVersions
-      :: PackageName
-      -> Framework.ServerPartE Framework.Response
-    lookupOrInsertVersions pkgname = do
-      cachedVersions <- Framework.queryState packageInfoState $
-                        GetVersionsFor pkgname
-      vers :: PackageVersions <- case cachedVersions of
-        Just vs  -> return vs
-        Nothing -> do
-          vs <- getVersionListing pkgname
-          Framework.updateState packageInfoState $
-            SetVersionsFor pkgname (Just vs)
-          return vs
-      return $ Framework.toResponse $ Aeson.toJSON vers
+        Right d -> do
+          let packageInfoDTO =  basicDescriptionToDTO uploader d
+          return packageInfoDTO
 
     getVersionListing name = do
       pkgs <- lookupPackageName resource name
@@ -254,34 +280,3 @@ servePackageBasicDescription resource userFeature preferred packageInfoState dpa
         . PackageVersions
         . Preferred.classifyVersions prefInfo
         $ fmap packageVersion pkgs
-
-
--- | Our backup doesn't produce any entries, and backup restore
---   returns an empty state. Our responses are cheap enough to
---   compute that we would rather regenerate them by need than
---   deal with the complexity persisting backups in
---   yet-another-format
-packageInfoStateComponent
-  :: Bool
-  -> FilePath
-  -> IO (Framework.StateComponent Framework.AcidState PackageInfoState)
-packageInfoStateComponent freshDB stateDir = do
-  st <- Framework.openLocalStateFrom
-        (stateDir </> "db" </> "PackageInfoJSON")
-        (initialPackageInfoState freshDB)
-  return Framework.StateComponent {
-      stateDesc    = "Preferred package versions"
-    , stateHandle  = st
-    , getState     = Framework.query st GetPackageInfo
-    , putState     = Framework.update st . ReplacePackageInfo
-    , resetState   = packageInfoStateComponent True
-    , backupState  = \_ -> return []
-    , restoreState = nullRestore (initialPackageInfoState True)
-    }
-  where
-
-    nullRestore :: PackageInfoState -> RestoreBackup PackageInfoState
-    nullRestore st = RestoreBackup {
-      restoreEntry = \_ -> nullRestore <$> pure (initialPackageInfoState True)
-      , restoreFinalize = return st
-      }

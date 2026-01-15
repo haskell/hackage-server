@@ -365,7 +365,6 @@ library
       Distribution.Server.Features.HaskellPlatform
       Distribution.Server.Features.HaskellPlatform.State
       Distribution.Server.Features.PackageInfoJSON
-      Distribution.Server.Features.PackageInfoJSON.State
       Distribution.Server.Features.Search
       Distribution.Server.Features.Search.BM25F
       Distribution.Server.Features.Search.DocIdSet
