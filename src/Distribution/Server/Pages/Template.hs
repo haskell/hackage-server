@@ -6,6 +6,7 @@ module Distribution.Server.Pages.Template
     ) where
 
 import Text.XHtml.Strict
+import qualified Text.XHtml as XHtml
 
 --TODO: replace all this with external templates
 
@@ -36,21 +37,22 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
                             , thetype "image/png"] << noHtml
                 , meta ! [ name "viewport"
                          , content "width=device-width, initial-scale=1"]
-                , (script noHtml) ! [ src "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js", thetype "text/javascript"]
+                , script noHtml ! [ src "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js", thetype "text/javascript"]
                 -- if Search is enabled
                 , thelink ! [ rel "search", href "/packages/opensearch.xml"
                             , thetype "application/opensearchdescription+xml"
                             , title "Hackage" ] << noHtml
                 ]
-    docBody   = [ thediv  ! [identifier "page-header"] << docHeader
+    docBody   = [ theheader  ! [identifier "page-header"] << docHeader
                 , thediv  ! [identifier "content"] << docContent ]
     docHeader = [ docSubtitle
                 , navigationBar
                 ]
+    theheader = XHtml.tag "header"
 
 navigationBar :: Html
 navigationBar =
-    ulist ! [theclass "links", identifier "page-menu"]
+    thenav $ ulist ! [theclass "links", identifier "page-menu"]
       <<  map (li <<)
           [ anchor ! [href introductionURL] << "Home"
           , form   ! [action "/packages/search", theclass "search", method "get"]
@@ -61,6 +63,8 @@ navigationBar =
           , anchor ! [href uploadURL]   << "Upload"
           , anchor ! [href accountsURL] << "User accounts"
           ]
+  where 
+    thenav = XHtml.tag "nav"
 
 
 googleFontURL :: URL
