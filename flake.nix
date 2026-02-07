@@ -55,6 +55,8 @@
 
             sandwich.check = false;
 
+            threads.check = false;
+
             unicode-data.check = false;
           };
           packages = {
