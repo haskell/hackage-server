@@ -19,6 +19,7 @@ import Distribution.Server.Features.Core     (initCoreFeature, coreResource, que
 import Distribution.Server.Features.Security (initSecurityFeature)
 import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
+import Distribution.Server.Features.Database   (initDatabaseFeature)
 
 #ifndef MINIMAL
 import Distribution.Server.Features.Browse              (initBrowseFeature)
@@ -101,6 +102,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                             initMirrorFeature env
     mkUploadFeature      <- logStartup "upload" $
                             initUploadFeature env
+    mkDatabaseFeature    <- logStartup "database" $
+                            initDatabaseFeature env
 #ifndef MINIMAL
     mkTarIndexCacheFeature   <- logStartup "tar index" $
                                 initTarIndexCacheFeature env
@@ -189,6 +192,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     uploadFeature   <- mkUploadFeature
                          usersFeature
                          coreFeature
+
+    databaseFeature <- mkDatabaseFeature
 
 #ifndef MINIMAL
     tarIndexCacheFeature <- mkTarIndexCacheFeature
@@ -392,6 +397,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface securityFeature
          , getFeatureInterface mirrorFeature
          , getFeatureInterface uploadFeature
+         , getFeatureInterface databaseFeature
 #ifndef MINIMAL
          , getFeatureInterface tarIndexCacheFeature
          , getFeatureInterface packageContentsFeature
