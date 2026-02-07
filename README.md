@@ -221,7 +221,10 @@ If you want to run the server directly from the build tree, run
 
 once to initialise the state. After that you can run the server with
 
-    cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
+    cabal v2-run -- hackage-server run --static-dir=datafiles --state-dir=state \
+        --base-uri=http://127.0.0.1:8080 \
+        --required-base-host-header=localhost:8080 \
+        --user-content-uri=http://127.0.0.1:8080
 
 By default the server runs on port `8080` with the following settings:
 
