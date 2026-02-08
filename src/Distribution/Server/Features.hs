@@ -215,6 +215,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                             uploadFeature
 
     userSignupFeature <- mkUserSignupFeature
+                           databaseFeature
                            usersFeature
                            userDetailsFeature
                            uploadFeature
@@ -305,6 +306,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     platformFeature <- mkPlatformFeature
 
     htmlFeature     <- mkHtmlFeature
+                         databaseFeature
                          usersFeature
                          coreFeature
                          packageContentsFeature
@@ -334,6 +336,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                           uploadFeature
 
     adminFrontendFeature <- mkAdminFrontendFeature
+                              databaseFeature
                               usersFeature
                               userDetailsFeature
                               userSignupFeature
@@ -358,6 +361,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                       uploadFeature
 
     userNotifyFeature <- mkUserNotifyFeature
+                           databaseFeature
                            usersFeature
                            coreFeature
                            uploadFeature

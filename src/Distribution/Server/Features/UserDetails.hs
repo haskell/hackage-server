@@ -14,9 +14,10 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Users
+import Distribution.Server.Features.UserDetails.State
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.Database (DatabaseFeature (..))
+import Distribution.Server.Features.Database (DatabaseFeature (..), HackageDb (..))
 import qualified Distribution.Server.Features.Database as Database
 
 import Distribution.Server.Users.Types
@@ -38,6 +39,8 @@ import Control.Monad.State (get, put)
 import Distribution.Text (display)
 import Data.Version
 import Text.CSV (CSV, Record)
+import Database.Beam hiding (update)
+import Database.Beam.Backend.SQL.BeamExtensions
 
 
 -- | A feature to store extra information about users like email addresses.
@@ -45,8 +48,8 @@ import Text.CSV (CSV, Record)
 data UserDetailsFeature = UserDetailsFeature {
     userDetailsFeatureInterface :: HackageFeature,
 
-    queryUserDetails  :: forall m. MonadIO m => UserId -> m (Maybe AccountDetails),
-    updateUserDetails :: forall m. MonadIO m => UserId -> AccountDetails -> m ()
+    queryUserDetails  :: UserId -> Database.Transaction (Maybe AccountDetails),
+    updateUserDetails :: UserId -> AccountDetails -> Database.Transaction ()
 }
 
 instance IsHackageFeature UserDetailsFeature where
@@ -280,18 +283,19 @@ migrateStateToDatabase :: StateComponent AcidState UserDetailsTable
                        -> IO ()
 migrateStateToDatabase userDetailsState DatabaseFeature{..} = do
   (UserDetailsTable tbl) <- queryState userDetailsState GetUserDetailsTable
-  forM_ (IntMap.toList tbl) $ \(uid, details) -> do
-    -- NOTE: This is actually performing a merge
-    --       by inserting records of user ids we know nothing about.
-    r <- accountDetailsFindByUserId (UserId uid)
-    when (isNothing r) $
-      accountDetailsUpsert Database.AccountDetails {
-          _adUserId = fromIntegral uid,
-          _adName = accountName details,
-          _adContactEmail = accountContactEmail details,
-          _adKind = fromAccountKind (accountKind details),
-          _adAdminNotes = accountAdminNotes details
-        }
+  withTransaction $ do
+    forM_ (IntMap.toList tbl) $ \(uid, details) -> do
+      -- NOTE: This is actually performing a merge
+      --       by inserting records of user ids we know nothing about.
+      r <- accountDetailsFindByUserId (UserId uid)
+      when (isNothing r) $
+        accountDetailsUpsert AccountDetailsRow {
+            _adUserId = fromIntegral uid,
+            _adName = accountName details,
+            _adContactEmail = accountContactEmail details,
+            _adKind = fromAccountKind (accountKind details),
+            _adAdminNotes = accountAdminNotes details
+          }
 
 userDetailsFeature :: Templates
                    -> StateComponent AcidState UserDetailsTable
@@ -338,18 +342,22 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
       , resourceDelete = [ ("", handlerDeleteAdminInfo) ]
       }
 
+    -- handlerWithConnection :: (Database.Connection -> DynamicPath -> ServerPartE Response) -> DynamicPath -> ServerPartE Response
+    -- handlerWithConnection handler dpath =
+    --   Database.withConnection $ \conn -> _ handler conn dpath
+
     -- Queries and updates
     --
 
-    queryUserDetails :: MonadIO m => UserId -> m (Maybe AccountDetails)
+    queryUserDetails :: UserId -> Database.Transaction (Maybe AccountDetails)
     queryUserDetails uid = fmap toUserDetails <$> accountDetailsFindByUserId uid
 
-    updateUserDetails :: MonadIO m => UserId -> AccountDetails -> m ()
+    updateUserDetails :: UserId -> AccountDetails -> Database.Transaction ()
     updateUserDetails uid@(UserId _uid) udetails = modifyAccountDetails uid (const udetails)
 
     -- convenient helper to update only part of the record.
     -- We use the same record for information that is editable by the user and information that is only editable by admins.
-    modifyAccountDetails :: MonadIO m => UserId -> (AccountDetails -> AccountDetails) -> m ()
+    modifyAccountDetails :: UserId -> (AccountDetails -> AccountDetails) -> Database.Transaction ()
     modifyAccountDetails uid@(UserId _uid) change = do
       -- NOTE: we need to query the current value because we are updating only some of the fields.
       madetails <- queryUserDetails uid
@@ -362,7 +370,7 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
                       } madetails
       let cdetails = change adetails
 
-      accountDetailsUpsert Database.AccountDetails {
+      accountDetailsUpsert AccountDetailsRow {
           _adUserId = fromIntegral _uid,
           _adName = accountName cdetails,
           _adContactEmail = accountContactEmail cdetails,
@@ -377,7 +385,7 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
       (uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
       template <- getTemplate templates "user-details-form.html"
-      udetails <- queryUserDetails uid
+      udetails <- withTransaction $ queryUserDetails uid
       showConfirmationOfSave <- not . null <$> queryString (lookBSs "showConfirmationOfSave")
       let
         emailTxt = maybe "" accountContactEmail udetails
@@ -402,7 +410,7 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
     handlerGetUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-        udetails <- queryUserDetails uid
+        udetails <- withTransaction $ queryUserDetails uid
         return $ toResponse (Aeson.toJSON (render udetails))
       where
         render Nothing = NameAndContact T.empty T.empty
@@ -420,21 +428,21 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
         NameAndContact name email <- expectAesonContent
         guardValidLookingName name
         guardValidLookingEmail email
-        modifyAccountDetails uid (\adetails -> adetails { accountName = name, accountContactEmail = email })
+        withTransaction $ modifyAccountDetails uid (\adetails -> adetails { accountName = name, accountContactEmail = email })
         noContent $ toResponse ()
 
     handlerDeleteUserNameContact :: DynamicPath -> ServerPartE Response
     handlerDeleteUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-        modifyAccountDetails uid (\adetails -> adetails { accountName = "", accountContactEmail = "" })
+        withTransaction $ modifyAccountDetails uid (\adetails -> adetails { accountName = "", accountContactEmail = "" })
         noContent $ toResponse ()
 
     handlerGetAdminInfo :: DynamicPath -> ServerPartE Response
     handlerGetAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
-        udetails <- queryUserDetails uid
+        udetails <- withTransaction $ queryUserDetails uid
         return $ toResponse (Aeson.toJSON (render udetails))
       where
         render Nothing = AdminInfo Nothing T.empty
@@ -449,18 +457,45 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
         AdminInfo akind notes <- expectAesonContent
-        modifyAccountDetails uid (\adetails -> adetails { accountKind = akind, accountAdminNotes = notes })
+        withTransaction $ modifyAccountDetails uid (\adetails -> adetails { accountKind = akind, accountAdminNotes = notes })
         noContent $ toResponse ()
 
     handlerDeleteAdminInfo :: DynamicPath -> ServerPartE Response
     handlerDeleteAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
-        modifyAccountDetails uid (\adetails -> adetails { accountKind = Nothing, accountAdminNotes = "" })
+        withTransaction $ modifyAccountDetails uid (\adetails -> adetails { accountKind = Nothing, accountAdminNotes = "" })
         noContent $ toResponse ()
 
-toUserDetails :: Database.AccountDetails -> AccountDetails
-toUserDetails Database.AccountDetails {..} =
+
+-- Database
+
+accountDetailsFindByUserId :: UserId -> Database.Transaction (Maybe AccountDetailsRow)
+accountDetailsFindByUserId (UserId userId) =
+  Database.runSelectReturningOne $
+    select $
+      filter_ (\ad -> _adUserId ad ==. val_ (fromIntegral userId)) $
+        all_ (_accountDetails Database.hackageDb)
+
+-- Use the values from the INSERT that caused the conflict
+accountDetailsUpsert :: AccountDetailsRow -> Database.Transaction ()
+accountDetailsUpsert details =
+  Database.runInsert $
+    insertOnConflict
+      (_accountDetails Database.hackageDb)
+      (insertValues [details])
+      (conflictingFields primaryKey)
+      ( onConflictUpdateSet $ \fields _oldRow ->
+          mconcat
+            [ _adName fields <-. val_ (_adName details),
+              _adContactEmail fields <-. val_ (_adContactEmail details),
+              _adKind fields <-. val_ (_adKind details),
+              _adAdminNotes fields <-. val_ (_adAdminNotes details)
+            ]
+      )
+
+toUserDetails :: AccountDetailsRow -> AccountDetails
+toUserDetails AccountDetailsRow {..} =
   AccountDetails
     { accountName = _adName,
       accountContactEmail = _adContactEmail,

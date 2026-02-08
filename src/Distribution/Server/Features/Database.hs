@@ -1,29 +1,50 @@
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# HLINT ignore "Avoid lambda" #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Distribution.Server.Features.Database where
 
-import Data.Int (Int32)
-import Data.Text (Text)
-import Database.Beam
-import Database.Beam.Backend.SQL.BeamExtensions
+import Control.Monad.Reader
+import Data.Kind
+import Data.Pool
+import Database.Beam hiding (runSelectReturningOne)
+import qualified Database.Beam
 import Database.Beam.Sqlite
-import Database.SQLite.Simple
+import qualified Database.SQLite.Simple
+import Distribution.Server.Features.UserDetails.State
 import Distribution.Server.Framework
-import Distribution.Server.Users.Types (UserId (..))
+
+newtype Connection = SqlLiteConnection Database.SQLite.Simple.Connection
+
+runSelectReturningOne :: forall a. (FromBackendRow Sqlite a) => SqlSelect Sqlite a -> Transaction (Maybe a)
+runSelectReturningOne q =
+  Transaction $ ReaderT $ \(SqlLiteConnection conn) -> runBeamSqlite conn $ Database.Beam.runSelectReturningOne q
+
+runInsert :: forall (table :: (Type -> Type) -> Type). SqlInsert Sqlite table -> Transaction ()
+runInsert q =
+  Transaction $ ReaderT $ \(SqlLiteConnection conn) -> runBeamSqlite conn $ Database.Beam.runInsert q
+
+newtype Transaction a = Transaction {unTransaction :: ReaderT Connection IO a} -- TODO: don't expose the internals of this
+  deriving (Functor, Applicative, Monad)
+
+runTransaction :: Transaction a -> Connection -> IO a
+runTransaction (Transaction t) = runReaderT t
 
 -- | A feature to store extra information about users like email addresses.
 data DatabaseFeature = DatabaseFeature
   { databaseFeatureInterface :: HackageFeature,
-    accountDetailsFindByUserId :: forall m. (MonadIO m) => UserId -> m (Maybe AccountDetails),
-    accountDetailsUpsert :: forall m. (MonadIO m) => AccountDetails -> m ()
+    withTransaction :: forall a m. (MonadIO m) => Transaction a -> m a
   }
 
 instance IsHackageFeature DatabaseFeature where
@@ -31,11 +52,17 @@ instance IsHackageFeature DatabaseFeature where
 
 initDatabaseFeature :: ServerEnv -> IO (IO DatabaseFeature)
 initDatabaseFeature env = pure $ do
-  conn <- open (serverDatabase env)
-  pure $ mkDatabaseFeature conn
+  dbpool <-
+    newPool $
+      defaultPoolConfig
+        (Database.SQLite.Simple.open (serverDatabase env))
+        Database.SQLite.Simple.close
+        (5 {- time in seconds before unused connection is closed -})
+        (20 {- number of connections -})
+  pure $ mkDatabaseFeature dbpool
   where
-    mkDatabaseFeature :: Connection -> DatabaseFeature
-    mkDatabaseFeature conn = DatabaseFeature {..}
+    mkDatabaseFeature :: Pool Database.SQLite.Simple.Connection -> DatabaseFeature
+    mkDatabaseFeature dbpool = DatabaseFeature {..}
       where
         databaseFeatureInterface =
           (emptyHackageFeature "database")
@@ -44,37 +71,19 @@ initDatabaseFeature env = pure $ do
               featureState = [] -- CHECK: should probably do a dump of the database here and perform an import somewhere else?
             }
 
-        accountDetailsFindByUserId :: forall m. (MonadIO m) => UserId -> m (Maybe AccountDetails)
-        accountDetailsFindByUserId (UserId userId) =
-          liftIO $
-            runBeamSqlite conn $
-              runSelectReturningOne $
-                select $
-                  filter_ (\ad -> _adUserId ad ==. val_ (fromIntegral userId)) $
-                    all_ (_accountDetails hackageDb)
-
-        -- Use the values from the INSERT that caused the conflict
-        accountDetailsUpsert :: forall m. (MonadIO m) => AccountDetails -> m ()
-        accountDetailsUpsert details =
-          liftIO $
-            runBeamSqlite conn $
-              runInsert $
-                insertOnConflict
-                  (_accountDetails hackageDb)
-                  (insertValues [details])
-                  (conflictingFields primaryKey)
-                  ( onConflictUpdateSet $ \fields _oldRow ->
-                      mconcat
-                        [ _adName fields <-. val_ (_adName details),
-                          _adContactEmail fields <-. val_ (_adContactEmail details),
-                          _adKind fields <-. val_ (_adKind details),
-                          _adAdminNotes fields <-. val_ (_adAdminNotes details)
-                        ]
-                  )
+        withTransaction :: forall a m. (MonadIO m) => Transaction a -> m a
+        withTransaction action =
+          liftIO $ withResource dbpool $ \conn ->
+            Database.SQLite.Simple.withTransaction conn $
+              runTransaction
+                action
+                (SqlLiteConnection conn)
 
 newtype HackageDb f = HackageDb
   {_accountDetails :: f (TableEntity AccountDetailsT)}
-  deriving (Generic, Database be)
+  deriving stock (Generic)
+
+instance Database be HackageDb
 
 hackageDb :: DatabaseSettings be HackageDb
 hackageDb =
@@ -82,29 +91,3 @@ hackageDb =
     `withDbModification` dbModification
       { _accountDetails = setEntityName "account_details"
       }
-
--- Tables
-
--- AccountDetails
-
-data AccountDetailsT f
-  = AccountDetails
-  { _adUserId :: Columnar f Int32, -- CHECK: Can we user Distribution.Server.Users.Types.UserId here instead?
-    _adName :: Columnar f Text,
-    _adContactEmail :: Columnar f Text,
-    _adKind :: Columnar f (Maybe Text), -- NOTE: valid values are real_user, special.
-    _adAdminNotes :: Columnar f Text
-  }
-  deriving (Generic, Beamable)
-
-type AccountDetails = AccountDetailsT Identity
-
-deriving instance Show AccountDetails
-
-deriving instance Eq AccountDetails
-
-type AccountDetailsId = PrimaryKey AccountDetailsT Identity
-
-instance Table AccountDetailsT where
-  data PrimaryKey AccountDetailsT f = AccountDetailsId (Columnar f Int32) deriving (Generic, Beamable)
-  primaryKey = AccountDetailsId . _adUserId
