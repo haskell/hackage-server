@@ -430,14 +430,14 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
         AdminInfo akind notes <- expectAesonContent
-        updateState userDetailsState (SetUserAdminInfo uid akind notes)
+        modifyAccountDetails uid (\adetails -> adetails { accountKind = akind, accountAdminNotes = notes })
         noContent $ toResponse ()
 
     handlerDeleteAdminInfo :: DynamicPath -> ServerPartE Response
     handlerDeleteAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
-        updateState userDetailsState (SetUserAdminInfo uid Nothing T.empty)
+        modifyAccountDetails uid (\adetails -> adetails { accountKind = Nothing, accountAdminNotes = "" })
         noContent $ toResponse ()
 
 toUserDetails :: Database.AccountDetails -> AccountDetails
