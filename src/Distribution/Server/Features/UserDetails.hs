@@ -27,7 +27,7 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Text (Text)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
 import Data.Aeson.TH
@@ -270,9 +270,28 @@ initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTempl
       [ "user-details-form.html" ]
 
     return $ \database users core upload -> do
+      migrateStateToDatabase usersDetailsState database
+      
       let feature = userDetailsFeature templates usersDetailsState database users core upload
       return feature
 
+migrateStateToDatabase :: StateComponent AcidState UserDetailsTable 
+                       -> DatabaseFeature 
+                       -> IO ()
+migrateStateToDatabase userDetailsState DatabaseFeature{..} = do
+  (UserDetailsTable tbl) <- queryState userDetailsState GetUserDetailsTable
+  forM_ (IntMap.toList tbl) $ \(uid, details) -> do
+    -- NOTE: This is actually performing a merge
+    --       by inserting records of user ids we know nothing about.
+    r <- accountDetailsFindByUserId (UserId uid)
+    when (isNothing r) $
+      accountDetailsUpsert Database.AccountDetails {
+          _adUserId = fromIntegral uid,
+          _adName = accountName details,
+          _adContactEmail = accountContactEmail details,
+          _adKind = fromAccountKind (accountKind details),
+          _adAdminNotes = accountAdminNotes details
+        }
 
 userDetailsFeature :: Templates
                    -> StateComponent AcidState UserDetailsTable
@@ -349,7 +368,7 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
           _adContactEmail = accountContactEmail cdetails,
           _adKind = fromAccountKind (accountKind cdetails),
           _adAdminNotes = accountAdminNotes cdetails
-      }      
+      }
 
     -- Request handlers
     --
