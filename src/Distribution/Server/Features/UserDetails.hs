@@ -347,7 +347,7 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
           _adUserId = fromIntegral _uid,
           _adName = accountName cdetails,
           _adContactEmail = accountContactEmail cdetails,
-          _adKind = Nothing, -- PENDING: we don't support this yet 
+          _adKind = fromAccountKind (accountKind cdetails),
           _adAdminNotes = accountAdminNotes cdetails
       }      
 
@@ -445,6 +445,22 @@ toUserDetails Database.AccountDetails {..} =
   AccountDetails
     { accountName = _adName,
       accountContactEmail = _adContactEmail,
-      accountKind = Nothing, -- PENDING
+      accountKind = 
+        -- NOTE: Should we fail to convert instead?
+        toAccountKind _adKind,
       accountAdminNotes = _adAdminNotes
     }
+
+toAccountKind :: Maybe Text -> Maybe AccountKind
+toAccountKind adKind =
+  case adKind of
+    Just "real_user" -> Just AccountKindRealUser
+    Just "special" -> Just AccountKindSpecial
+    _ -> Nothing
+
+fromAccountKind :: Maybe AccountKind -> Maybe Text
+fromAccountKind adKind =
+  case adKind of
+    Just AccountKindRealUser -> Just "real_user"
+    Just AccountKindSpecial -> Just "special"
+    _ -> Nothing
