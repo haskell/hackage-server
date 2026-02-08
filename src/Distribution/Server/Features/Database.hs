@@ -13,6 +13,7 @@ module Distribution.Server.Features.Database where
 import Data.Int (Int32)
 import Data.Text (Text)
 import Database.Beam
+import Database.Beam.Backend.SQL.BeamExtensions
 import Database.Beam.Sqlite
 import Database.SQLite.Simple
 import Distribution.Server.Framework
@@ -21,7 +22,8 @@ import Distribution.Server.Users.Types (UserId (..))
 -- | A feature to store extra information about users like email addresses.
 data DatabaseFeature = DatabaseFeature
   { databaseFeatureInterface :: HackageFeature,
-    accountDetailsFindByUserId :: forall m. (MonadIO m) => UserId -> m (Maybe AccountDetails)
+    accountDetailsFindByUserId :: forall m. (MonadIO m) => UserId -> m (Maybe AccountDetails),
+    accountDetailsUpsert :: forall m. (MonadIO m) => AccountDetails -> m ()
   }
 
 instance IsHackageFeature DatabaseFeature where
@@ -50,6 +52,25 @@ initDatabaseFeature env = pure $ do
                 select $
                   filter_ (\ad -> _adUserId ad ==. val_ (fromIntegral userId)) $
                     all_ (_accountDetails hackageDb)
+
+        -- Use the values from the INSERT that caused the conflict
+        accountDetailsUpsert :: forall m. (MonadIO m) => AccountDetails -> m ()
+        accountDetailsUpsert details =
+          liftIO $
+            runBeamSqlite conn $
+              runInsert $
+                insertOnConflict
+                  (_accountDetails hackageDb)
+                  (insertValues [details])
+                  (conflictingFields primaryKey)
+                  ( onConflictUpdateSet $ \fields _oldRow ->
+                      mconcat
+                        [ _adName fields <-. val_ (_adName details),
+                          _adContactEmail fields <-. val_ (_adContactEmail details),
+                          _adKind fields <-. val_ (_adKind details),
+                          _adAdminNotes fields <-. val_ (_adAdminNotes details)
+                        ]
+                  )
 
 newtype HackageDb f = HackageDb
   {_accountDetails :: f (TableEntity AccountDetailsT)}

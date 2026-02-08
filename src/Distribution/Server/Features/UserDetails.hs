@@ -27,6 +27,7 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Text (Text)
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
 import Data.Aeson.TH
@@ -325,8 +326,30 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
     queryUserDetails uid = fmap toUserDetails <$> accountDetailsFindByUserId uid
 
     updateUserDetails :: MonadIO m => UserId -> AccountDetails -> m ()
-    updateUserDetails uid udetails = do
-      updateState userDetailsState (SetUserDetails uid udetails)
+    updateUserDetails uid@(UserId _uid) udetails = modifyAccountDetails uid (const udetails)
+
+    -- convenient helper to update only part of the record.
+    -- We use the same record for information that is editable by the user and information that is only editable by admins.
+    modifyAccountDetails :: MonadIO m => UserId -> (AccountDetails -> AccountDetails) -> m ()
+    modifyAccountDetails uid@(UserId _uid) change = do
+      -- NOTE: we need to query the current value because we are updating only some of the fields.
+      madetails <- queryUserDetails uid
+      -- NOTE: We could assume that the record exist since updateUserDetails is called from UserSignup
+      let adetails = fromMaybe AccountDetails {
+                        accountName = "",
+                        accountContactEmail = "",
+                        accountKind = Nothing,
+                        accountAdminNotes = ""
+                      } madetails
+      let cdetails = change adetails
+
+      accountDetailsUpsert Database.AccountDetails {
+          _adUserId = fromIntegral _uid,
+          _adName = accountName cdetails,
+          _adContactEmail = accountContactEmail cdetails,
+          _adKind = Nothing, -- PENDING: we don't support this yet 
+          _adAdminNotes = accountAdminNotes cdetails
+      }      
 
     -- Request handlers
     --
@@ -378,14 +401,14 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
         NameAndContact name email <- expectAesonContent
         guardValidLookingName name
         guardValidLookingEmail email
-        updateState userDetailsState (SetUserNameContact uid name email)
+        modifyAccountDetails uid (\adetails -> adetails { accountName = name, accountContactEmail = email })
         noContent $ toResponse ()
 
     handlerDeleteUserNameContact :: DynamicPath -> ServerPartE Response
     handlerDeleteUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-        updateState userDetailsState (SetUserNameContact uid T.empty T.empty)
+        modifyAccountDetails uid (\adetails -> adetails { accountName = "", accountContactEmail = "" })
         noContent $ toResponse ()
 
     handlerGetAdminInfo :: DynamicPath -> ServerPartE Response
