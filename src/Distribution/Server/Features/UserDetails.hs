@@ -16,6 +16,8 @@ import Distribution.Server.Framework.Templating
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.Database (DatabaseFeature (..))
+import qualified Distribution.Server.Features.Database as Database
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Util.Validators (guardValidLookingEmail, guardValidLookingName)
@@ -250,7 +252,8 @@ userDetailsToCSV backuptype (UserDetailsTable tbl)
 --
 
 initUserDetailsFeature :: ServerEnv
-                       -> IO (UserFeature
+                       -> IO (DatabaseFeature
+                           -> UserFeature
                            -> CoreFeature
                            -> UploadFeature
                            -> IO UserDetailsFeature)
@@ -265,18 +268,19 @@ initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTempl
       [serverTemplatesDir, serverTemplatesDir </> "UserDetails"]
       [ "user-details-form.html" ]
 
-    return $ \users core upload -> do
-      let feature = userDetailsFeature templates usersDetailsState users core upload
+    return $ \database users core upload -> do
+      let feature = userDetailsFeature templates usersDetailsState database users core upload
       return feature
 
 
 userDetailsFeature :: Templates
                    -> StateComponent AcidState UserDetailsTable
+                   -> DatabaseFeature
                    -> UserFeature
                    -> CoreFeature
                    -> UploadFeature
                    -> UserDetailsFeature
-userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} UploadFeature{uploadersGroup}
+userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..} CoreFeature{..} UploadFeature{uploadersGroup}
   = UserDetailsFeature {..}
 
   where
@@ -318,7 +322,7 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
     --
 
     queryUserDetails :: MonadIO m => UserId -> m (Maybe AccountDetails)
-    queryUserDetails uid = queryState userDetailsState (LookupUserDetails uid)
+    queryUserDetails uid = fmap toUserDetails <$> accountDetailsFindByUserId uid
 
     updateUserDetails :: MonadIO m => UserId -> AccountDetails -> m ()
     updateUserDetails uid udetails = do
@@ -412,3 +416,12 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
         uid <- lookupUserName =<< userNameInPath dpath
         updateState userDetailsState (SetUserAdminInfo uid Nothing T.empty)
         noContent $ toResponse ()
+
+toUserDetails :: Database.AccountDetails -> AccountDetails
+toUserDetails Database.AccountDetails {..} =
+  AccountDetails
+    { accountName = _adName,
+      accountContactEmail = _adContactEmail,
+      accountKind = Nothing, -- PENDING
+      accountAdminNotes = _adAdminNotes
+    }
