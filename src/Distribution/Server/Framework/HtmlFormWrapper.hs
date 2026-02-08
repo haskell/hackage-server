@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Distribution.Server.Framework.HtmlFormWrapper (
     htmlFormWrapperHack,
     rqRealMethod,
@@ -16,6 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KeyMap
 import Control.Concurrent.MVar
+import Data.Text.Encoding (decodeUtf8Lenient, encodeUtf8)
 
 import Distribution.Server.Framework.HappstackUtils (showContentType)
 
@@ -149,7 +152,7 @@ requestFormDataAsJSON = do
     let keyvals = [ (k, v)
                   | (k, Input { inputValue = Right v }) <- fromMaybe [] mbody
                   , case k of '_':_ -> False; _ -> True ]
-        paths   = [ parsePathTmpl (BS8.unpack v) k
+        paths   = [ parsePathTmpl (decodeUtf8Lenient (BS8.toStrict v)) k
                   | (k, v) <- keyvals ]
     case accumJPaths paths of
       Nothing -> return $ Left (zip keyvals paths )
@@ -158,28 +161,29 @@ requestFormDataAsJSON = do
 data JPath = JField T.Text JPath | JVal JSON.Value | JPathErr
   deriving Show
 
-parsePathTmpl :: String -> String -> JPath
+parsePathTmpl :: T.Text -> String -> JPath
 parsePathTmpl v = parseKey
   where
     parseKey s =
       case break (\c -> c == '.' || c == '=') s of
-        ("%f",    '.':r)             -> JField (T.pack v) (parseKey r)
+        ("%f",    '.':r)             -> JField v (parseKey r)
         (c@(_:_), '.':r)             -> JField (T.pack c) (parseKey r)
-        ("%f",    '=':r)             -> JField (T.pack v) (parseVal r)
+        ("%f",    '=':r)             -> JField v (parseVal r)
         (c@(_:_), '=':r)             -> JField (T.pack c) (parseVal r)
         _                            -> JPathErr
-    parseVal "%s"                         = JVal (JSON.String (T.pack v))
-    parseVal "%n" | [(n,"")] <- reads v   = JVal (JSON.Number (fromIntegral (n :: Int)))
+    parseVal :: String -> JPath
+    parseVal "%s"                         = JVal (JSON.String v)
+    parseVal "%n" | [(n,"")] <- reads (T.unpack v) = JVal (JSON.Number (fromIntegral (n :: Int)))
     parseVal "%v" | Just j <- parseJVal v = JVal j
-    parseVal s    | Just j <- parseJVal s = JVal j
+    parseVal s    | Just j <- parseJVal (T.pack s) = JVal j
     parseVal _                            = JPathErr
 
     parseJVal "true"                     = Just (JSON.Bool True)
     parseJVal "false"                    = Just (JSON.Bool False)
     parseJVal "null"                     = Just  JSON.Null
-    parseJVal s | [(str,"")] <- reads s  = Just (JSON.String (T.pack str))
-    parseJVal s | [(n,  "")] <- reads s  = Just (JSON.Number (fromIntegral (n :: Int)))
-    parseJVal s                          = JSON.decode (BS8.pack s)
+    parseJVal s | [(str,"")] <- reads (T.unpack s) = Just (JSON.String (T.pack str))
+    parseJVal s | [(n,  "")] <- reads (T.unpack s) = Just (JSON.Number (fromIntegral (n :: Int)))
+    parseJVal s                          = JSON.decodeStrict (encodeUtf8 s)
 
 accumJPaths :: [JPath] -> Maybe JSON.Value
 accumJPaths js = f JSON.Null
