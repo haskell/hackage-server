@@ -176,6 +176,11 @@ common defaults
     , unordered-containers  ^>= 0.2.10
     , vector                ^>= 0.12 || ^>= 0.13.0.0
     , zlib                  ^>= 0.6.2  || ^>= 0.7.0.0
+  -- database dependencies
+  build-depends:
+    , beam-core             ^>= 0.10.4.0
+    , beam-sqlite           ^>= 0.5.5.0
+    , sqlite-simple         ^>= 0.4.19.0
 
 
 library
