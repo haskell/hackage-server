@@ -80,7 +80,7 @@ You'll need to do the following to get `hackage-server`'s dependency `hs-captcha
 
   - Fedora/CentOS
 
-        sudo dnf install unzip libgd-devel
+        sudo dnf install unzip gd-devel
 
   - Nix/NixOS
 
@@ -101,7 +101,7 @@ You'll need to do the following to get `hackage-server`'s dependency `hs-captcha
 
   - Fedora/CentOS
 
-      sudo dnf install openssl-devel
+        sudo dnf install openssl-devel
 
 #### zlib
 
