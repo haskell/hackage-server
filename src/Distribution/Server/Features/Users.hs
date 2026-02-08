@@ -68,7 +68,7 @@ data UserFeature = UserFeature {
     -- | Require being logged in, giving the id of the current user.
     guardAuthenticated :: ServerPartE UserId,
     -- | Gets the authentication if it exists.
-    checkAuthenticated :: ServerPartE (Maybe (UserId, UserInfo)),
+    checkAuthenticated :: ServerPartE (Maybe UserId),
     -- | A hook to override the default authentication error in particular
     -- circumstances.
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
@@ -487,7 +487,7 @@ userFeature templates usersState adminsState
     -- See note about "authn" cookie above
     guardAuthenticatedWithErrHook :: Users.Users -> ServerPartE UserId
     guardAuthenticatedWithErrHook users = do
-        (uid,_) <- Auth.checkAuthenticated realm users userFeatureServerEnv
+        uid <- Auth.checkAuthenticated realm users userFeatureServerEnv
                    >>= either handleAuthError return
         addCookie Session (mkCookie "authn" "1")
         -- Set-Cookie:authn="1";Path=/;Version="1"
@@ -510,7 +510,7 @@ userFeature templates usersState adminsState
 
     -- Check if there is an authenticated userid, and return info, if so.
     -- See note about "authn" cookie above
-    checkAuthenticated :: ServerPartE (Maybe (UserId, UserInfo))
+    checkAuthenticated :: ServerPartE (Maybe UserId)
     checkAuthenticated = do
         authn <- optional (lookCookieValue "authn")
         case authn of
