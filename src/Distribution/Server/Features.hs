@@ -90,6 +90,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     loginfo verbosity "Initialising features, part 1"
 
+    mkDatabaseFeature    <- logStartup "database" $
+                            initDatabaseFeature env
     mkStaticFilesFeature <- logStartup "static files" $
                             initStaticFilesFeature env
     mkUserFeature        <- logStartup "user" $
@@ -102,8 +104,6 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                             initMirrorFeature env
     mkUploadFeature      <- logStartup "upload" $
                             initUploadFeature env
-    mkDatabaseFeature    <- logStartup "database" $
-                            initDatabaseFeature env
 #ifndef MINIMAL
     mkTarIndexCacheFeature   <- logStartup "tar index" $
                                 initTarIndexCacheFeature env
@@ -175,6 +175,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     -- Arguments denote feature dependencies.
     -- What follows is a topological sort along those lines
+    databaseFeature <- mkDatabaseFeature
+
     staticFilesFeature <- mkStaticFilesFeature
 
     usersFeature    <- mkUserFeature
@@ -192,8 +194,6 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     uploadFeature   <- mkUploadFeature
                          usersFeature
                          coreFeature
-
-    databaseFeature <- mkDatabaseFeature
 
 #ifndef MINIMAL
     tarIndexCacheFeature <- mkTarIndexCacheFeature
