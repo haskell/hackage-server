@@ -16,6 +16,7 @@
 module Distribution.Server.Features.Database where
 
 import Control.Monad.Reader
+import Data.String (fromString)
 import Data.Kind
 import Data.Pool
 import Database.Beam hiding (runSelectReturningOne)
@@ -59,6 +60,15 @@ initDatabaseFeature env = pure $ do
         Database.SQLite.Simple.close
         (5 {- time in seconds before unused connection is closed -})
         (20 {- number of connections -})
+
+  -- Initialize the database schema.
+  -- Script produce no changes if database is already initialized.
+  -- TODO: implement migrations or check how to embed or distribute the SQL script with the server.
+  -- CHECK: Should this be done in featurePostInit instead?
+  sql <- readFile "init_db.sql"
+  withResource dbpool $ \conn ->
+    Database.SQLite.Simple.execute_ conn (fromString sql)
+
   pure $ mkDatabaseFeature dbpool
   where
     mkDatabaseFeature :: Pool Database.SQLite.Simple.Connection -> DatabaseFeature
