@@ -83,10 +83,8 @@ import           Hedgehog
 
 import RevDepCommon (Package(..), TestPackage(..), mkPackage, mkPackageWithCabalFileSuffix, packToPkgInfo)
 
-import Data.String (fromString)
 import Distribution.Server.Features.Database
 import Distribution.Server.Features.UserDetails.State
-import qualified Database.SQLite.Simple
 import Database.Beam
 import Control.Exception (bracket)
 
@@ -330,37 +328,14 @@ allTests = testGroup "ReverseDependenciesTest"
       assertEqual "hedgehog test pass" True res
   ]
 
-setupTestDatabase :: IO (Database.SQLite.Simple.Connection, DatabaseFeature)
-setupTestDatabase = do
-  conn <- Database.SQLite.Simple.open ":memory:"
-  Database.SQLite.Simple.execute_ conn initDbSql
-  pure (conn, DatabaseFeature { 
-      databaseFeatureInterface = undefined, -- not needed for these tests
-      withTransaction = \transaction -> 
-            liftIO $ Database.SQLite.Simple.withTransaction conn $
-                          runTransaction
-                            transaction
-                            (SqlLiteConnection conn)
-  })
-
-tearDownTestDatabase :: (Database.SQLite.Simple.Connection, DatabaseFeature) -> IO ()
-tearDownTestDatabase (conn, _) = Database.SQLite.Simple.close conn
-  
-withTestDatabase :: (IO DatabaseFeature -> TestTree) -> TestTree
-withTestDatabase action = do
-  withResource setupTestDatabase tearDownTestDatabase
-    (\ ioResource -> action (snd <$> ioResource))
-
 getNotificationEmailsTests :: TestTree
 getNotificationEmailsTests =
   testGroup "getNotificationEmails"
     [ testProperty "All general notifications batched in one email" . withTests 30 . property $ do
         notifs <- forAll $ Gen.list (Range.linear 1 10) $ Gen.filterT isGeneral genNotification
-        emails <- evalIO $ bracket setupTestDatabase tearDownTestDatabase
-                    (\ (_, database) -> do
-                      withTransaction database seedDatabase
-                      getNotificationEmailsMocked database $ map (userWatcher,) notifs
-                    )
+        emails <- evalIO $ testDatabaseFeature bracket $ \ database -> do
+                    withTransaction database seedDatabase
+                    getNotificationEmailsMocked database $ map (userWatcher,) notifs
         length emails === 1
     , testGolden "Render NotifyNewVersion" "getNotificationEmails-NotifyNewVersion.golden" $ \database -> do
         withTransaction database seedDatabase
@@ -726,9 +701,9 @@ hedgehogTests =
 
 testGolden :: TestName -> FilePath -> (DatabaseFeature -> IO Lazy.ByteString) -> TestTree
 testGolden name fp body = 
-  withTestDatabase $ \getDatabase ->
+  testDatabaseFeatureIO withResource $ \ioDatabase ->
     goldenVsString name ("tests/golden/ReverseDependenciesTest/" <> fp) (do
-      database <- getDatabase
+      database <- ioDatabase
       body database
     )
   

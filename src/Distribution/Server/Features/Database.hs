@@ -20,7 +20,9 @@ module Distribution.Server.Features.Database
     runInsert,
     HackageDb (..),
     hackageDb,
-    initDbSql, -- for tests
+    -- for tests
+    testDatabaseFeature,
+    testDatabaseFeatureIO,
   )
 where
 
@@ -108,3 +110,41 @@ instance Database be HackageDb
 
 hackageDb :: DatabaseSettings be HackageDb
 hackageDb = defaultDbSettings
+
+-- | For testing purposes, in memory single connection database.
+testDatabaseFeature ::
+  (forall r. IO r -> (r -> IO ()) -> (r -> b) -> b) ->
+  (DatabaseFeature -> b) ->
+  b
+testDatabaseFeature withResourceFn action =
+  withResourceFn
+    setupTestDatabase
+    (\(conn, _) -> Database.SQLite.Simple.close conn)
+    (\(_, database) -> action database)
+
+testDatabaseFeatureIO ::
+  (forall r. IO r -> (r -> IO ()) -> (IO r -> b) -> b) ->
+  (IO DatabaseFeature -> b) ->
+  b
+testDatabaseFeatureIO withResourceFn action =
+  withResourceFn
+    setupTestDatabase
+    (\(conn, _) -> Database.SQLite.Simple.close conn)
+    (\ioResource -> action (snd <$> ioResource))
+
+setupTestDatabase :: IO (Database.SQLite.Simple.Connection, DatabaseFeature)
+setupTestDatabase = do
+  conn <- Database.SQLite.Simple.open ":memory:"
+  Database.SQLite.Simple.execute_ conn initDbSql
+  pure
+    ( conn,
+      DatabaseFeature
+        { databaseFeatureInterface = undefined, -- not needed for these tests
+          withTransaction = \transaction ->
+            liftIO $
+              Database.SQLite.Simple.withTransaction conn $
+                runTransaction
+                  transaction
+                  (SqlLiteConnection conn)
+        }
+    )
