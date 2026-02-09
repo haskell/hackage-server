@@ -76,7 +76,7 @@ data ServerConfig = ServerConfig {
   confTmpDir    :: FilePath,
   confCacheDelay:: Int,
   confLiveTemplates :: Bool,
-  confServerDatabase :: String
+  confDatabasePath :: String
 } deriving (Show)
 
 confDbStateDir, confBlobStoreDir :: ServerConfig -> FilePath
@@ -110,7 +110,7 @@ defaultServerConfig = do
     confTmpDir    = "state" </> "tmp",
     confCacheDelay= 0,
     confLiveTemplates = False,
-    confServerDatabase = "hackage.db"
+    confDatabasePath = "hackage.db"
   }
 
 data Server = Server {
@@ -156,7 +156,7 @@ mkServerEnv config@(ServerConfig verbosity hostURI userContentURI requiredBaseHo
             serverUserContentBaseURI = userContentURI,
             serverRequiredBaseHostHeader = requiredBaseHostHeader,
             serverVerbosity     = verbosity,
-            serverDatabase      = confServerDatabase config
+            serverDatabasePath  = confDatabasePath config
          }
     return env
 

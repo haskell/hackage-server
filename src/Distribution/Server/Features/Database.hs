@@ -55,7 +55,7 @@ initDatabaseFeature env = pure $ do
   dbpool <-
     newPool $
       defaultPoolConfig
-        (Database.SQLite.Simple.open (serverDatabase env))
+        (Database.SQLite.Simple.open (serverDatabasePath env))
         Database.SQLite.Simple.close
         (5 {- time in seconds before unused connection is closed -})
         (20 {- number of connections -})

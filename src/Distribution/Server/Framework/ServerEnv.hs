@@ -73,7 +73,7 @@ data ServerEnv = ServerEnv {
     -- increasing the time taken to update the cache we can push this further.
     serverCacheDelay :: Int,
 
-    serverDatabase :: String,
+    serverDatabasePath :: String,
 
     serverVerbosity  :: Verbosity
 }
