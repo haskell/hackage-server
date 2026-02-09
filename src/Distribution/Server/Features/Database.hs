@@ -91,14 +91,10 @@ initDatabaseFeature env = pure $ do
                 (SqlLiteConnection conn)
 
 newtype HackageDb f = HackageDb
-  {_accountDetails :: f (TableEntity AccountDetailsT)}
+  {_tblAccountDetails :: f (TableEntity AccountDetailsT)}
   deriving stock (Generic)
 
 instance Database be HackageDb
 
 hackageDb :: DatabaseSettings be HackageDb
-hackageDb =
-  defaultDbSettings
-    `withDbModification` dbModification
-      { _accountDetails = setEntityName "account_details"
-      }
+hackageDb = defaultDbSettings

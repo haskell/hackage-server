@@ -535,7 +535,7 @@ getNotificationEmailsTests =
     seedDatabase :: Transaction ()
     seedDatabase = do
       Distribution.Server.Features.Database.runInsert $
-        insert (_accountDetails hackageDb) $
+        insert (_tblAccountDetails hackageDb) $
           insertValues
             [ AccountDetailsRow
                 { _adUserId = (\(UserId v) -> fromIntegral v) userWatcher

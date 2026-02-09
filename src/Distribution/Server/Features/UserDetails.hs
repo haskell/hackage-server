@@ -484,14 +484,14 @@ accountDetailsFindByUserId (UserId userId) =
   Database.runSelectReturningOne $
     select $
       filter_ (\ad -> _adUserId ad ==. val_ (fromIntegral userId)) $
-        all_ (_accountDetails Database.hackageDb)
+        all_ (_tblAccountDetails Database.hackageDb)
 
 -- Use the values from the INSERT that caused the conflict
 accountDetailsUpsert :: AccountDetailsRow -> Database.Transaction ()
 accountDetailsUpsert details =
   Database.runInsert $
     insertOnConflict
-      (_accountDetails Database.hackageDb)
+      (_tblAccountDetails Database.hackageDb)
       (insertValues [details])
       (conflictingFields primaryKey)
       ( onConflictUpdateSet $ \fields _oldRow ->
