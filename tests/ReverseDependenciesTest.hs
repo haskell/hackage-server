@@ -333,8 +333,7 @@ allTests = testGroup "ReverseDependenciesTest"
 setupTestDatabase :: IO (Database.SQLite.Simple.Connection, DatabaseFeature)
 setupTestDatabase = do
   conn <- Database.SQLite.Simple.open ":memory:"
-  sql <- readFile "init_db.sql"
-  Database.SQLite.Simple.execute_ conn (fromString sql)
+  Database.SQLite.Simple.execute_ conn initDbSql
   pure (conn, DatabaseFeature { 
       databaseFeatureInterface = undefined, -- not needed for these tests
       withTransaction = \transaction -> 

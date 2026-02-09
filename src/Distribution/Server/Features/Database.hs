@@ -4,19 +4,18 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# HLINT ignore "Avoid lambda" #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Distribution.Server.Features.Database where
 
 import Control.Monad.Reader
-import Data.String (fromString)
+import Data.FileEmbed (embedStringFile)
 import Data.Kind
 import Data.Pool
 import Database.Beam hiding (runSelectReturningOne)
@@ -51,6 +50,9 @@ data DatabaseFeature = DatabaseFeature
 instance IsHackageFeature DatabaseFeature where
   getFeatureInterface = databaseFeatureInterface
 
+initDbSql :: Database.SQLite.Simple.Query
+initDbSql = $(embedStringFile "init_db.sql")
+
 initDatabaseFeature :: ServerEnv -> IO (IO DatabaseFeature)
 initDatabaseFeature env = pure $ do
   dbpool <-
@@ -63,11 +65,10 @@ initDatabaseFeature env = pure $ do
 
   -- Initialize the database schema.
   -- Script produce no changes if database is already initialized.
-  -- TODO: implement migrations or check how to embed or distribute the SQL script with the server.
+  -- TODO: implement migrations
   -- CHECK: Should this be done in featurePostInit instead?
-  sql <- readFile "init_db.sql"
   withResource dbpool $ \conn ->
-    Database.SQLite.Simple.execute_ conn (fromString sql)
+    Database.SQLite.Simple.execute_ conn initDbSql
 
   pure $ mkDatabaseFeature dbpool
   where
