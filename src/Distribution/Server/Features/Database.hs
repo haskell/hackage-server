@@ -12,13 +12,23 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Distribution.Server.Features.Database where
+module Distribution.Server.Features.Database
+  ( DatabaseFeature (..),
+    Transaction,
+    initDatabaseFeature,
+    runSelectReturningOne,
+    runInsert,
+    HackageDb (..),
+    hackageDb,
+    initDbSql, -- for tests
+  )
+where
 
 import Control.Monad.Reader
 import Data.FileEmbed (embedStringFile)
 import Data.Kind
 import Data.Pool
-import Database.Beam hiding (runSelectReturningOne)
+import Database.Beam hiding (runInsert, runSelectReturningOne)
 import qualified Database.Beam
 import Database.Beam.Sqlite
 import qualified Database.SQLite.Simple
@@ -35,11 +45,11 @@ runInsert :: forall (table :: (Type -> Type) -> Type). SqlInsert Sqlite table ->
 runInsert q =
   Transaction $ ReaderT $ \(SqlLiteConnection conn) -> runBeamSqlite conn $ Database.Beam.runInsert q
 
-newtype Transaction a = Transaction {unTransaction :: ReaderT Connection IO a} -- TODO: don't expose the internals of this
+newtype Transaction a = Transaction {unTransaction :: ReaderT Connection IO a}
   deriving (Functor, Applicative, Monad)
 
 runTransaction :: Transaction a -> Connection -> IO a
-runTransaction (Transaction t) = runReaderT t
+runTransaction t = runReaderT (unTransaction t)
 
 -- | A feature to store extra information about users like email addresses.
 data DatabaseFeature = DatabaseFeature
