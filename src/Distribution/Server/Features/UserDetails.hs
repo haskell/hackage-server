@@ -5,7 +5,10 @@ module Distribution.Server.Features.UserDetails (
     UserDetailsFeature(..),
 
     AccountDetails(..),
-    AccountKind(..)
+    AccountKind(..),
+
+    -- Exposed to setup features in test context that use the database
+    dbQueryUserDetails
   ) where
 
 import Distribution.Server.Framework
@@ -350,33 +353,10 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
     --
 
     queryUserDetails :: UserId -> Database.Transaction (Maybe AccountDetails)
-    queryUserDetails uid = fmap toUserDetails <$> accountDetailsFindByUserId uid
+    queryUserDetails = dbQueryUserDetails
 
     updateUserDetails :: UserId -> AccountDetails -> Database.Transaction ()
-    updateUserDetails uid@(UserId _uid) udetails = modifyAccountDetails uid (const udetails)
-
-    -- convenient helper to update only part of the record.
-    -- We use the same record for information that is editable by the user and information that is only editable by admins.
-    modifyAccountDetails :: UserId -> (AccountDetails -> AccountDetails) -> Database.Transaction ()
-    modifyAccountDetails uid@(UserId _uid) change = do
-      -- NOTE: we need to query the current value because we are updating only some of the fields.
-      madetails <- queryUserDetails uid
-      -- NOTE: We could assume that the record exist since updateUserDetails is called from UserSignup
-      let adetails = fromMaybe AccountDetails {
-                        accountName = "",
-                        accountContactEmail = "",
-                        accountKind = Nothing,
-                        accountAdminNotes = ""
-                      } madetails
-      let cdetails = change adetails
-
-      accountDetailsUpsert AccountDetailsRow {
-          _adUserId = fromIntegral _uid,
-          _adName = accountName cdetails,
-          _adContactEmail = accountContactEmail cdetails,
-          _adKind = fromAccountKind (accountKind cdetails),
-          _adAdminNotes = accountAdminNotes cdetails
-      }
+    updateUserDetails = dbUpdateUserDetails
 
     -- Request handlers
     --
@@ -428,14 +408,14 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
         NameAndContact name email <- expectAesonContent
         guardValidLookingName name
         guardValidLookingEmail email
-        withTransaction $ modifyAccountDetails uid (\adetails -> adetails { accountName = name, accountContactEmail = email })
+        withTransaction $ dbModifyAccountDetails uid (\adetails -> adetails { accountName = name, accountContactEmail = email })
         noContent $ toResponse ()
 
     handlerDeleteUserNameContact :: DynamicPath -> ServerPartE Response
     handlerDeleteUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-        withTransaction $ modifyAccountDetails uid (\adetails -> adetails { accountName = "", accountContactEmail = "" })
+        withTransaction $ dbModifyAccountDetails uid (\adetails -> adetails { accountName = "", accountContactEmail = "" })
         noContent $ toResponse ()
 
     handlerGetAdminInfo :: DynamicPath -> ServerPartE Response
@@ -457,18 +437,47 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
         AdminInfo akind notes <- expectAesonContent
-        withTransaction $ modifyAccountDetails uid (\adetails -> adetails { accountKind = akind, accountAdminNotes = notes })
+        withTransaction $ dbModifyAccountDetails uid (\adetails -> adetails { accountKind = akind, accountAdminNotes = notes })
         noContent $ toResponse ()
 
     handlerDeleteAdminInfo :: DynamicPath -> ServerPartE Response
     handlerDeleteAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
-        withTransaction $ modifyAccountDetails uid (\adetails -> adetails { accountKind = Nothing, accountAdminNotes = "" })
+        withTransaction $ dbModifyAccountDetails uid (\adetails -> adetails { accountKind = Nothing, accountAdminNotes = "" })
         noContent $ toResponse ()
 
 
 -- Database
+
+dbQueryUserDetails :: UserId -> Database.Transaction (Maybe AccountDetails)
+dbQueryUserDetails uid = fmap toUserDetails <$> accountDetailsFindByUserId uid
+
+dbUpdateUserDetails :: UserId -> AccountDetails -> Database.Transaction ()
+dbUpdateUserDetails uid@(UserId _uid) udetails = dbModifyAccountDetails uid (const udetails)
+
+-- convenient helper to update only part of the record.
+-- We use the same record for information that is editable by the user and information that is only editable by admins.
+dbModifyAccountDetails :: UserId -> (AccountDetails -> AccountDetails) -> Database.Transaction ()
+dbModifyAccountDetails uid@(UserId _uid) change = do
+  -- NOTE: we need to query the current value because we are updating only some of the fields.
+  madetails <- dbQueryUserDetails uid
+  -- NOTE: We could assume that the record exist since updateUserDetails is called from UserSignup
+  let adetails = fromMaybe AccountDetails {
+                    accountName = "",
+                    accountContactEmail = "",
+                    accountKind = Nothing,
+                    accountAdminNotes = ""
+                  } madetails
+  let cdetails = change adetails
+
+  accountDetailsUpsert AccountDetailsRow {
+      _adUserId = fromIntegral _uid,
+      _adName = accountName cdetails,
+      _adContactEmail = accountContactEmail cdetails,
+      _adKind = fromAccountKind (accountKind cdetails),
+      _adAdminNotes = accountAdminNotes cdetails
+  }
 
 accountDetailsFindByUserId :: UserId -> Database.Transaction (Maybe AccountDetailsRow)
 accountDetailsFindByUserId (UserId userId) =
