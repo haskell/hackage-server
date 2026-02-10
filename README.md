@@ -36,7 +36,8 @@ Alternatively, open the [`nix develop`](https://nixos.org/manual/nix/stable/comm
     $ cabal v2-run -- hackage-server run --static-dir=datafiles --state-dir=state \
         --base-uri=http://localhost:8080 \
         --required-base-host-header=localhost:8080 \
-        --user-content-uri=http://127.0.0.1:8080
+        --user-content-uri=http://127.0.0.1:8080 \
+        --database-path=path/to/hackage.db
     hackage-server: Ready! Point your browser at http://localhost:8080
 
 #### Populate the local package index
@@ -49,6 +50,11 @@ http://localhost:8080/packages/mirrorers/
 Then
 
      $ nix run .#mirror-hackage-server
+
+#### Database
+
+When hackage-server starts it will migrate data from the acid store to the specified database and
+will keep using that going forward.
 
 #### Not working
 
@@ -224,7 +230,8 @@ once to initialise the state. After that you can run the server with
     cabal v2-run -- hackage-server run --static-dir=datafiles --state-dir=state \
         --base-uri=http://127.0.0.1:8080 \
         --required-base-host-header=localhost:8080 \
-        --user-content-uri=http://127.0.0.1:8080
+        --user-content-uri=http://127.0.0.1:8080 \
+        --database-path=path/to/hackage.db
 
 By default the server runs on port `8080` with the following settings:
 
