@@ -292,7 +292,7 @@ migrateStateToDatabase userDetailsState DatabaseFeature{..} = do
         _adUserId = toDBUserId (UserId uid),
         _adName = accountName details,
         _adContactEmail = accountContactEmail details,
-        _adKind = fromAccountKind (accountKind details),
+        _adKind = fmap fromAccountKind (accountKind details),
         _adAdminNotes = accountAdminNotes details
       }
 
@@ -471,7 +471,7 @@ dbModifyAccountDetails uid change = do
       _adUserId = toDBUserId uid,
       _adName = accountName cdetails,
       _adContactEmail = accountContactEmail cdetails,
-      _adKind = fromAccountKind (accountKind cdetails),
+      _adKind = fmap fromAccountKind (accountKind cdetails),
       _adAdminNotes = accountAdminNotes cdetails
   }
 
@@ -504,22 +504,18 @@ toUserDetails AccountDetailsRow {..} =
   AccountDetails
     { accountName = _adName,
       accountContactEmail = _adContactEmail,
-      accountKind = 
-        -- NOTE: Should we fail to convert instead?
-        toAccountKind _adKind,
+      accountKind = fmap toAccountKind _adKind,
       accountAdminNotes = _adAdminNotes
     }
 
-toAccountKind :: Maybe Text -> Maybe AccountKind
+toAccountKind :: AccountDetailsKind -> AccountKind
 toAccountKind adKind =
   case adKind of
-    Just "real_user" -> Just AccountKindRealUser
-    Just "special" -> Just AccountKindSpecial
-    _ -> Nothing
+    RealUser -> AccountKindRealUser
+    Special -> AccountKindSpecial
 
-fromAccountKind :: Maybe AccountKind -> Maybe Text
+fromAccountKind :: AccountKind -> AccountDetailsKind
 fromAccountKind adKind =
   case adKind of
-    Just AccountKindRealUser -> Just "real_user"
-    Just AccountKindSpecial -> Just "special"
-    _ -> Nothing
+    AccountKindRealUser -> RealUser
+    AccountKindSpecial -> Special

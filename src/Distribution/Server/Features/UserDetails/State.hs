@@ -8,8 +8,11 @@
 
 module Distribution.Server.Features.UserDetails.State where
 
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import Database.Beam
+import Database.Beam.Backend.SQL.SQL92 (HasSqlValueSyntax (..), autoSqlValueSyntax)
+import Database.Beam.Sqlite (Sqlite)
+import Database.Beam.Sqlite.Syntax (SqliteValueSyntax (..))
 import Distribution.Server.Users.Types
 
 data AccountDetailsT f
@@ -17,7 +20,7 @@ data AccountDetailsT f
   { _adUserId :: Columnar f DBUserId,
     _adName :: Columnar f Text,
     _adContactEmail :: Columnar f Text,
-    _adKind :: Columnar f (Maybe Text), -- NOTE: valid values are real_user, special.
+    _adKind :: Columnar f (Maybe AccountDetailsKind),
     _adAdminNotes :: Columnar f Text
   }
   deriving (Generic, Beamable)
@@ -33,3 +36,12 @@ type AccountDetailsId = PrimaryKey AccountDetailsT Identity
 instance Table AccountDetailsT where
   data PrimaryKey AccountDetailsT f = AccountDetailsId (Columnar f DBUserId) deriving (Generic, Beamable)
   primaryKey = AccountDetailsId . _adUserId
+
+data AccountDetailsKind = RealUser | Special
+  deriving (Eq, Show, Read, Enum, Bounded)
+
+instance HasSqlValueSyntax SqliteValueSyntax AccountDetailsKind where
+  sqlValueSyntax = autoSqlValueSyntax
+
+instance FromBackendRow Sqlite AccountDetailsKind where
+  fromBackendRow = read . unpack <$> fromBackendRow
