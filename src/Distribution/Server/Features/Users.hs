@@ -15,6 +15,7 @@ import Distribution.Server.Framework.Templating
 import qualified Distribution.Server.Framework.Auth as Auth
 
 import Distribution.Server.Features.Database (DatabaseFeature (..), HackageDb (..))
+import qualified Distribution.Server.Features.Database as Database
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.State
@@ -40,6 +41,8 @@ import qualified Data.Text as T
 import Distribution.Text (display, simpleParse)
 
 import Happstack.Server.Cookie (addCookie, mkCookie, CookieLife(Session))
+
+import Database.Beam hiding (update)
 
 -- | A feature to allow manipulation of the database of users.
 --
@@ -251,6 +254,9 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
       ]
 
   return $ \database -> do
+    when (fresh database) 
+      (migrateStateToDatabase usersState adminsState database)
+
     -- Slightly tricky: we have an almost recursive knot between the group
     -- resource management functions, and creating the admin group
     -- resource that is part of the user feature.
@@ -270,6 +276,34 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
         (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
 
     return feature
+
+migrateStateToDatabase :: StateComponent AcidState Users.Users
+                       -> StateComponent AcidState HackageAdmins
+                       -> DatabaseFeature 
+                       -> IO ()
+migrateStateToDatabase usersState adminsState DatabaseFeature{..} = do
+  users <- queryState usersState GetUserDb
+  admins <- queryState adminsState GetAdminList
+
+  withTransaction $ do
+    forM_ (Users.enumerateAllUsers users) $ \(uid, uinfo) -> do
+      let (status, authInfo) = 
+            case userStatus uinfo of
+              AccountEnabled a -> (Enabled, Just a)
+              AccountDisabled ma -> (Disabled, ma)
+              AccountDeleted -> (Deleted, Nothing)
+
+      Database.runInsert $
+        insert
+          (_tblUsers Database.hackageDb)
+          (insertValues [UsersRow {
+            _uId = toDBUserId uid,
+            _uUsername = userName uinfo,
+            _uStatus = status,
+            _uAuthInfo = authInfo,
+            _uAdmin = Group.member uid admins
+          }])
+   
 
 usersStateComponent :: FilePath -> IO (StateComponent AcidState Users.Users)
 usersStateComponent stateDir = do

@@ -37,6 +37,7 @@ import qualified Database.SQLite.Simple
 import qualified Database.SQLite3
 import Distribution.Server.Features.UserDetails.State
 import Distribution.Server.Framework
+import Distribution.Server.Users.State
 
 newtype Connection = SqlLiteConnection Database.SQLite.Simple.Connection
 
@@ -111,8 +112,10 @@ initDatabaseFeature env = pure $ do
                 action
                 (SqlLiteConnection conn)
 
-newtype HackageDb f = HackageDb
-  {_tblAccountDetails :: f (TableEntity AccountDetailsT)}
+data HackageDb f = HackageDb
+  { _tblAccountDetails :: f (TableEntity AccountDetailsT),
+    _tblUsers :: f (TableEntity UsersT)
+  }
   deriving stock (Generic)
 
 instance Database be HackageDb

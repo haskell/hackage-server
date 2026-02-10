@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Distribution.Server.Users.Types (
     module Distribution.Server.Users.Types,
     module Distribution.Server.Users.AuthToken,
@@ -24,6 +25,7 @@ import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.List as L
 
+import Data.Text (unpack)
 import Data.Int
 import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
@@ -31,6 +33,7 @@ import Data.Hashable
 import Data.Serialize (Serialize)
 import Database.Beam
 import Database.Beam.Backend
+import Database.Beam.Backend.SQL.SQL92 ()
 import Database.Beam.Sqlite
 import Database.Beam.Sqlite.Syntax
 
@@ -50,7 +53,10 @@ toDBUserId :: UserId -> DBUserId
 toDBUserId (UserId v) = DBUserId (fromIntegral v)
 
 newtype UserName  = UserName String
-  deriving newtype (Eq, Ord, Read, Show, MemSize, ToJSON, FromJSON, Hashable, Serialize)
+  deriving newtype (Eq, Ord, Read, Show, MemSize, ToJSON, FromJSON, Hashable, Serialize, HasSqlValueSyntax SqliteValueSyntax)
+
+instance FromBackendRow Sqlite UserName where
+  fromBackendRow = UserName . unpack <$> fromBackendRow
 
 data UserInfo = UserInfo {
                   userName   :: !UserName,
@@ -65,6 +71,12 @@ data UserStatus = AccountEnabled  UserAuth
 
 newtype UserAuth = UserAuth PasswdHash
     deriving (Show, Eq)
+
+instance HasSqlValueSyntax SqliteValueSyntax UserAuth where
+  sqlValueSyntax (UserAuth (PasswdHash v)) = sqlValueSyntax v
+
+instance FromBackendRow Sqlite UserAuth where
+  fromBackendRow = UserAuth . PasswdHash . unpack <$> fromBackendRow
 
 isActiveAccount :: UserStatus -> Bool
 isActiveAccount (AccountEnabled  _) = True

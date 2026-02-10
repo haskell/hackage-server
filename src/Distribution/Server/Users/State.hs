@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators, StandaloneDeriving, DeriveGeneric, DeriveAnyClass #-}
+             TypeOperators, StandaloneDeriving, DeriveGeneric, DeriveAnyClass, 
+             DerivingStrategies, GeneralisedNewtypeDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Users.State where
 
@@ -21,6 +22,9 @@ import qualified Data.Text as T
 
 import Data.Text
 import Database.Beam
+import Database.Beam.Backend.SQL.SQL92 (HasSqlValueSyntax (..), autoSqlValueSyntax)
+import Database.Beam.Sqlite (Sqlite)
+import Database.Beam.Sqlite.Syntax (SqliteValueSyntax (..))
 
 initialUsers :: Users.Users
 initialUsers = Users.emptyUsers
@@ -184,9 +188,9 @@ $(makeAcidic ''MirrorClients
 data UsersT f
   = UsersRow
   { _uId :: Columnar f DBUserId,
-    _uUsername :: Columnar f Text,
-    _uStatus :: Columnar f Text, -- NOTE: valid values are enabled, disabled, deleted.
-    _uAuthInfo :: Columnar f Text, 
+    _uUsername :: Columnar f UserName,
+    _uStatus :: Columnar f UsersStatus,
+    _uAuthInfo :: Columnar f (Maybe UserAuth), 
     _uAdmin :: Columnar f Bool
   }
   deriving (Generic, Beamable)
@@ -202,3 +206,15 @@ type UsersId = PrimaryKey UsersT Identity
 instance Table UsersT where
   data PrimaryKey UsersT f = UsersId (Columnar f DBUserId) deriving (Generic, Beamable)
   primaryKey = UsersId . _uId
+
+data UsersStatus = Enabled | Disabled | Deleted
+  deriving (Eq, Show, Read, Enum, Bounded)
+
+instance HasSqlValueSyntax SqliteValueSyntax UsersStatus where
+  sqlValueSyntax = autoSqlValueSyntax
+
+instance FromBackendRow Sqlite UsersStatus where
+  fromBackendRow = read . unpack <$> fromBackendRow
+
+newtype DBUserName = DBUserName Text
+  deriving newtype (Eq, Ord, Read, Show, FromBackendRow Sqlite, HasSqlValueSyntax SqliteValueSyntax)
