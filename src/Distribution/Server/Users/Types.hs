@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Distribution.Server.Users.Types (
@@ -25,6 +26,7 @@ import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.List as L
 
+import Data.Proxy
 import Data.Text (unpack)
 import Data.Int
 import Data.Aeson (ToJSON, FromJSON)
@@ -41,16 +43,19 @@ newtype UserId = UserId Int
   deriving newtype (Eq, Ord, Read, Show, MemSize, ToJSON, FromJSON, Pretty)
 
 -- NOTE: To use UserId directly we need to change it to a non machine-dependent size for Beam
---       MemSize and Pretty are not defined on Int32
---       but other places start to complain after that
-newtype DBUserId = DBUserId Int32
-  deriving newtype (Eq, Ord, Read, Show, FromBackendRow Sqlite, HasSqlValueSyntax SqliteValueSyntax, HasSqlEqualityCheck Sqlite)
+--       We force Beam to treat UserId as a Int32
 
-fromDBUserId :: DBUserId -> UserId
-fromDBUserId (DBUserId v) = UserId (fromIntegral v)
+instance FromBackendRow Sqlite UserId where
+  fromBackendRow = UserId . fromIntegral @Int32 <$> fromBackendRow
 
-toDBUserId :: UserId -> DBUserId
-toDBUserId (UserId v) = DBUserId (fromIntegral v)
+instance HasSqlValueSyntax SqliteValueSyntax UserId where
+  sqlValueSyntax (UserId v) = sqlValueSyntax (fromIntegral v :: Int32)
+
+instance HasSqlEqualityCheck Sqlite UserId where
+  sqlEqE _ = sqlEqE (Proxy :: Proxy Int32)
+  sqlNeqE _ = sqlNeqE (Proxy :: Proxy Int32)
+  sqlEqTriE _ = sqlEqTriE (Proxy :: Proxy Int32)
+  sqlNeqTriE _ = sqlNeqTriE (Proxy :: Proxy Int32)
 
 newtype UserName  = UserName String
   deriving newtype (Eq, Ord, Read, Show, MemSize, ToJSON, FromJSON, Hashable, Serialize, HasSqlValueSyntax SqliteValueSyntax)

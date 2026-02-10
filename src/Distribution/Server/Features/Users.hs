@@ -297,7 +297,7 @@ migrateStateToDatabase usersState adminsState DatabaseFeature{..} = do
         insert
           (_tblUsers Database.hackageDb)
           (insertValues [UsersRow {
-            _uId = toDBUserId uid,
+            _uId = uid,
             _uUsername = userName uinfo,
             _uStatus = status,
             _uAuthInfo = authInfo,

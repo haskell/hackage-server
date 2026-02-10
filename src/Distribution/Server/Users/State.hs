@@ -187,7 +187,7 @@ $(makeAcidic ''MirrorClients
 
 data UsersT f
   = UsersRow
-  { _uId :: Columnar f DBUserId,
+  { _uId :: Columnar f UserId,
     _uUsername :: Columnar f UserName,
     _uStatus :: Columnar f UsersStatus,
     _uAuthInfo :: Columnar f (Maybe UserAuth), 
@@ -204,7 +204,7 @@ deriving instance Eq UserRow
 type UsersId = PrimaryKey UsersT Identity
 
 instance Table UsersT where
-  data PrimaryKey UsersT f = UsersId (Columnar f DBUserId) deriving (Generic, Beamable)
+  data PrimaryKey UsersT f = UsersId (Columnar f UserId) deriving (Generic, Beamable)
   primaryKey = UsersId . _uId
 
 data UsersStatus = Enabled | Disabled | Deleted

@@ -289,7 +289,7 @@ migrateStateToDatabase userDetailsState DatabaseFeature{..} = do
   withTransaction $ do
     forM_ (IntMap.toList tbl) $ \(uid, details) -> do
       accountDetailsUpsert AccountDetailsRow {
-        _adUserId = toDBUserId (UserId uid),
+        _adUserId = UserId uid,
         _adName = accountName details,
         _adContactEmail = accountContactEmail details,
         _adKind = fmap fromAccountKind (accountKind details),
@@ -468,7 +468,7 @@ dbModifyAccountDetails uid change = do
   let cdetails = change adetails
 
   accountDetailsUpsert AccountDetailsRow {
-      _adUserId = toDBUserId uid,
+      _adUserId = uid,
       _adName = accountName cdetails,
       _adContactEmail = accountContactEmail cdetails,
       _adKind = fmap fromAccountKind (accountKind cdetails),
@@ -479,7 +479,7 @@ accountDetailsFindByUserId :: UserId -> Database.Transaction (Maybe AccountDetai
 accountDetailsFindByUserId uid =
   Database.runSelectReturningOne $
     select $
-      filter_ (\ad -> _adUserId ad ==. val_ (toDBUserId uid)) $
+      filter_ (\ad -> _adUserId ad ==. val_ uid) $
         all_ (_tblAccountDetails Database.hackageDb)
 
 -- Use the values from the INSERT that caused the conflict
