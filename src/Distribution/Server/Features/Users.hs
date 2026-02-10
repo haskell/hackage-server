@@ -14,6 +14,8 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.Templating
 import qualified Distribution.Server.Framework.Auth as Auth
 
+import Distribution.Server.Features.Database (DatabaseFeature (..), HackageDb (..))
+
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.State
 import Distribution.Server.Users.Backup
@@ -227,7 +229,7 @@ deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''EnabledResource
 deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserGroupResource
 
 -- TODO: add renaming
-initUserFeature :: ServerEnv -> IO (IO UserFeature)
+initUserFeature :: ServerEnv -> IO (DatabaseFeature -> IO UserFeature)
 initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
   -- Canonical state
   usersState  <- usersStateComponent  serverStateDir
@@ -248,7 +250,7 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
       [ "manage.html", "token-created.html", "token-revoked.html"
       ]
 
-  return $ do
+  return $ \database -> do
     -- Slightly tricky: we have an almost recursive knot between the group
     -- resource management functions, and creating the admin group
     -- resource that is part of the user feature.
@@ -257,6 +259,7 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
     --
     rec let (feature@UserFeature{groupResourceAt}, adminGroupDesc)
               = userFeature templates
+                            database
                             usersState
                             adminsState
                             groupIndex
@@ -295,6 +298,7 @@ adminsStateComponent stateDir = do
     }
 
 userFeature :: Templates
+            -> DatabaseFeature
             -> StateComponent AcidState Users.Users
             -> StateComponent AcidState HackageAdmins
             -> MemState GroupIndex
@@ -305,7 +309,7 @@ userFeature :: Templates
             -> GroupResource
             -> ServerEnv
             -> (UserFeature, UserGroup)
-userFeature templates usersState adminsState
+userFeature templates database usersState adminsState
              groupIndex userAdded authFailHook groupChangedHook
              adminGroup adminResource userFeatureServerEnv
   = (UserFeature {..}, adminGroupDesc)

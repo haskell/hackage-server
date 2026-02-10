@@ -180,6 +180,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     staticFilesFeature <- mkStaticFilesFeature
 
     usersFeature    <- mkUserFeature
+                         databaseFeature
 
     coreFeature     <- mkCoreFeature
                          usersFeature
