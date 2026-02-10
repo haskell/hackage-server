@@ -34,6 +34,7 @@ import Database.Beam hiding (runInsert, runSelectReturningOne)
 import qualified Database.Beam
 import Database.Beam.Sqlite
 import qualified Database.SQLite.Simple
+import qualified Database.SQLite3
 import Distribution.Server.Features.UserDetails.State
 import Distribution.Server.Framework
 
@@ -64,8 +65,15 @@ data DatabaseFeature = DatabaseFeature
 instance IsHackageFeature DatabaseFeature where
   getFeatureInterface = databaseFeatureInterface
 
-initDbSql :: Database.SQLite.Simple.Query
-initDbSql = $(embedStringFile "init_db.sql")
+-- | Ensures the database schema is initialized. Returns 'True' if the database was just created, 'False' if it already existed.
+initSchema :: Database.SQLite.Simple.Connection -> IO Bool
+initSchema conn = do
+  [Database.SQLite.Simple.Only tableExists] <-
+    Database.SQLite.Simple.query_
+      conn
+      "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='account_details');"
+  Database.SQLite3.exec (Database.SQLite.Simple.connectionHandle conn) $(embedStringFile "init_db.sql")
+  pure (not tableExists)
 
 initDatabaseFeature :: ServerEnv -> IO (IO DatabaseFeature)
 initDatabaseFeature env = pure $ do
@@ -81,15 +89,9 @@ initDatabaseFeature env = pure $ do
   -- Script produce no changes if database is already initialized.
   -- TODO: implement migrations
   -- CHECK: Should this be done in featurePostInit instead?
-  tableExists <- withResource dbpool $ \conn -> do
-    [Database.SQLite.Simple.Only tableExists] <-
-      Database.SQLite.Simple.query_
-        conn
-        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='account_details');"
-    Database.SQLite.Simple.execute_ conn initDbSql
-    pure tableExists
+  fresh <- withResource dbpool initSchema
 
-  pure $ mkDatabaseFeature dbpool (not tableExists)
+  pure $ mkDatabaseFeature dbpool fresh
   where
     mkDatabaseFeature :: Pool Database.SQLite.Simple.Connection -> Bool -> DatabaseFeature
     mkDatabaseFeature dbpool fresh = DatabaseFeature {..}
@@ -142,7 +144,7 @@ testDatabaseFeatureIO withResourceFn action =
 setupTestDatabase :: IO (Database.SQLite.Simple.Connection, DatabaseFeature)
 setupTestDatabase = do
   conn <- Database.SQLite.Simple.open ":memory:"
-  Database.SQLite.Simple.execute_ conn initDbSql
+  fresh <- initSchema conn -- NOTE: Always fresh since it's an in-memory database
   pure
     ( conn,
       DatabaseFeature
@@ -153,6 +155,6 @@ setupTestDatabase = do
                 runTransaction
                   transaction
                   (SqlLiteConnection conn),
-          fresh = True
+          fresh = fresh
         }
     )
