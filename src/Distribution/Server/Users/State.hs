@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators #-}
+             TypeOperators, StandaloneDeriving, DeriveGeneric, DeriveAnyClass #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Users.State where
 
@@ -18,6 +18,9 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import qualified Data.Text as T
+
+import Data.Text
+import Database.Beam
 
 initialUsers :: Users.Users
 initialUsers = Users.emptyUsers
@@ -175,3 +178,27 @@ $(makeAcidic ''MirrorClients
                     ,'addMirrorClient
                     ,'removeMirrorClient
                     ,'replaceMirrorClients])
+
+-- Database
+
+data UsersT f
+  = UsersRow
+  { _uId :: Columnar f DBUserId,
+    _uUsername :: Columnar f Text,
+    _uStatus :: Columnar f Text, -- NOTE: valid values are enabled, disabled, deleted.
+    _uAuthInfo :: Columnar f Text, 
+    _uAdmin :: Columnar f Bool
+  }
+  deriving (Generic, Beamable)
+
+type UserRow = UsersT Identity
+
+deriving instance Show UserRow
+
+deriving instance Eq UserRow
+
+type UsersId = PrimaryKey UsersT Identity
+
+instance Table UsersT where
+  data PrimaryKey UsersT f = UsersId (Columnar f DBUserId) deriving (Generic, Beamable)
+  primaryKey = UsersId . _uId

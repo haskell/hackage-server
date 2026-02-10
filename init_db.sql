@@ -2,6 +2,13 @@
 --
 -- sqlite3 hackage.db < init_db.sql
 --
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE, -- CHECK: should it be unique? what happens with deleted users?
+    status TEXT NOT NULL,
+    auth_info TEXT NOT NULL,
+    admin BOOLEAN NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS account_details (
     user_id INTEGER PRIMARY KEY,
