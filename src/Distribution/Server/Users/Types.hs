@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingStrategies #-}
 module Distribution.Server.Users.Types (
@@ -23,14 +24,30 @@ import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.List as L
 
+import Data.Int
 import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
 import Data.Hashable
 import Data.Serialize (Serialize)
-
+import Database.Beam
+import Database.Beam.Backend
+import Database.Beam.Sqlite
+import Database.Beam.Sqlite.Syntax
 
 newtype UserId = UserId Int
   deriving newtype (Eq, Ord, Read, Show, MemSize, ToJSON, FromJSON, Pretty)
+
+-- NOTE: To use UserId directly we need to change it to a non machine-dependent size for Beam
+--       MemSize and Pretty are not defined on Int32
+--       but other places start to complain after that
+newtype DBUserId = DBUserId Int32
+  deriving newtype (Eq, Ord, Read, Show, FromBackendRow Sqlite, HasSqlValueSyntax SqliteValueSyntax, HasSqlEqualityCheck Sqlite)
+
+fromDBUserId :: DBUserId -> UserId
+fromDBUserId (DBUserId v) = UserId (fromIntegral v)
+
+toDBUserId :: UserId -> DBUserId
+toDBUserId (UserId v) = DBUserId (fromIntegral v)
 
 newtype UserName  = UserName String
   deriving newtype (Eq, Ord, Read, Show, MemSize, ToJSON, FromJSON, Hashable, Serialize)

@@ -8,13 +8,13 @@
 
 module Distribution.Server.Features.UserDetails.State where
 
-import Data.Int (Int32)
 import Data.Text (Text)
 import Database.Beam
+import Distribution.Server.Users.Types
 
 data AccountDetailsT f
   = AccountDetailsRow
-  { _adUserId :: Columnar f Int32, -- CHECK: Can we user Distribution.Server.Users.Types.UserId here instead?
+  { _adUserId :: Columnar f DBUserId,
     _adName :: Columnar f Text,
     _adContactEmail :: Columnar f Text,
     _adKind :: Columnar f (Maybe Text), -- NOTE: valid values are real_user, special.
@@ -31,5 +31,5 @@ deriving instance Eq AccountDetailsRow
 type AccountDetailsId = PrimaryKey AccountDetailsT Identity
 
 instance Table AccountDetailsT where
-  data PrimaryKey AccountDetailsT f = AccountDetailsId (Columnar f Int32) deriving (Generic, Beamable)
+  data PrimaryKey AccountDetailsT f = AccountDetailsId (Columnar f DBUserId) deriving (Generic, Beamable)
   primaryKey = AccountDetailsId . _adUserId

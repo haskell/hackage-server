@@ -289,7 +289,7 @@ migrateStateToDatabase userDetailsState DatabaseFeature{..} = do
   withTransaction $ do
     forM_ (IntMap.toList tbl) $ \(uid, details) -> do
       accountDetailsUpsert AccountDetailsRow {
-        _adUserId = fromIntegral uid,
+        _adUserId = toDBUserId (UserId uid),
         _adName = accountName details,
         _adContactEmail = accountContactEmail details,
         _adKind = fromAccountKind (accountKind details),
@@ -450,12 +450,12 @@ dbQueryUserDetails :: UserId -> Database.Transaction (Maybe AccountDetails)
 dbQueryUserDetails uid = fmap toUserDetails <$> accountDetailsFindByUserId uid
 
 dbUpdateUserDetails :: UserId -> AccountDetails -> Database.Transaction ()
-dbUpdateUserDetails uid@(UserId _uid) udetails = dbModifyAccountDetails uid (const udetails)
+dbUpdateUserDetails uid udetails = dbModifyAccountDetails uid (const udetails)
 
 -- convenient helper to update only part of the record.
 -- We use the same record for information that is editable by the user and information that is only editable by admins.
 dbModifyAccountDetails :: UserId -> (AccountDetails -> AccountDetails) -> Database.Transaction ()
-dbModifyAccountDetails uid@(UserId _uid) change = do
+dbModifyAccountDetails uid change = do
   -- NOTE: we need to query the current value because we are updating only some of the fields.
   madetails <- dbQueryUserDetails uid
   -- NOTE: We could assume that the record exist since updateUserDetails is called from UserSignup
@@ -468,7 +468,7 @@ dbModifyAccountDetails uid@(UserId _uid) change = do
   let cdetails = change adetails
 
   accountDetailsUpsert AccountDetailsRow {
-      _adUserId = fromIntegral _uid,
+      _adUserId = toDBUserId uid,
       _adName = accountName cdetails,
       _adContactEmail = accountContactEmail cdetails,
       _adKind = fromAccountKind (accountKind cdetails),
@@ -476,10 +476,10 @@ dbModifyAccountDetails uid@(UserId _uid) change = do
   }
 
 accountDetailsFindByUserId :: UserId -> Database.Transaction (Maybe AccountDetailsRow)
-accountDetailsFindByUserId (UserId userId) =
+accountDetailsFindByUserId uid =
   Database.runSelectReturningOne $
     select $
-      filter_ (\ad -> _adUserId ad ==. val_ (fromIntegral userId)) $
+      filter_ (\ad -> _adUserId ad ==. val_ (toDBUserId uid)) $
         all_ (_tblAccountDetails Database.hackageDb)
 
 -- Use the values from the INSERT that caused the conflict

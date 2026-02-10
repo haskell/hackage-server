@@ -54,7 +54,7 @@ import Distribution.Server.Users.Types
   ( PasswdHash(..)
   , UserAuth(..)
   , UserId(..)
-  , UserName(..)
+  , UserName(..), toDBUserId
   )
 import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import qualified Distribution.Server.Users.Users as Users
@@ -513,7 +513,7 @@ getNotificationEmailsTests =
         insert (_tblAccountDetails hackageDb) $
           insertValues
             [ AccountDetailsRow
-                { _adUserId = (\(UserId v) -> fromIntegral v) userWatcher
+                { _adUserId = toDBUserId userWatcher
                 , _adName = "user-watcher"
                 , _adContactEmail = "user-watcher@example.com"
                 , _adKind = Nothing
