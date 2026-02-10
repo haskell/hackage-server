@@ -31,12 +31,11 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Text (Text)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
 import Data.Aeson.TH
 
-import Control.Monad (when)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put)
 
