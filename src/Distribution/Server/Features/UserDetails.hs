@@ -36,6 +36,7 @@ import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
 import Data.Aeson.TH
 
+import Control.Monad (when)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put)
 
@@ -276,8 +277,8 @@ initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTempl
       [ "user-details-form.html" ]
 
     return $ \database users core upload -> do
-      migrateStateToDatabase usersDetailsState database
-      
+      when (fresh database) 
+        (migrateStateToDatabase usersDetailsState database)
       let feature = userDetailsFeature templates usersDetailsState database users core upload
       return feature
 
@@ -288,17 +289,13 @@ migrateStateToDatabase userDetailsState DatabaseFeature{..} = do
   (UserDetailsTable tbl) <- queryState userDetailsState GetUserDetailsTable
   withTransaction $ do
     forM_ (IntMap.toList tbl) $ \(uid, details) -> do
-      -- NOTE: This is actually performing a merge
-      --       by inserting records of user ids we know nothing about.
-      r <- accountDetailsFindByUserId (UserId uid)
-      when (isNothing r) $
-        accountDetailsUpsert AccountDetailsRow {
-            _adUserId = fromIntegral uid,
-            _adName = accountName details,
-            _adContactEmail = accountContactEmail details,
-            _adKind = fromAccountKind (accountKind details),
-            _adAdminNotes = accountAdminNotes details
-          }
+      accountDetailsUpsert AccountDetailsRow {
+        _adUserId = fromIntegral uid,
+        _adName = accountName details,
+        _adContactEmail = accountContactEmail details,
+        _adKind = fromAccountKind (accountKind details),
+        _adAdminNotes = accountAdminNotes details
+      }
 
 userDetailsFeature :: Templates
                    -> StateComponent AcidState UserDetailsTable

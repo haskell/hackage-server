@@ -56,7 +56,9 @@ runTransaction t = runReaderT (unTransaction t)
 -- | A feature to store extra information about users like email addresses.
 data DatabaseFeature = DatabaseFeature
   { databaseFeatureInterface :: HackageFeature,
-    withTransaction :: forall a m. (MonadIO m) => Transaction a -> m a
+    withTransaction :: forall a m. (MonadIO m) => Transaction a -> m a,
+    -- | whether the database is fresh and feature should migrate acid data
+    fresh :: Bool
   }
 
 instance IsHackageFeature DatabaseFeature where
@@ -79,13 +81,18 @@ initDatabaseFeature env = pure $ do
   -- Script produce no changes if database is already initialized.
   -- TODO: implement migrations
   -- CHECK: Should this be done in featurePostInit instead?
-  withResource dbpool $ \conn ->
+  tableExists <- withResource dbpool $ \conn -> do
+    [Database.SQLite.Simple.Only tableExists] <-
+      Database.SQLite.Simple.query_
+        conn
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='account_details');"
     Database.SQLite.Simple.execute_ conn initDbSql
+    pure tableExists
 
-  pure $ mkDatabaseFeature dbpool
+  pure $ mkDatabaseFeature dbpool (not tableExists)
   where
-    mkDatabaseFeature :: Pool Database.SQLite.Simple.Connection -> DatabaseFeature
-    mkDatabaseFeature dbpool = DatabaseFeature {..}
+    mkDatabaseFeature :: Pool Database.SQLite.Simple.Connection -> Bool -> DatabaseFeature
+    mkDatabaseFeature dbpool fresh = DatabaseFeature {..}
       where
         databaseFeatureInterface =
           (emptyHackageFeature "database")
@@ -145,6 +152,7 @@ setupTestDatabase = do
               Database.SQLite.Simple.withTransaction conn $
                 runTransaction
                   transaction
-                  (SqlLiteConnection conn)
+                  (SqlLiteConnection conn),
+          fresh = True
         }
     )
