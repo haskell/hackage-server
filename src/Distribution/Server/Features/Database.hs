@@ -114,7 +114,8 @@ initDatabaseFeature env = pure $ do
 
 data HackageDb f = HackageDb
   { _tblAccountDetails :: f (TableEntity AccountDetailsT),
-    _tblUsers :: f (TableEntity UsersT)
+    _tblUsers :: f (TableEntity UsersT),
+    _tblUserTokens :: f (TableEntity UserTokensT)
   }
   deriving stock (Generic)
 

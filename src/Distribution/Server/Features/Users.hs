@@ -303,6 +303,17 @@ migrateStateToDatabase usersState adminsState DatabaseFeature{..} = do
             _uAuthInfo = authInfo,
             _uAdmin = Group.member uid admins
           }])
+
+      forM_ (Map.toList (userTokens uinfo)) $ \(token, desc) -> do
+        Database.runInsert $
+          insert
+            (_tblUserTokens Database.hackageDb)
+            (insertExpressions [UserTokensRow {
+              _utId = default_,
+              _utUserId = val_ uid,
+              _utToken = val_ token,
+              _utDescription = val_ desc
+            }])
    
 
 usersStateComponent :: FilePath -> IO (StateComponent AcidState Users.Users)

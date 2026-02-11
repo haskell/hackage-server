@@ -20,6 +20,7 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import qualified Data.Text as T
 
+import Data.Int
 import Data.Text
 import Database.Beam
 import Database.Beam.Backend.SQL.SQL92 (HasSqlValueSyntax (..), autoSqlValueSyntax)
@@ -218,3 +219,24 @@ instance FromBackendRow Sqlite UsersStatus where
 
 newtype DBUserName = DBUserName Text
   deriving newtype (Eq, Ord, Read, Show, FromBackendRow Sqlite, HasSqlValueSyntax SqliteValueSyntax)
+
+data UserTokensT f
+  = UserTokensRow
+  { _utId :: Columnar f Int32,
+    _utUserId :: Columnar f UserId,
+    _utDescription :: Columnar f Text,
+    _utToken :: Columnar f AuthToken
+  }
+  deriving (Generic, Beamable)
+
+type UserTokenRow = UserTokensT Identity
+
+deriving instance Show UserTokenRow
+
+deriving instance Eq UserTokenRow
+
+type UserTokensId = PrimaryKey UserTokensT Identity
+
+instance Table UserTokensT where
+  data PrimaryKey UserTokensT f = UserTokensId (Columnar f Int32) deriving (Generic, Beamable)
+  primaryKey = UserTokensId . _utId  

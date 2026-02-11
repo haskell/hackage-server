@@ -35,7 +35,6 @@ import Data.Hashable
 import Data.Serialize (Serialize)
 import Database.Beam
 import Database.Beam.Backend
-import Database.Beam.Backend.SQL.SQL92 ()
 import Database.Beam.Sqlite
 import Database.Beam.Sqlite.Syntax
 

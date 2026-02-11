@@ -10,6 +10,13 @@ CREATE TABLE IF NOT EXISTS users (
     admin BOOLEAN NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS user_tokens (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    token TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS account_details (
     user_id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
