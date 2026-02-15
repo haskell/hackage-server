@@ -15,6 +15,7 @@ import Distribution.Server.Framework.Templating
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 
+import Distribution.Server.Features.Database (DatabaseFeature (..))
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
@@ -276,7 +277,8 @@ resetInfoToCSV backuptype (SignupResetTable tbl)
 --
 
 initUserSignupFeature :: ServerEnv
-                      -> IO (UserFeature
+                      -> IO (DatabaseFeature
+                          -> UserFeature
                           -> UserDetailsFeature
                           -> UploadFeature
                           -> IO UserSignupFeature)
@@ -293,14 +295,15 @@ initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                    , "ResetRequest.html", "ResetConfirmation.email"
                    , "ResetEmailSent.html", "ResetConfirm.html" ]
 
-    return $ \users userdetails upload -> do
+    return $ \database users userdetails upload -> do
       let feature = userSignupFeature env
-                      users userdetails upload
+                      database users userdetails upload
                       signupResetState templates
       return feature
 
 
 userSignupFeature :: ServerEnv
+                  -> DatabaseFeature
                   -> UserFeature
                   -> UserDetailsFeature
                   -> UploadFeature
@@ -308,6 +311,7 @@ userSignupFeature :: ServerEnv
                   -> Templates
                   -> UserSignupFeature
 userSignupFeature ServerEnv{serverBaseURI, serverCron}
+                  DatabaseFeature{..}
                   UserFeature{..} UserDetailsFeature{..}
                   UploadFeature{uploadersGroup} signupResetState templates
   = UserSignupFeature {..}
@@ -562,7 +566,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
             }
         uid <- updateAddUser username userauth
            >>= either errNameClash return
-        updateUserDetails uid acctDetails
+        withTransaction $ updateUserDetails uid acctDetails
         liftIO $ addUserToGroup uploadersGroup uid
         seeOther (userPageUri userResource "" username) (toResponse ())
       where
@@ -593,7 +597,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
 
         (supplied_username, supplied_useremail) <- lookUserNameEmail
         (uid, uinfo) <- lookupUserNameFull supplied_username
-        mudetails    <- queryUserDetails uid
+        mudetails    <- withTransaction $ queryUserDetails uid
 
         guardEmailMatches mudetails supplied_useremail
         AccountDetails{..} <- guardSuitableAccountType uinfo mudetails
@@ -658,7 +662,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
         nonce                    <- nonceInPath dpath
         ResetInfo{resetUserId}   <- lookupResetInfo nonce
         uinfo@UserInfo{userName} <- lookupUserInfo resetUserId
-        mudetails                <- queryUserDetails resetUserId
+        mudetails                <- withTransaction $ queryUserDetails resetUserId
         AccountDetails{..}       <- guardSuitableAccountType uinfo mudetails
 
         template <- getTemplate templates "ResetConfirm.html"
@@ -676,7 +680,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
         nonce                    <- nonceInPath dpath
         ResetInfo{resetUserId}   <- lookupResetInfo nonce
         uinfo@UserInfo{userName} <- lookupUserInfo resetUserId
-        mudetails                <- queryUserDetails resetUserId
+        mudetails                <- withTransaction $ queryUserDetails resetUserId
         AccountDetails{..}       <- guardSuitableAccountType uinfo mudetails
 
         (passwd, passwdRepeat) <- lookPasswd

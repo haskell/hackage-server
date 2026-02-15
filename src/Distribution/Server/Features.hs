@@ -19,6 +19,7 @@ import Distribution.Server.Features.Core     (initCoreFeature, coreResource, que
 import Distribution.Server.Features.Security (initSecurityFeature)
 import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
+import Distribution.Server.Features.Database   (initDatabaseFeature)
 
 #ifndef MINIMAL
 import Distribution.Server.Features.Browse              (initBrowseFeature)
@@ -89,6 +90,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     loginfo verbosity "Initialising features, part 1"
 
+    mkDatabaseFeature    <- logStartup "database" $
+                            initDatabaseFeature env
     mkStaticFilesFeature <- logStartup "static files" $
                             initStaticFilesFeature env
     mkUserFeature        <- logStartup "user" $
@@ -172,9 +175,12 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     -- Arguments denote feature dependencies.
     -- What follows is a topological sort along those lines
+    databaseFeature <- mkDatabaseFeature
+
     staticFilesFeature <- mkStaticFilesFeature
 
     usersFeature    <- mkUserFeature
+                         databaseFeature
 
     coreFeature     <- mkCoreFeature
                          usersFeature
@@ -204,11 +210,13 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
 
     userDetailsFeature <- mkUserDetailsFeature
+                            databaseFeature
                             usersFeature
                             coreFeature
                             uploadFeature
 
     userSignupFeature <- mkUserSignupFeature
+                           databaseFeature
                            usersFeature
                            userDetailsFeature
                            uploadFeature
@@ -299,6 +307,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     platformFeature <- mkPlatformFeature
 
     htmlFeature     <- mkHtmlFeature
+                         databaseFeature
                          usersFeature
                          coreFeature
                          packageContentsFeature
@@ -328,6 +337,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                           uploadFeature
 
     adminFrontendFeature <- mkAdminFrontendFeature
+                              databaseFeature
                               usersFeature
                               userDetailsFeature
                               userSignupFeature
@@ -352,6 +362,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                       uploadFeature
 
     userNotifyFeature <- mkUserNotifyFeature
+                           databaseFeature
                            usersFeature
                            coreFeature
                            uploadFeature
@@ -392,6 +403,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface securityFeature
          , getFeatureInterface mirrorFeature
          , getFeatureInterface uploadFeature
+         , getFeatureInterface databaseFeature
 #ifndef MINIMAL
          , getFeatureInterface tarIndexCacheFeature
          , getFeatureInterface packageContentsFeature

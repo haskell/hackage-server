@@ -12,6 +12,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.UserSignup
 import Distribution.Server.Features.LegacyPasswds
+import Distribution.Server.Features.Database (DatabaseFeature(..))
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Users as Users
@@ -27,7 +28,8 @@ import Data.Maybe (isJust)
 -- | An HTML UI for various server admin tasks, mostly user accounts
 --
 initAdminFrontendFeature :: ServerEnv
-                         -> IO (UserFeature
+                         -> IO (DatabaseFeature
+                             -> UserFeature
                              -> UserDetailsFeature
                              -> UserSignupFeature
                              -> LegacyPasswdsFeature
@@ -40,8 +42,9 @@ initAdminFrontendFeature env@ServerEnv{ serverTemplatesDir,
                    [ "admin.html", "accounts.html", "account.html"
                    , "signups.html", "resets.html", "legacy.html" ]
 
-    return $ \user userdetails usersignup legacypasswds -> do
+    return $ \database user userdetails usersignup legacypasswds -> do
       let feature = adminFrontendFeature env templates
+                                         database
                                          user userdetails
                                          usersignup legacypasswds
 
@@ -49,12 +52,13 @@ initAdminFrontendFeature env@ServerEnv{ serverTemplatesDir,
 
 
 adminFrontendFeature :: ServerEnv -> Templates
+                     -> DatabaseFeature
                      -> UserFeature
                      -> UserDetailsFeature
                      -> UserSignupFeature
                      -> LegacyPasswdsFeature
                      -> HackageFeature
-adminFrontendFeature _env templates
+adminFrontendFeature _env templates DatabaseFeature{..}
                      UserFeature{..} UserDetailsFeature{..}
                      UserSignupFeature{..} LegacyPasswdsFeature{..} =
   (emptyHackageFeature "admin-frontend") {
@@ -224,7 +228,7 @@ adminFrontendFeature _env templates
         template  <- getTemplate templates "account.html"
         uid       <- maybe mzero return (simpleParse =<< lookup "uid" dpath)
         uinfo     <- lookupUserInfo uid
-        mudetails <- queryUserDetails uid
+        mudetails <- withTransaction $ queryUserDetails uid
         resetInfo <- lookupPasswordReset uid <$> queryAllSignupResetInfo
         mlegacy   <- lookupUserLegacyPasswd uid <$> queryLegacyPasswds
 

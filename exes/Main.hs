@@ -206,6 +206,7 @@ data RunFlags = RunFlags {
     flagRunTemp            :: Flag Bool,
     flagRunCacheDelay      :: Flag String,
     flagRunLiveTemplates   :: Flag Bool,
+    flagRunDatabasePath    :: Flag FilePath,
     -- Online backup flags
     flagRunBackupOutputDir :: Flag FilePath,
     flagRunBackupLinkBlobs :: Flag Bool,
@@ -226,6 +227,7 @@ defaultRunFlags = RunFlags {
     flagRunTemp            = Flag False,
     flagRunCacheDelay      = NoFlag,
     flagRunLiveTemplates   = Flag False,
+    flagRunDatabasePath    = NoFlag,
     flagRunBackupOutputDir = Flag "backups",
     flagRunBackupLinkBlobs = Flag False,
     flagRunBackupScrubbed  = Flag False
@@ -311,6 +313,11 @@ runCommand =
           "Do not cache templates, for quicker feedback during development."
           flagRunLiveTemplates (\v flags -> flags { flagRunLiveTemplates = v })
           (noArg (Flag True))
+      , option [] ["database-path"]
+          "Path to the database file"
+          flagRunDatabasePath (\v flags -> flags { flagRunDatabasePath = v })
+          (reqArgFlag "FILE")
+          -- NOTE: How to make --database-path mandatory?
       ]
 
 runAction :: RunFlags -> IO ()
@@ -340,12 +347,14 @@ runAction opts = do
                         confTmpDir     = tmpDir,
                         confCacheDelay = cacheDelay,
                         confLiveTemplates = liveTemplates,
-                        confVerbosity  = verbosity
+                        confVerbosity  = verbosity,
+                        confDatabasePath = databasePath
                     }
         outputDir = fromFlag (flagRunBackupOutputDir opts)
         linkBlobs = fromFlag (flagRunBackupLinkBlobs opts)
         scrubbed  = fromFlag (flagRunBackupScrubbed  opts)
         liveTemplates = fromFlag (flagRunLiveTemplates opts)
+        databasePath = fromFlagOrDefault (confDatabasePath defaults) (flagRunDatabasePath opts)
 
     checkBlankServerState =<< Server.hasSavedState config
     checkStaticDir staticDir (flagRunStaticDir opts)

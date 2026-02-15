@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Distribution.Server.Users.AuthToken
     ( AuthToken
     , parseAuthToken, parseAuthTokenM, renderAuthToken
@@ -25,6 +26,11 @@ import qualified Distribution.Compat.CharParsing as P
 
 import Data.SafeCopy
 
+import Database.Beam
+import Database.Beam.Backend
+import Database.Beam.Sqlite
+import Database.Beam.Sqlite.Syntax
+
 -- | Contains the original token which will be shown to the user
 -- once and is NOT stored on the server. The user is expected
 -- to provide this token on each request that should be
@@ -35,6 +41,12 @@ newtype OriginalToken = OriginalToken Nonce
 -- | Contains a hash of the original token
 newtype AuthToken = AuthToken BSS.ShortByteString
     deriving (Eq, Ord, Read, Show, MemSize)
+
+instance FromBackendRow Sqlite AuthToken where
+  fromBackendRow = AuthToken . BSS.toShort <$> fromBackendRow
+
+instance HasSqlValueSyntax SqliteValueSyntax AuthToken where
+  sqlValueSyntax (AuthToken v) = sqlValueSyntax (BSS.fromShort v)
 
 convertToken :: OriginalToken -> AuthToken
 convertToken (OriginalToken bs) =
