@@ -474,9 +474,7 @@ dbModifyAccountDetails uid change = do
 accountDetailsFindByUserId :: UserId -> Database.Transaction (Maybe AccountDetailsRow)
 accountDetailsFindByUserId uid =
   Database.runSelectReturningOne $
-    select $
-      filter_ (\ad -> _adUserId ad ==. val_ uid) $
-        all_ (_tblAccountDetails Database.hackageDb)
+    lookup_ (_tblAccountDetails Database.hackageDb) (AccountDetailsId uid)
 
 -- Use the values from the INSERT that caused the conflict
 accountDetailsUpsert :: AccountDetailsRow -> Database.Transaction ()
