@@ -285,35 +285,47 @@ migrateStateToDatabase usersState adminsState DatabaseFeature{..} = do
   users <- queryState usersState GetUserDb
   admins <- queryState adminsState GetAdminList
 
+  let usersAndTokens =
+        map (\(uid, uinfo) -> 
+           ( (uid, uinfo), 
+             map (\(token, desc) -> (uid, token, desc)) 
+                 (Map.toList (userTokens uinfo))
+           )
+        ) (Users.enumerateAllUsers users)
+  
+  let usersToInsert = map fst usersAndTokens
+  let tokensToInsert = concatMap snd usersAndTokens
   withTransaction $ do
-    forM_ (Users.enumerateAllUsers users) $ \(uid, uinfo) -> do
-      let (status, authInfo) = 
-            case userStatus uinfo of
-              AccountEnabled a -> (Enabled, Just a)
-              AccountDisabled ma -> (Disabled, ma)
-              AccountDeleted -> (Deleted, Nothing)
+    Database.runInsert $
+      insert
+        (_tblUsers Database.hackageDb)
+        (insertValues (map (\(uid, uinfo) -> 
+          let (status, authInfo) = 
+                case userStatus uinfo of
+                  AccountEnabled a  -> (Enabled, Just a)
+                  AccountDisabled ma -> (Disabled, ma)
+                  AccountDeleted    -> (Deleted, Nothing)
+          in
+            UsersRow {
+              _uId       = uid,
+              _uUsername = userName uinfo,
+              _uStatus   = status,
+              _uAuthInfo = authInfo,
+              _uAdmin    = Group.member uid admins
+            }
+        ) usersToInsert))
 
-      Database.runInsert $
-        insert
-          (_tblUsers Database.hackageDb)
-          (insertValues [UsersRow {
-            _uId = uid,
-            _uUsername = userName uinfo,
-            _uStatus = status,
-            _uAuthInfo = authInfo,
-            _uAdmin = Group.member uid admins
-          }])
-
-      forM_ (Map.toList (userTokens uinfo)) $ \(token, desc) -> do
-        Database.runInsert $
-          insert
-            (_tblUserTokens Database.hackageDb)
-            (insertExpressions [UserTokensRow {
-              _utId = default_,
-              _utUserId = val_ uid,
-              _utToken = val_ token,
-              _utDescription = val_ desc
-            }])
+    Database.runInsert $
+      insert
+        (_tblUserTokens Database.hackageDb)
+        (insertExpressions (map (\(uid, token, desc) ->
+          UserTokensRow {
+            _utId          = default_,
+            _utUserId      = val_ uid,
+            _utToken       = val_ token,
+            _utDescription = val_ desc
+          }
+        ) tokensToInsert))
    
 
 usersStateComponent :: FilePath -> IO (StateComponent AcidState Users.Users)
