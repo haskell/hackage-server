@@ -341,10 +341,6 @@ userDetailsFeature templates userDetailsState DatabaseFeature{..} UserFeature{..
       , resourceDelete = [ ("", handlerDeleteAdminInfo) ]
       }
 
-    -- handlerWithConnection :: (Database.Connection -> DynamicPath -> ServerPartE Response) -> DynamicPath -> ServerPartE Response
-    -- handlerWithConnection handler dpath =
-    --   Database.withConnection $ \conn -> _ handler conn dpath
-
     -- Queries and updates
     --
 
