@@ -650,7 +650,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         pkgVotes      <- pkgNumVotes pkgname
         pkgScore      <- pkgNumScore pkgname
         auth          <- checkAuthenticated
-        userRating    <- case auth of Just (uid,_) -> pkgUserVote pkgname uid; _ -> return Nothing
+        userRating    <- case auth of Just uid -> pkgUserVote pkgname uid; _ -> return Nothing
         mdoctarblob   <- queryDocumentation realpkg
         tags          <- queryTagsForPackage pkgname
         rdeps         <- queryReverseDeps pkgname
