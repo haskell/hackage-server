@@ -59,6 +59,7 @@ serverRunningArgs =
   , "--base-uri", "http://127.0.0.1:" <> show testPort
   , "--user-content-uri", "http://localhost:" <> show testPort
   , "--required-base-host-header", "127.0.0.1:" <> show testPort
+  , "--database-path", "hackageTest.db" -- NOTE: :memory: does not work for the HighLevelTest
   ]
 
 waitForServer :: IO ()

@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators #-}
+             TypeOperators, StandaloneDeriving, DeriveGeneric, DeriveAnyClass, 
+             DerivingStrategies, GeneralisedNewtypeDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Users.State where
 
@@ -18,6 +19,13 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import qualified Data.Text as T
+
+import Data.Int
+import Data.Text
+import Database.Beam
+import Database.Beam.Backend.SQL.SQL92 (HasSqlValueSyntax (..), autoSqlValueSyntax)
+import Database.Beam.Sqlite (Sqlite)
+import Database.Beam.Sqlite.Syntax (SqliteValueSyntax (..))
 
 initialUsers :: Users.Users
 initialUsers = Users.emptyUsers
@@ -175,3 +183,60 @@ $(makeAcidic ''MirrorClients
                     ,'addMirrorClient
                     ,'removeMirrorClient
                     ,'replaceMirrorClients])
+
+-- Database
+
+data UsersT f
+  = UsersRow
+  { _uId :: Columnar f UserId,
+    _uUsername :: Columnar f UserName,
+    _uStatus :: Columnar f UsersStatus,
+    _uAuthInfo :: Columnar f (Maybe UserAuth), 
+    _uAdmin :: Columnar f Bool
+  }
+  deriving (Generic, Beamable)
+
+type UserRow = UsersT Identity
+
+deriving instance Show UserRow
+
+deriving instance Eq UserRow
+
+type UsersId = PrimaryKey UsersT Identity
+
+instance Table UsersT where
+  data PrimaryKey UsersT f = UsersId (Columnar f UserId) deriving (Generic, Beamable)
+  primaryKey = UsersId . _uId
+
+data UsersStatus = Enabled | Disabled | Deleted
+  deriving (Eq, Show, Read, Enum, Bounded)
+
+instance HasSqlValueSyntax SqliteValueSyntax UsersStatus where
+  sqlValueSyntax = autoSqlValueSyntax
+
+instance FromBackendRow Sqlite UsersStatus where
+  fromBackendRow = read . unpack <$> fromBackendRow
+
+newtype DBUserName = DBUserName Text
+  deriving newtype (Eq, Ord, Read, Show, FromBackendRow Sqlite, HasSqlValueSyntax SqliteValueSyntax)
+
+data UserTokensT f
+  = UserTokensRow
+  { _utId :: Columnar f Int32,
+    _utUserId :: Columnar f UserId,
+    _utDescription :: Columnar f Text,
+    _utToken :: Columnar f AuthToken
+  }
+  deriving (Generic, Beamable)
+
+type UserTokenRow = UserTokensT Identity
+
+deriving instance Show UserTokenRow
+
+deriving instance Eq UserTokenRow
+
+type UserTokensId = PrimaryKey UserTokensT Identity
+
+instance Table UserTokensT where
+  data PrimaryKey UserTokensT f = UserTokensId (Columnar f Int32) deriving (Generic, Beamable)
+  primaryKey = UserTokensId . _utId  

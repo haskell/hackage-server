@@ -14,6 +14,9 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.Templating
 import qualified Distribution.Server.Framework.Auth as Auth
 
+import Distribution.Server.Features.Database (DatabaseFeature (..), HackageDb (..))
+import qualified Distribution.Server.Features.Database as Database
+
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.State
 import Distribution.Server.Users.Backup
@@ -38,6 +41,8 @@ import qualified Data.Text as T
 import Distribution.Text (display, simpleParse)
 
 import Happstack.Server.Cookie (addCookie, mkCookie, CookieLife(Session))
+
+import Database.Beam hiding (update)
 
 -- | A feature to allow manipulation of the database of users.
 --
@@ -227,7 +232,7 @@ deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''EnabledResource
 deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserGroupResource
 
 -- TODO: add renaming
-initUserFeature :: ServerEnv -> IO (IO UserFeature)
+initUserFeature :: ServerEnv -> IO (DatabaseFeature -> IO UserFeature)
 initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
   -- Canonical state
   usersState  <- usersStateComponent  serverStateDir
@@ -248,7 +253,10 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
       [ "manage.html", "token-created.html", "token-revoked.html"
       ]
 
-  return $ do
+  return $ \database -> do
+    when (fresh database) 
+      (migrateStateToDatabase usersState adminsState database)
+
     -- Slightly tricky: we have an almost recursive knot between the group
     -- resource management functions, and creating the admin group
     -- resource that is part of the user feature.
@@ -257,6 +265,7 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
     --
     rec let (feature@UserFeature{groupResourceAt}, adminGroupDesc)
               = userFeature templates
+                            database
                             usersState
                             adminsState
                             groupIndex
@@ -267,6 +276,57 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
         (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
 
     return feature
+
+migrateStateToDatabase :: StateComponent AcidState Users.Users
+                       -> StateComponent AcidState HackageAdmins
+                       -> DatabaseFeature 
+                       -> IO ()
+migrateStateToDatabase usersState adminsState DatabaseFeature{..} = do
+  users <- queryState usersState GetUserDb
+  admins <- queryState adminsState GetAdminList
+
+  let usersAndTokens =
+        map (\(uid, uinfo) -> 
+           ( (uid, uinfo), 
+             map (\(token, desc) -> (uid, token, desc)) 
+                 (Map.toList (userTokens uinfo))
+           )
+        ) (Users.enumerateAllUsers users)
+  
+  let usersToInsert = map fst usersAndTokens
+  let tokensToInsert = concatMap snd usersAndTokens
+  withTransaction $ do
+    Database.runInsert $
+      insert
+        (_tblUsers Database.hackageDb)
+        (insertValues (map (\(uid, uinfo) -> 
+          let (status, authInfo) = 
+                case userStatus uinfo of
+                  AccountEnabled a  -> (Enabled, Just a)
+                  AccountDisabled ma -> (Disabled, ma)
+                  AccountDeleted    -> (Deleted, Nothing)
+          in
+            UsersRow {
+              _uId       = uid,
+              _uUsername = userName uinfo,
+              _uStatus   = status,
+              _uAuthInfo = authInfo,
+              _uAdmin    = Group.member uid admins
+            }
+        ) usersToInsert))
+
+    Database.runInsert $
+      insert
+        (_tblUserTokens Database.hackageDb)
+        (insertExpressions (map (\(uid, token, desc) ->
+          UserTokensRow {
+            _utId          = default_,
+            _utUserId      = val_ uid,
+            _utToken       = val_ token,
+            _utDescription = val_ desc
+          }
+        ) tokensToInsert))
+   
 
 usersStateComponent :: FilePath -> IO (StateComponent AcidState Users.Users)
 usersStateComponent stateDir = do
@@ -295,6 +355,7 @@ adminsStateComponent stateDir = do
     }
 
 userFeature :: Templates
+            -> DatabaseFeature
             -> StateComponent AcidState Users.Users
             -> StateComponent AcidState HackageAdmins
             -> MemState GroupIndex
@@ -305,7 +366,7 @@ userFeature :: Templates
             -> GroupResource
             -> ServerEnv
             -> (UserFeature, UserGroup)
-userFeature templates usersState adminsState
+userFeature templates database usersState adminsState
              groupIndex userAdded authFailHook groupChangedHook
              adminGroup adminResource userFeatureServerEnv
   = (UserFeature {..}, adminGroupDesc)
