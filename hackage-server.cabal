@@ -718,3 +718,24 @@ test-suite DocTests
 
   if !flag(doctests)
     buildable: False
+
+benchmark FdExhaustion-DownloadCount-Hypothesis
+  import:         exe-base
+  import:         defaults
+
+  -- This benchmark needs to have the same rtsopts as hackage-server
+
+  -- from exe-base
+  ghc-options: -threaded -rtsopts
+  -- from hackage-server above
+  ghc-options: -with-rtsopts=-I00
+
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: benchmarks
+  main-is:        FdExhaustionDownloadCountHypothesis.hs
+
+  build-depends:
+    , cereal
+    , hackage-server
+    , safecopy
+    , temporary
