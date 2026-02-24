@@ -10,6 +10,7 @@ import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
+import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Distribution.Server.Pages.Package () -- for ShortText html instance, for now.
@@ -19,13 +20,9 @@ import Distribution.PackageDescription
 import Distribution.Text
 import Distribution.Utils.ShortText (fromShortText)
 
-import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 import Data.List (sortOn)
 import Data.Maybe (listToMaybe)
 import Data.Ord (Down(..))
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Text.Encoding.Error as T
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format
 import Network.URI( URI(..), uriToString )
@@ -96,7 +93,7 @@ packageFeedFeature ServerEnv{..}
             Right (_, content) ->
               if supposedToBeMarkdown filename
                 then return (pkg, renderMarkdown filename content)
-                else return (pkg, XHtml.pre << unpackUtf8 content)
+                else return (pkg, XHtml.pre << unpackUTF8 content)
 
 renderPackageFeed :: Users -> URI -> UTCTime -> PackageName -> [(PkgInfo, XHtml.Html)] -> RSS
 renderPackageFeed users hostURI now name pkgs = RSS title uri desc (channel updated) items
@@ -139,9 +136,3 @@ feedItems users hostURI (pkgInfo, chlog) =
         uploader = display $ Users.userIdToName users uploaderId
         pd = packageDescription (pkgDesc pkgInfo)
         d dt dd = XHtml.dterm (XHtml.toHtml dt) +++ XHtml.ddef (XHtml.toHtml dd)
-
-
-unpackUtf8 :: BS.ByteString -> String
-unpackUtf8 = T.unpack
-           . T.decodeUtf8With T.lenientDecode
-           . BS.toStrict

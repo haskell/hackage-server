@@ -32,6 +32,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Features.Security.Migration
 
+import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Util.ServeTarball
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Distribution.Server.Pages.Template (hackagePage)
@@ -41,9 +42,6 @@ import Distribution.Package
 import Distribution.Version
 
 import qualified Data.Text                as T
-import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Encoding.Error as T
-import qualified Data.ByteString.Lazy     as BS (ByteString, toStrict)
 import qualified Text.XHtml.Strict        as XHtml
 import           Text.XHtml.Strict        ((<<), (!))
 import           Data.Aeson               (Value (..), object, toJSON, (.=))
@@ -596,7 +594,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                             << if supposedToBeMarkdown filename
                                  then renderMarkdown filename contents
                                  else XHtml.thediv ! [XHtml.theclass "preformatted"]
-                                                  << unpackUtf8 contents
+                                                  << unpackUTF8 contents
               ]
 
 
@@ -614,8 +612,3 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                          ["index.html"] (display (packageId pkg)) fp index
                          [Public, maxAgeMinutes 5] etag Nothing
           requireUserContent userFeatureServerEnv (tarServeResponse tarServe)
-
-unpackUtf8 :: BS.ByteString -> String
-unpackUtf8 = T.unpack
-           . T.decodeUtf8With T.lenientDecode
-           . BS.toStrict

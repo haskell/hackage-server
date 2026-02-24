@@ -20,6 +20,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Users.Types (UserInfo, userStatus, userName, isActiveAccount)
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
+import Distribution.Server.Util.Parse (unpackUTF8)
 import Data.TarIndex (TarIndex)
 import Distribution.Server.Features.Distro.Types
 
@@ -37,10 +38,7 @@ import Data.List                (intercalate, intersperse)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Format         (defaultTimeLocale, formatTime)
 
-import qualified Data.Text                as T
-import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Encoding.Error as T
-import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
+import qualified Data.ByteString.Lazy as BS (ByteString)
 
 import qualified Distribution.Server.Pages.Package as Old
 import Data.Time.Clock (UTCTime)
@@ -500,15 +498,10 @@ readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename), rendPkg
     [ thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
                  then renderMarkdown (display pkgid) content
-                 else pre << unpackUtf8 content
+                 else pre << unpackUTF8 content
     ]
 readmeSection _ _ = []
 
-
-unpackUtf8 :: BS.ByteString -> String
-unpackUtf8 = T.unpack
-           . T.decodeUtf8With T.lenientDecode
-           . BS.toStrict
 -----------------------------------------------------------------------------
 commaList :: [Html] -> Html
 commaList = concatHtml . intersperse (toHtml ", ")
