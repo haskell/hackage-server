@@ -27,7 +27,7 @@ import qualified Codec.Compression.GZip                             as GZip
 import           Data.Aeson                                         (Value (..), toJSON)
 import qualified Data.Aeson.Key                                     as Key
 import qualified Data.Aeson.KeyMap                                  as KeyMap
-import           Data.ByteString.Lazy                               (LazyByteString)
+import           Data.ByteString.Lazy                               (LazyByteString, fromStrict)
 import qualified Data.Foldable                                      as Foldable
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
@@ -721,7 +721,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       -- check that the cabal name matches the package
       guard (lookup "cabal" dpath == Just (display $ packageName pkginfo))
       let (fileRev, (utime, _uid)) = pkgLatestRevision pkginfo
-          cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
+          cabalfile = Resource.CabalFile (fromStrict $ cabalFileByteString fileRev) utime
       return $ toResponse cabalfile
 
     serveCabalFileRevisionsList :: DynamicPath -> ServerPartE Response
@@ -731,7 +731,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       let revisions = pkgMetadataRevisions pkginfo
           revisionToObj rev (cabalFileText, (utime, uid)) =
             let uname = userIdToName users uid
-                hash = sha256 (cabalFileByteString cabalFileText)
+                hash = sha256 (fromStrict $ cabalFileByteString cabalFileText)
             in
             Object $ KeyMap.fromList
               [ (Key.fromString "number", Number (fromIntegral rev))
@@ -750,7 +750,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mrev >>= \rev -> revisions Vec.!? rev of
         Just (fileRev, (utime, _uid)) -> return $ toResponse cabalfile
           where
-            cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
+            cabalfile = Resource.CabalFile (fromStrict $ cabalFileByteString fileRev) utime
         Nothing -> errNotFound "Package revision not found"
                      [MText "Cannot parse revision, or revision out of range."]
 

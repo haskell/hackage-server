@@ -1,14 +1,17 @@
 -- | Parsing and UTF8 utilities
 module Distribution.Server.Util.Parse (
-    int, unpackUTF8, packUTF8
+    int, unpackUTF8, unpackUTF8Strict, packUTF8
   ) where
 
 import qualified Text.ParserCombinators.ReadP as Parse
 
 import qualified Data.Char as Char
+import Data.ByteString (StrictByteString)
 import Data.ByteString.Lazy (LazyByteString)
-import qualified Data.Text.Lazy           as Text
-import qualified Data.Text.Lazy.Encoding  as Text
+import qualified Data.Text                as TextStrict
+import qualified Data.Text.Encoding       as TextStrict
+import qualified Data.Text.Lazy           as TextLazy
+import qualified Data.Text.Lazy.Encoding  as TextLazy
 import qualified Data.Text.Encoding.Error as Text
 
 -- | Parse a positive integer. No leading @0@'s allowed.
@@ -29,7 +32,10 @@ ignoreBOM ('\xFEFF':string) = string
 ignoreBOM string            = string
 
 unpackUTF8 :: LazyByteString -> String
-unpackUTF8 = ignoreBOM . Text.unpack . Text.decodeUtf8With Text.lenientDecode
+unpackUTF8 = ignoreBOM . TextLazy.unpack . TextLazy.decodeUtf8With Text.lenientDecode
+
+unpackUTF8Strict :: StrictByteString -> String
+unpackUTF8Strict = ignoreBOM . TextStrict.unpack . TextStrict.decodeUtf8With Text.lenientDecode
 
 packUTF8 :: String -> LazyByteString
-packUTF8 = Text.encodeUtf8 . Text.pack
+packUTF8 = TextLazy.encodeUtf8 . TextLazy.pack

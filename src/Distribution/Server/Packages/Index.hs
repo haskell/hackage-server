@@ -24,15 +24,12 @@ import Distribution.Server.Users.Users
          ( Users, userIdToName )
 import Distribution.Server.Users.Types
          ( UserId(..), UserName(..) )
-import Distribution.Server.Util.ParseSpecVer
 
 import Distribution.Text
          ( display )
 import Distribution.Types.PackageName
 import Distribution.Package
          ( Package, PackageId, packageName, packageVersion )
-import Distribution.CabalSpecVersion
-         ( pattern CabalSpecV2_0 )
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Clock.POSIX
@@ -43,7 +40,7 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
-import Data.ByteString.Lazy (LazyByteString)
+import Data.ByteString.Lazy (LazyByteString, fromStrict)
 import System.FilePath.Posix
 import Data.Maybe (mapMaybe)
 
@@ -107,7 +104,7 @@ writeIncremental pkgs =
         tarPath   <- either (const Nothing) Just $
                      Tar.toTarPath False fileName
         let !tarEntry = addTimestampAndOwner timestamp userid username $
-                          Tar.fileEntry tarPath cabalfile
+                          Tar.fileEntry tarPath $ fromStrict cabalfile
         return tarEntry
       where
         pkgname = unPackageName (packageName pkgid)
@@ -175,7 +172,7 @@ legacyExtras = go Map.empty
 -- files for a package), and does not contain the TUF files.
 writeLegacy :: Users -> Map String (LazyByteString, UTCTime) -> PackageIndex PkgInfo -> LazyByteString
 writeLegacy users =
-    writeLegacyAux (cabalFileByteString . pkgLatestCabalFileText) setModTime
+    writeLegacyAux (fromStrict . cabalFileByteString . pkgLatestCabalFileText) setModTime
   . extraEntries
   where
     setModTime pkgInfo entry =

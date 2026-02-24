@@ -41,6 +41,7 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.Version
 
+import qualified Data.ByteString.Lazy     as BS (toStrict, fromStrict)
 import qualified Data.Text                as T
 import qualified Text.XHtml.Strict        as XHtml
 import           Text.XHtml.Strict        ((<<), (!))
@@ -381,7 +382,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       pkg <- packageInPath dpath >>= lookupCandidateId
       guard (lookup "cabal" dpath == Just (display $ packageName pkg))
       let (fileRev, (utime, _uid)) = pkgLatestRevision (candPkgInfo pkg)
-          cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
+          cabalfile = Resource.CabalFile (BS.fromStrict (cabalFileByteString fileRev)) utime
       return $ toResponse cabalfile
 
     uploadCandidate :: (PackageId -> Bool) -> ServerPartE CandPkgInfo
@@ -394,7 +395,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         now <- liftIO getCurrentTime
         let (UploadResult pkg pkgStr _) = uresult
             pkgid      = packageId pkg
-            cabalfile  = CabalFileText pkgStr
+            cabalfile  = CabalFileText $ BS.toStrict pkgStr
             uploadinfo = (now, uid)
             candidate = CandPkgInfo {
                 candPkgInfo = PkgInfo {
@@ -451,7 +452,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           -- run filters
           let pkgInfo = candPkgInfo candidate
               uresult = UploadResult (pkgDesc pkgInfo)
-                                     (cabalFileByteString (pkgLatestCabalFileText pkgInfo))
+                                     (BS.fromStrict (cabalFileByteString (pkgLatestCabalFileText pkgInfo)))
                                      (candWarnings candidate)
           time <- liftIO getCurrentTime
           let uploadInfo = (time, uid)

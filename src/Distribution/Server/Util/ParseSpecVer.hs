@@ -6,7 +6,6 @@ module Distribution.Server.Util.ParseSpecVer
   ( parseSpecVer
   , parseSpecVerLazy
   , scanSpecVersion
-  , scanSpecVersionLazy
   , parseGenericPackageDescriptionChecked
   ) where
 
@@ -16,7 +15,6 @@ import           Data.ByteString       (StrictByteString)
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy  as BSL
-import qualified Data.ByteString.Lazy.Char8 as BC8L
 import           Data.List.NonEmpty  ( toList)
 import           Distribution.Text
 import           Distribution.CabalSpecVersion
@@ -271,35 +269,27 @@ strCaseStrAll s1 s2
             let !ofs = m `minusPtr` hay0
             go (m `plusPtr` needleSz) (ofs:acc)
 
-
--- | Lazy 'BSL.ByteString' version of 'scanSpecVersion'
-scanSpecVersionLazy :: BSL.ByteString -> Maybe Version
-scanSpecVersionLazy bs = do
-    fstline':_ <- pure (BC8L.lines bs)
-    scanSpecVersion (BSL.toStrict fstline')
-
-
 -- | Version of 'parseGenericPackageDescription' which also validates spec-version heuristics
 --
 -- * Result of 'parseSpecVerLazy' must agree with 'parseGenericPackageDescription'
--- * If 'scanSpecVersionLazy' detects a version, then it must agree with 'parseGenericPackageDescription' as well
--- * Starting with cabal-version:2.2 'scanSpecVersionLazy' must succeed
+-- * If 'scanSpecVersion' detects a version, then it must agree with 'parseGenericPackageDescription' as well
+-- * Starting with cabal-version:2.2 'scanSpecVersion' must succeed
 --
 -- 'True' is returned in the first element if sanity checks passes.
-parseGenericPackageDescriptionChecked :: BSL.LazyByteString -> (Bool, [PWarning], Either (Maybe Version, [PError]) GenericPackageDescription)
+parseGenericPackageDescriptionChecked :: StrictByteString -> (Bool, [PWarning], Either (Maybe Version, [PError]) GenericPackageDescription)
 parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription' bs of
    (warns, Left pe) -> (False, warns, Left $ fmap toList pe)
    (warns, Right gpd) -> (isOk (specVersion (packageDescription gpd)), warns, Right gpd)
  where
    isOk :: CabalSpecVersion -> Bool
    isOk v
-     | Just v /= parseSpecVerLazy bs      = False
-     | Just v' <- versionToCabalSpecVersion =<< scanSpecVersionLazy bs
+     | Just v /= parseSpecVer bs          = False
+     | Just v' <- versionToCabalSpecVersion =<< scanSpecVersion bs
                                           = v == v'
      | otherwise                          = v <= CabalSpecV2_2
 
 #if defined(MIN_VERSION_cabal_parsers)
-   parseGenericPackageDescription' bs' = compatParseGenericPackageDescription (BSL.toStrict bs')
+   parseGenericPackageDescription' bs' = compatParseGenericPackageDescription bs'
 #else
-   parseGenericPackageDescription' bs' = runParseResult (parseGenericPackageDescription (BSL.toStrict bs'))
+   parseGenericPackageDescription' bs' = runParseResult (parseGenericPackageDescription bs')
 #endif

@@ -98,7 +98,7 @@ doPackageImport (PartialIndex packages updatelog) entry = case entry of
         list <- importCSV "tarball.csv" bs >>= importTarballMetadata fp
         return $ partial { partialTarballUpload = list }
       [other] | Just version <- extractVersion other (packageName pkgId) ".cabal" ->
-        return $ partial { partialCabal = (version, CabalFileText bs):partialCabal partial }
+        return $ partial { partialCabal = (version, CabalFileText $ BS.toStrict bs) : partialCabal partial }
       _ -> return partial
     return $! PartialIndex (Map.insert pkgId partial' packages) updatelog
   BackupBlob filename@["package",pkgStr,other] blobId -> do
@@ -198,7 +198,7 @@ partialToFullPkg (pkgId, PartialPkg{..}) = do
         filename = display pkgId ++ ".cabal"
 
     case runParseResult $ parseGenericPackageDescription $
-         BS.toStrict $ cabalFileByteString latestCabalFile of
+         cabalFileByteString latestCabalFile of
       (_, Left (_, errs)) -> fail $ unlines (map (showPError filename) $ toList errs)
       (_, Right _)        -> return ()
 
@@ -322,8 +322,8 @@ cabalListToExport pkgId cabalInfos =
     cabalName = display (packageName pkgId) ++ ".cabal"
 
     blobEntry :: (Int, CabalFileText) -> BackupEntry
-    blobEntry (0, CabalFileText bs) = BackupByteString (pkgPath pkgId cabalName) bs
-    blobEntry (n, CabalFileText bs) = BackupByteString (pkgPath pkgId (cabalName ++ "-" ++ show n)) bs
+    blobEntry (0, CabalFileText bs) = BackupByteString (pkgPath pkgId cabalName) (BS.fromStrict bs)
+    blobEntry (n, CabalFileText bs) = BackupByteString (pkgPath pkgId (cabalName ++ "-" ++ show n)) (BS.fromStrict bs)
 
     cabalMetadata :: CSV
     cabalMetadata =

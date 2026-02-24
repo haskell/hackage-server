@@ -243,12 +243,12 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     cabalPut dpath = do
         uid <- guardMirrorGroup
         pkgid :: PackageId <- packageInPath dpath
-        fileContent <- expectTextPlain
+        fileContent <- BS.L.toStrict <$> expectTextPlain
         time <- liftIO getCurrentTime
         let uploadData = (time, uid)
             filename = display pkgid <.> "cabal"
 
-        case runParseResult $ parseGenericPackageDescription $ BS.L.toStrict fileContent of
+        case runParseResult $ parseGenericPackageDescription fileContent of
             (_, Left (_, err NE.:| _)) -> badRequest (toResponse $ showPError filename err)
             (_, Right pkg) | pkgid /= packageId pkg ->
                 errBadRequest "Wrong package Id"

@@ -19,7 +19,6 @@ import Distribution.Server.Prelude
 import qualified Data.Aeson                 as Aeson
 import           Data.Aeson                 ((.=))
 import qualified Data.Aeson.Key             as Key
-import qualified Data.ByteString.Lazy.Char8 as BS (toStrict)
 import qualified Data.Map.Strict      as Map
 import qualified Data.Text                  as T
 import qualified Data.Vector                as Vector
@@ -181,7 +180,7 @@ getBasicDescription
      --   @PackageBasicDescription@
   -> Either String PackageBasicDescription
 getBasicDescription uploadedAt (CabalFileText cf) metadataRev =
-  let parseResult = PkgDescr.parseGenericPackageDescription (BS.toStrict cf)
+  let parseResult = PkgDescr.parseGenericPackageDescription cf
   in case PkgDescr.runParseResult parseResult of
     (_, Right pkg) -> let
       pkgd                  = PkgDescr.packageDescription pkg

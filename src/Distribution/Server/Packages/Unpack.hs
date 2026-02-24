@@ -183,7 +183,7 @@ basicChecks pkgid tarIndex = do
               ++ "save the package's cabal file as UTF8 without the BOM."
 
   -- Parse the Cabal file
-  (specVerOk,pkgDesc, warnings) <- case parseGenericPackageDescriptionChecked cabalEntry of
+  (specVerOk,pkgDesc, warnings) <- case parseGenericPackageDescriptionChecked (LBS.toStrict cabalEntry) of
     (_, _, Left (_, err:_)) -> -- TODO: show all errors
       throwError $ showPError cabalFileName err
     (_, _, Left (_, [])) ->
