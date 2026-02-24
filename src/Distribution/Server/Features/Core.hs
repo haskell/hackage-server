@@ -27,7 +27,7 @@ import qualified Codec.Compression.GZip                             as GZip
 import           Data.Aeson                                         (Value (..), toJSON)
 import qualified Data.Aeson.Key                                     as Key
 import qualified Data.Aeson.KeyMap                                  as KeyMap
-import           Data.ByteString.Lazy                               (ByteString)
+import           Data.ByteString.Lazy                               (LazyByteString)
 import qualified Data.Foldable                                      as Foldable
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
@@ -130,7 +130,7 @@ data CoreFeature = CoreFeature {
     -- modification time for the tar entry.
     --
     -- This runs a `PackageChangeIndexExtra` hook when done.
-    updateArchiveIndexEntry :: forall m. MonadIO m => FilePath -> ByteString -> UTCTime -> m (),
+    updateArchiveIndexEntry :: forall m. MonadIO m => FilePath -> LazyByteString -> UTCTime -> m (),
 
     -- | Notification of package or index changes.
     packageChangeHook :: Hook PackageChange (),
@@ -175,7 +175,7 @@ data PackageChange
     | PackageChangeInfo PackageUpdate PkgInfo PkgInfo
     -- | A file has changed in the package index tar not covered by any of the
     -- other change types.
-    | PackageChangeIndexExtra String ByteString UTCTime
+    | PackageChangeIndexExtra String LazyByteString UTCTime
 
 -- | A predicate to use with `packageChangeHook` and `registerHookJust` for
 -- keeping other features synchronized with the main package index.
@@ -212,7 +212,7 @@ isPackageDeleteVersion             :: Maybe PackageId,
 isPackageChangeCabalFile           :: Maybe (PackageId, CabalFileText),
 isPackageChangeCabalFileUploadInfo :: Maybe (PackageId, UploadInfo),
 isPackageChangeTarball             :: Maybe (PackageId, PkgTarball),
-isPackageIndexExtraChange          :: Maybe (String, ByteString, UTCTime)
+isPackageIndexExtraChange          :: Maybe (String, LazyByteString, UTCTime)
 -}
 
 data CoreResource = CoreResource {
@@ -591,7 +591,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedUploadTime oldpkginfo newpkginfo)
           return True
 
-    updateArchiveIndexEntry :: MonadIO m => FilePath -> ByteString -> UTCTime -> m ()
+    updateArchiveIndexEntry :: MonadIO m => FilePath -> LazyByteString -> UTCTime -> m ()
     updateArchiveIndexEntry entryName entryData entryTime = logTiming maxBound ("updateArchiveIndexEntry " ++ show entryName) $ do
       updateState packagesState $
         AddOtherIndexEntry $ ExtraEntry entryName entryData entryTime

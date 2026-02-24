@@ -23,7 +23,7 @@ import Distribution.Server.Util.CabalRevisions
          (Change(..), diffCabalRevisions, insertRevisionField)
 import Text.StringTemplate.Classes (SElem(SM))
 
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy (LazyByteString)
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map as Map
 import Data.Time (getCurrentTime)
@@ -126,7 +126,7 @@ editCabalFilesFeature _env templates
                                (look "publish" >> return True)
 
          responseTemplate :: ([TemplateAttr] -> Template) -> PackageId
-                          -> ByteString -> Bool -> [String] -> [Change]
+                          -> LazyByteString -> Bool -> [String] -> [Change]
                           -> ServerPartE Response
          responseTemplate template pkgid cabalFile publish errors changes =
            ok $ toResponse $ template
@@ -139,9 +139,9 @@ editCabalFilesFeature _env templates
 
 
 -- | Wrapper around 'diffCabalRevisions' which operates on
--- 'ByteString' decoded with lenient UTF8 and with any leading BOM
+-- 'LazyByteString' decoded with lenient UTF8 and with any leading BOM
 -- stripped.
-diffCabalRevisionsByteString :: ByteString -> ByteString -> Either String [Change]
+diffCabalRevisionsByteString :: LazyByteString -> LazyByteString -> Either String [Change]
 diffCabalRevisionsByteString oldRevision newRevision =
     maybe (diffCabalRevisions (BS.L.toStrict oldRevision) (BS.L.toStrict newRevision))
           Left

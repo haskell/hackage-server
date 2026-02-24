@@ -6,7 +6,7 @@ module Distribution.Server.Util.Parse (
 import qualified Text.ParserCombinators.ReadP as Parse
 
 import qualified Data.Char as Char
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy (LazyByteString)
 import qualified Data.Text.Lazy           as Text
 import qualified Data.Text.Lazy.Encoding  as Text
 import qualified Data.Text.Encoding.Error as Text
@@ -28,8 +28,8 @@ ignoreBOM :: String -> String
 ignoreBOM ('\xFEFF':string) = string
 ignoreBOM string            = string
 
-unpackUTF8 :: ByteString -> String
+unpackUTF8 :: LazyByteString -> String
 unpackUTF8 = ignoreBOM . Text.unpack . Text.decodeUtf8With Text.lenientDecode
 
-packUTF8 :: String -> ByteString
+packUTF8 :: String -> LazyByteString
 packUTF8 = Text.encodeUtf8 . Text.pack

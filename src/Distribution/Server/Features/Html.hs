@@ -68,7 +68,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import qualified Data.Text as T
-import qualified Data.ByteString.Lazy.Char8 as BS (ByteString)
+import qualified Data.ByteString.Lazy as BS (LazyByteString)
 import qualified Network.URI as URI
 
 import Text.XHtml.Strict
@@ -849,7 +849,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
 
 -- | Common helper used by 'serveCandidatePage' and 'servePackagePage'
-makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
+makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.LazyByteString)
 makeReadme render = case rendReadme render of
   Just (tarfile, _, offset, _) ->
         either (\_err -> return Nothing) (return . Just . snd) =<<

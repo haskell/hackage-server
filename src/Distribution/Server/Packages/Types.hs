@@ -35,7 +35,7 @@ import Distribution.PackageDescription.Parsec
          ( parseGenericPackageDescription, runParseResult )
 
 import Data.Serialize (Serialize)
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy (LazyByteString)
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
 import Data.SafeCopy
@@ -47,7 +47,7 @@ import qualified Data.Vector          as Vec
   Datatypes
 -------------------------------------------------------------------------------}
 
-newtype CabalFileText = CabalFileText { cabalFileByteString :: ByteString }
+newtype CabalFileText = CabalFileText { cabalFileByteString :: LazyByteString }
   deriving (Eq, MemSize)
 
 -- | The information we keep about a particular version of a package.
@@ -227,7 +227,7 @@ pkgDescMaybe pkgInfo =
       (_, Right x)     -> Just x
 
 
-blobInfoFromBS :: BlobId -> ByteString -> BlobInfo
+blobInfoFromBS :: BlobId -> LazyByteString -> BlobInfo
 blobInfoFromBS blobId bs = BlobInfo {
       blobInfoId         = blobId
     , blobInfoLength     = fromIntegral $ BS.L.length bs
