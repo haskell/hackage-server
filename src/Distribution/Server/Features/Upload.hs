@@ -29,7 +29,7 @@ import Data.Maybe (fromMaybe)
 import Data.List (dropWhileEnd, intersperse)
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy (LazyByteString, toStrict)
 
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
@@ -97,7 +97,7 @@ data UploadResult = UploadResult {
     -- The parsed Cabal file.
     uploadDesc :: !GenericPackageDescription,
     -- The text of the Cabal file.
-    uploadCabal :: !ByteString,
+    uploadCabal :: !LazyByteString,
     -- Any warnings from unpacking the tarball.
     uploadWarnings :: ![String]
 }
@@ -302,7 +302,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
         now <- liftIO getCurrentTime
         let (UploadResult pkg pkgStr _) = uresult
             pkgid      = packageId pkg
-            cabalfile  = CabalFileText pkgStr
+            cabalfile  = CabalFileText $ toStrict pkgStr
             uploadinfo = (now, uid)
         success <- updateAddPackage pkgid cabalfile uploadinfo (Just tarball)
         if success
@@ -417,7 +417,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
             --FIXME: this should have been covered earlier
             uid <- guardAuthenticated
             now <- liftIO getCurrentTime
-            let processPackage :: ByteString -> IO (Either ErrorResponse (UploadResult, BlobStorage.BlobId))
+            let processPackage :: LazyByteString -> IO (Either ErrorResponse (UploadResult, BlobStorage.BlobId))
                 processPackage content' = do
                     -- as much as it would be nice to do requirePackageAuth in here,
                     -- processPackage is run in a handle bracket

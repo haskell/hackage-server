@@ -32,6 +32,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Features.Security.Migration
 
+import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Util.ServeTarball
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Distribution.Server.Pages.Template (hackagePage)
@@ -40,10 +41,8 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.Version
 
+import qualified Data.ByteString.Lazy     as BS (toStrict, fromStrict)
 import qualified Data.Text                as T
-import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Encoding.Error as T
-import qualified Data.ByteString.Lazy     as BS (ByteString, toStrict)
 import qualified Text.XHtml.Strict        as XHtml
 import           Text.XHtml.Strict        ((<<), (!))
 import           Data.Aeson               (Value (..), object, toJSON, (.=))
@@ -383,7 +382,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       pkg <- packageInPath dpath >>= lookupCandidateId
       guard (lookup "cabal" dpath == Just (display $ packageName pkg))
       let (fileRev, (utime, _uid)) = pkgLatestRevision (candPkgInfo pkg)
-          cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
+          cabalfile = Resource.CabalFile (BS.fromStrict (cabalFileByteString fileRev)) utime
       return $ toResponse cabalfile
 
     uploadCandidate :: (PackageId -> Bool) -> ServerPartE CandPkgInfo
@@ -396,7 +395,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         now <- liftIO getCurrentTime
         let (UploadResult pkg pkgStr _) = uresult
             pkgid      = packageId pkg
-            cabalfile  = CabalFileText pkgStr
+            cabalfile  = CabalFileText $ BS.toStrict pkgStr
             uploadinfo = (now, uid)
             candidate = CandPkgInfo {
                 candPkgInfo = PkgInfo {
@@ -453,7 +452,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           -- run filters
           let pkgInfo = candPkgInfo candidate
               uresult = UploadResult (pkgDesc pkgInfo)
-                                     (cabalFileByteString (pkgLatestCabalFileText pkgInfo))
+                                     (BS.fromStrict (cabalFileByteString (pkgLatestCabalFileText pkgInfo)))
                                      (candWarnings candidate)
           time <- liftIO getCurrentTime
           let uploadInfo = (time, uid)
@@ -596,7 +595,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                             << if supposedToBeMarkdown filename
                                  then renderMarkdown filename contents
                                  else XHtml.thediv ! [XHtml.theclass "preformatted"]
-                                                  << unpackUtf8 contents
+                                                  << unpackUTF8 contents
               ]
 
 
@@ -614,8 +613,3 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                          ["index.html"] (display (packageId pkg)) fp index
                          [Public, maxAgeMinutes 5] etag Nothing
           requireUserContent userFeatureServerEnv (tarServeResponse tarServe)
-
-unpackUtf8 :: BS.ByteString -> String
-unpackUtf8 = T.unpack
-           . T.decodeUtf8With T.lenientDecode
-           . BS.toStrict

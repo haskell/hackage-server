@@ -68,7 +68,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import qualified Data.Text as T
-import qualified Data.ByteString.Lazy.Char8 as BS (ByteString)
+import qualified Data.ByteString.Lazy as BS (LazyByteString, fromStrict)
 import qualified Network.URI as URI
 
 import Text.XHtml.Strict
@@ -812,9 +812,9 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             start []          = []
             start (curr:rest) = go curr rest
 
-            go curr [] = [(sha256 (cabalFileByteString (fst curr)), [])]
+            go curr [] = [(sha256 (BS.fromStrict (cabalFileByteString (fst curr))), [])]
             go curr (prev:rest) =
-                ( sha256 (cabalFileByteString (fst curr))
+                ( sha256 (BS.fromStrict (cabalFileByteString (fst curr)))
                 , changes curr prev )
                 : go prev rest
 
@@ -849,7 +849,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
 
 -- | Common helper used by 'serveCandidatePage' and 'servePackagePage'
-makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
+makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.LazyByteString)
 makeReadme render = case rendReadme render of
   Just (tarfile, _, offset, _) ->
         either (\_err -> return Nothing) (return . Just . snd) =<<

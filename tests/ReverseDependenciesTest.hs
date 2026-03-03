@@ -9,7 +9,6 @@ import qualified Control.Monad.Trans.State as State
 import qualified Data.Array as Arr
 import qualified Data.Bimap as Bimap
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
-import qualified Data.ByteString.Lazy as ByteStringL
 import           Data.Foldable (for_)
 import           Data.Functor.Identity (Identity(..))
 import           Data.List (partition, foldl')
@@ -551,7 +550,7 @@ getNotificationEmailsTests =
     genPackageName = mkPackageName <$> Gen.string (Range.linear 1 30) Gen.unicode
     genVersion = mkVersion <$> Gen.list (Range.linear 1 4) (Gen.int $ Range.linear 0 50)
     genPackageId = PackageIdentifier <$> genPackageName <*> genVersion
-    genCabalFileText = CabalFileText . ByteStringL.fromStrict <$> Gen.utf8 (Range.linear 0 50000) Gen.unicode
+    genCabalFileText = CabalFileText <$> Gen.utf8 (Range.linear 0 50000) Gen.unicode
     genNonExistentUserId = UserId <$> Gen.int (Range.linear (-1000) (-1))
     genUploadInfo = (,) <$> genUTCTime <*> genNonExistentUserId
     genTag = Tag <$> Gen.string (Range.linear 1 10) Gen.unicode

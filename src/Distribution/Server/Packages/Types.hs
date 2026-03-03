@@ -21,7 +21,7 @@ import Distribution.Server.Users.Types (UserId(..))
 import Distribution.Server.Framework.BlobStorage (BlobId, BlobId_v0, BlobStorage)
 import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
 import Distribution.Server.Framework.MemSize
-import Distribution.Server.Util.Parse (unpackUTF8)
+import Distribution.Server.Util.Parse (unpackUTF8Strict)
 import Distribution.Server.Features.Security.Orphans ()
 import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Features.Security.SHA256
@@ -35,7 +35,8 @@ import Distribution.PackageDescription.Parsec
          ( parseGenericPackageDescription, runParseResult )
 
 import Data.Serialize (Serialize)
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString (StrictByteString)
+import Data.ByteString.Lazy (LazyByteString)
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
 import Data.SafeCopy
@@ -47,7 +48,9 @@ import qualified Data.Vector          as Vec
   Datatypes
 -------------------------------------------------------------------------------}
 
-newtype CabalFileText = CabalFileText { cabalFileByteString :: ByteString }
+-- | Cabal files are definitely small enough to use a strict ByteString.
+-- This eliminates one possible source of issues with lazy IO.
+newtype CabalFileText = CabalFileText { cabalFileByteString :: StrictByteString }
   deriving (Eq, MemSize)
 
 -- | The information we keep about a particular version of a package.
@@ -156,7 +159,7 @@ instance Package PkgInfo where
 -------------------------------------------------------------------------------}
 
 cabalFileString :: CabalFileText -> String
-cabalFileString = unpackUTF8 . cabalFileByteString
+cabalFileString = unpackUTF8Strict . cabalFileByteString
 
 pkgOriginalRevision :: PkgInfo -> (CabalFileText, UploadInfo)
 pkgOriginalRevision = Vec.head . pkgMetadataRevisions
@@ -208,7 +211,7 @@ pkgLatestTarball pkginfo =
 pkgDesc :: PkgInfo -> GenericPackageDescription
 pkgDesc pkgInfo =
     case runParseResult $ parseGenericPackageDescription $
-         BS.L.toStrict $ cabalFileByteString $ fst $
+         cabalFileByteString $ fst $
          pkgLatestRevision pkgInfo of
       -- We only make PkgInfos with parsable pkgDatas, so if it
       -- doesn't parse then something has gone wrong.
@@ -219,7 +222,7 @@ pkgDesc pkgInfo =
 pkgDescMaybe :: PkgInfo -> Maybe GenericPackageDescription
 pkgDescMaybe pkgInfo =
     case runParseResult $ parseGenericPackageDescription $
-         BS.L.toStrict $ cabalFileByteString $ fst $
+         cabalFileByteString $ fst $
          pkgLatestRevision pkgInfo of
       -- We only make PkgInfos with parsable pkgDatas, so if it
       -- doesn't parse then something has gone wrong.
@@ -227,7 +230,7 @@ pkgDescMaybe pkgInfo =
       (_, Right x)     -> Just x
 
 
-blobInfoFromBS :: BlobId -> ByteString -> BlobInfo
+blobInfoFromBS :: BlobId -> LazyByteString -> BlobInfo
 blobInfoFromBS blobId bs = BlobInfo {
       blobInfoId         = blobId
     , blobInfoLength     = fromIntegral $ BS.L.length bs
