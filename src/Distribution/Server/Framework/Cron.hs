@@ -80,7 +80,7 @@ removeExpiredJobs stateVar =
 nextJobTime :: UTCTime -> JobFrequency -> UTCTime
 nextJobTime now DailyJobFrequency  = now {
                                         utctDay     = addDays 1 (utctDay now),
-                                        utctDayTime = 0
+                                        utctDayTime = secondsToDiffTime (60 * 90) -- 90 minutes after midnight
                                      }
 nextJobTime now WeeklyJobFrequency = now {
                                         utctDay     = sundayAfter (utctDay now),
@@ -155,4 +155,3 @@ threadDelayUntil target = do
 
     hour :: Num a => a
     hour = 60 * 60 * 1000000
-

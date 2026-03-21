@@ -229,6 +229,7 @@ library
     Distribution.Server.Framework.BlobStorage
     Distribution.Server.Framework.Cache
     Distribution.Server.Framework.Cron
+    Distribution.Server.Framework.CSRF
     Distribution.Server.Framework.Error
     Distribution.Server.Framework.Logging
     Distribution.Server.Framework.Feature

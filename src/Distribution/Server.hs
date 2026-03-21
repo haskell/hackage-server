@@ -32,6 +32,7 @@ import qualified Distribution.Server.Framework.Auth as Auth
 import Distribution.Server.Framework.Templating (TemplatesMode(..))
 import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
 import Distribution.Server.Framework.HtmlFormWrapper (htmlFormWrapperHack)
+import Distribution.Server.Framework.CSRF (csrfMiddleware)
 
 import Distribution.Server.Framework.Feature as Feature
 import qualified Distribution.Server.Features as Features
@@ -301,10 +302,9 @@ initState server (admin, pass) = do
 impl :: Server -> ServerPart Response
 impl server = logExceptions $
     runServerPartE $
-      handleErrorResponse (serveErrorResponse errHandlers Nothing) $
-        renderServerTree [] serverTree
-          `mplus`
-        fallbackNotFound
+      handleErrorResponse (serveErrorResponse errHandlers Nothing) $ do
+        csrfMiddleware
+        renderServerTree [] serverTree `mplus` fallbackNotFound
   where
     serverTree :: ServerTree (DynamicPath -> ServerPartE Response)
     serverTree =

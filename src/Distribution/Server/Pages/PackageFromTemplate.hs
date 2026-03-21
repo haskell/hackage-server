@@ -34,7 +34,7 @@ import Text.XHtml.Strict hiding (p, name, title, content)
 import qualified Text.XHtml.Strict as XHtml
 
 import Data.Maybe               (maybeToList, fromMaybe, isJust)
-import Data.List                (intercalate, intersperse)
+import Data.List                (intercalate, intersperse, isPrefixOf)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Format         (defaultTimeLocale, formatTime)
 
@@ -210,12 +210,16 @@ packagePageTemplate render
 
       [ templateVal "hasHomePage"
           (not . Short.null $ homepage desc)
+      , templateVal "homepageIsSafeURI"
+          (fromShortText (homepage desc) `hasScheme` [uriSchemeHttp, uriSchemeHttps])
       , templateVal "homepage"
           (homepage desc)
       ] ++
 
       [ templateVal "hasBugTracker"
           (not . Short.null $ bugReports desc)
+      , templateVal "bugTrackerIsSafeURI"
+          (fromShortText (bugReports desc) `hasScheme` [uriSchemeHttp, uriSchemeHttps, uriSchemeMailto])
       , templateVal "bugTracker"
           (bugReports desc)
       ] ++
@@ -376,6 +380,16 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
       Nothing -> noHtml
       Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
+uriSchemeHttp, uriSchemeHttps, uriSchemeMailto :: String
+uriSchemeHttp = "http:"
+uriSchemeHttps = "https:"
+uriSchemeMailto = "mailto:"
+
+-- | Check if string starts with one of the given URI schemes.
+-- Schemes are given __with trailing @:@__.
+hasScheme :: String -> [String] -> Bool
+hasScheme s = any (`isPrefixOf` s)
+
 sourceRepositoryToHtml :: SourceRepo -> Html
 sourceRepositoryToHtml sr
     = toHtml (display (repoKind sr) ++ ": ")
@@ -384,21 +398,20 @@ sourceRepositoryToHtml sr
        | (Just url, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr) ->
           concatHtml [toHtml "darcs get ",
-                      anchor ! [href url] << toHtml url,
+                      anchorOrBare url url,
                       case repoTag sr of
                           Just tag' -> toHtml (" --tag " ++ tag')
                           Nothing   -> noHtml,
                       case repoSubdir sr of
                           Just sd -> toHtml " ("
-                                 +++ (anchor ! [href (url </> sd)]
-                                      << toHtml sd)
+                                 +++ anchorOrBare (url </> sd) sd
                                  +++ toHtml ")"
                           Nothing   -> noHtml]
       Just (KnownRepoType Git)
        | (Just url, Nothing) <-
          (repoLocation sr, repoModule sr) ->
           concatHtml [toHtml "git clone ",
-                      anchor ! [href url] << toHtml url,
+                      anchorOrBare url url,
                       case repoBranch sr of
                           Just branch -> toHtml (" -b " ++ branch)
                           Nothing     -> noHtml,
@@ -412,7 +425,7 @@ sourceRepositoryToHtml sr
        | (Just url, Nothing, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
           concatHtml [toHtml "svn checkout ",
-                      anchor ! [href url] << toHtml url,
+                      anchorOrBare url url,
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
@@ -420,7 +433,7 @@ sourceRepositoryToHtml sr
        | (Just url, Just m, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
           concatHtml [toHtml "cvs -d ",
-                      anchor ! [href url] << toHtml url,
+                      anchorOrBare url url,
                       toHtml (" " ++ m),
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
@@ -429,7 +442,7 @@ sourceRepositoryToHtml sr
        | (Just url, Nothing) <-
          (repoLocation sr, repoModule sr) ->
           concatHtml [toHtml "hg clone ",
-                      anchor ! [href url] << toHtml url,
+                      anchorOrBare url url,
                       case repoBranch sr of
                           Just branch -> toHtml (" -b " ++ branch)
                           Nothing     -> noHtml,
@@ -443,7 +456,7 @@ sourceRepositoryToHtml sr
        | (Just url, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr) ->
           concatHtml [toHtml "bzr branch ",
-                      anchor ! [href url] << toHtml url,
+                      anchorOrBare url url,
                       case repoTag sr of
                           Just tag' -> toHtml (" -r " ++ tag')
                           Nothing -> noHtml,
@@ -454,7 +467,7 @@ sourceRepositoryToHtml sr
         | Just url <-
            repoLocation sr ->
                      concatHtml [toHtml "fossil clone ",
-                      anchor ! [href url] << toHtml url,
+                      anchorOrBare url url,
                       toHtml " ",
                       toHtml (takeFileName (dropTrailingPathSeparator url) ++ ".fossil")
                       ]
@@ -462,7 +475,7 @@ sourceRepositoryToHtml sr
         | (Just url, Nothing, Nothing) <-
            (repoLocation sr, repoModule sr, repoTag sr) ->
                      concatHtml [toHtml "pijul clone ",
-                      anchor ! [href url] << toHtml url,
+                      anchorOrBare url url,
                       case repoBranch sr of
                           Just branch -> toHtml (" --from-branch " ++ branch)
                           Nothing     -> noHtml,
@@ -477,12 +490,18 @@ sourceRepositoryToHtml sr
            let url = fromMaybe "" $ repoLocation sr
                showRepoType (OtherRepoType rt) = rt
                showRepoType x = show x
-           in  concatHtml $ [anchor ! [href url] << toHtml url]
+           in  concatHtml $ [anchorOrBare url url]
                            ++ fmap (\r -> toHtml $ ", repo type " ++ showRepoType r) (maybeToList $ repoType sr)
                            ++ fmap (\x -> toHtml $ ", module " ++ x) (maybeToList $ repoModule sr)
                            ++ fmap (\x -> toHtml $ ", branch " ++ x) (maybeToList $ repoBranch sr)
                            ++ fmap (\x -> toHtml $ ", tag "    ++ x) (maybeToList $ repoTag sr)
                            ++ fmap (\x -> toHtml $ ", subdir " ++ x) (maybeToList $ repoSubdir sr)
+  where
+    -- only make hyperlink if URI matches acceptable schemes
+    anchorOrBare url text
+      | url `hasScheme` schemes = anchor ! [href url] << toHtml text
+      | otherwise               = toHtml text
+    schemes = [uriSchemeHttp, uriSchemeHttps]
 
 -- | Handle how version links are displayed.
 

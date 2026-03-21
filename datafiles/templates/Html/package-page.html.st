@@ -204,7 +204,11 @@
             <tr>
               <th>Home page</th>
               <td class="word-wrap">
-                <a href=$package.optional.homepage$>$package.optional.homepage$</a>
+                $if(package.optional.homepageIsSafeURI)$
+                <a href="$package.optional.homepage$">$package.optional.homepage$</a>
+                $else$
+                $package.optional.homepage$
+                $endif$
               </td>
             </tr>
             $endif$
@@ -213,7 +217,11 @@
             <tr>
               <th>Bug&nbsp;tracker</th>
               <td class="word-wrap">
+                $if(package.optional.bugTrackerIsSafeURI)$
                 <a href="$package.optional.bugTracker$">$package.optional.bugTracker$</a>
+                $else$
+                $package.optional.bugTracker$
+                $endif$
               </td>
             </tr>
             $endif$
