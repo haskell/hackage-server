@@ -28,6 +28,10 @@ module Distribution.Server.Framework.Auth (
     -- ** Errors
     AuthError(..),
     authErrorResponse,
+
+    -- ** Internal details
+    AuthMethod(..),
+    probeAttemptedAuthMethod,
   ) where
 
 import qualified Data.Text as T
@@ -82,7 +86,7 @@ guardAuthorised :: RealmName -> Users.Users -> [PrivilegeCondition]
                 -> ServerEnv
                 -> ServerPartE UserId
 guardAuthorised realm users privconds env = do
-    (uid, _) <- guardAuthenticated realm users env
+    uid <- guardAuthenticated realm users env
     guardPriviledged users uid privconds
     return uid
 
@@ -96,14 +100,14 @@ guardAuthorised realm users privconds env = do
 -- It only checks the user is known, it does not imply that the user is
 -- authorised to do anything in particular, see 'guardAuthorised'.
 --
-guardAuthenticated :: RealmName -> Users.Users -> ServerEnv -> ServerPartE (UserId, UserInfo)
+guardAuthenticated :: RealmName -> Users.Users -> ServerEnv -> ServerPartE UserId
 guardAuthenticated realm users env = do
     authres <- checkAuthenticated realm users env
     case authres of
       Left  autherr -> throwError =<< authErrorResponse realm autherr
       Right info    -> return info
 
-checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> ServerEnv -> m (Either AuthError (UserId, UserInfo))
+checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> ServerEnv -> m (Either AuthError UserId)
 checkAuthenticated realm users ServerEnv { serverRequiredBaseHostHeader } = do
     mbHost <- getHost
     case mbHost of
@@ -124,20 +128,32 @@ checkAuthenticated realm users ServerEnv { serverRequiredBaseHostHeader } = do
            Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
            Just (AuthToken,  ahdr) -> checkTokenAuth  users       ahdr
            Nothing                 -> Left NoAuthError
-    getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
-    getHeaderAuth req =
-        case getHeader "authorization" req of
-          Just hdr
-            |  BS.isPrefixOf (BS.pack "Digest ") hdr
-            -> Just (DigestAuth, BS.drop 7 hdr)
-            |  BS.isPrefixOf (BS.pack "X-ApiKey ") hdr
-            -> Just (AuthToken, BS.drop 9 hdr)
-            |  BS.isPrefixOf (BS.pack "Basic ") hdr
-            -> Just (BasicAuth,  BS.drop 6 hdr)
-          _ -> Nothing
 
-data AuthType = BasicAuth | DigestAuth | AuthToken
+-- | Authentication methods supported by hackage-server.
+data AuthMethod
+  = -- | HTTP Basic authentication.
+    BasicAuth
+  | -- | HTTP Digest authentication.
+    DigestAuth
+  | -- | Authentication usinng an API token via the @X-ApiKey@ header.
+    AuthToken
 
+getHeaderAuth :: Request -> Maybe (AuthMethod, BS.ByteString)
+getHeaderAuth req =
+  case getHeader "authorization" req of
+    Just hdr
+      |  BS.isPrefixOf (BS.pack "Digest ") hdr
+      -> Just (DigestAuth, BS.drop 7 hdr)
+      |  BS.isPrefixOf (BS.pack "X-ApiKey ") hdr
+      -> Just (AuthToken, BS.drop 9 hdr)
+      |  BS.isPrefixOf (BS.pack "Basic ") hdr
+      -> Just (BasicAuth,  BS.drop 6 hdr)
+    _ -> Nothing
+
+-- | Reads the request headers to determine which @AuthMethod@ the client has attempted to use, if
+-- any. Note that this does not /validate/ the authentication credentials.
+probeAttemptedAuthMethod :: Request -> Maybe AuthMethod
+probeAttemptedAuthMethod = fmap fst . getHeaderAuth
 
 data PrivilegeCondition = InGroup    Group.UserGroup
                         | IsUserId   UserId
@@ -251,7 +267,7 @@ plainHttp req
 
 -- | Handle a auth request using an access token
 checkTokenAuth :: Users.Users -> BS.ByteString
-               -> Either AuthError (UserId, UserInfo)
+               -> Either AuthError UserId
 checkTokenAuth users ahdr = do
     parsedToken <-
       case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
@@ -259,7 +275,7 @@ checkTokenAuth users ahdr = do
         Right tok -> Right (Users.convertToken tok)
     (uid, uinfo) <- Users.lookupAuthToken parsedToken users ?! BadApiKeyError
     _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
-    return (uid, uinfo)
+    return uid
 
 ------------------------------------------------------------------------
 -- Basic auth method
@@ -268,7 +284,7 @@ checkTokenAuth users ahdr = do
 -- | Use HTTP Basic auth to authenticate the client as an active enabled user.
 --
 checkBasicAuth :: Users.Users -> RealmName -> BS.ByteString
-               -> Either AuthError (UserId, UserInfo)
+               -> Either AuthError UserId
 checkBasicAuth users realm ahdr = do
     authInfo     <- getBasicAuthInfo realm ahdr       ?! UnrecognizedAuthError
     let uname    = basicUsername authInfo
@@ -276,7 +292,7 @@ checkBasicAuth users realm ahdr = do
     uauth        <- getUserAuth uinfo                 ?! UserStatusError uid uinfo
     let passwdhash = getPasswdHash uauth
     guard (checkBasicAuthInfo passwdhash authInfo)    ?! PasswordMismatchError uid uinfo
-    return (uid, uinfo)
+    return uid
 
 getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
 getBasicAuthInfo realm authHeader
@@ -327,7 +343,7 @@ headerBasicAuthChallenge (RealmName realmName) =
 -- | Use HTTP Digest auth to authenticate the client as an active enabled user.
 --
 checkDigestAuth :: Users.Users -> BS.ByteString -> Request
-                -> Either AuthError (UserId, UserInfo)
+                -> Either AuthError UserId
 checkDigestAuth users ahdr req = do
     authInfo     <- getDigestAuthInfo ahdr req         ?! UnrecognizedAuthError
     let uname    = digestUsername authInfo
@@ -337,7 +353,7 @@ checkDigestAuth users ahdr req = do
     guard (checkDigestAuthInfo passwdhash authInfo)    ?! PasswordMismatchError uid uinfo
     -- TODO: if we want to prevent replay attacks, then we must check the
     -- nonce and nonce count and issue stale=true replies.
-    return (uid, uinfo)
+    return uid
 
 -- | retrieve the Digest auth info from the headers
 --

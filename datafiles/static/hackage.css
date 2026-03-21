@@ -1313,3 +1313,11 @@ p.registration-email {
     background: #222;
   }
 }
+
+
+@media (prefer-color-scheme: dark) {
+  thead th{
+      background-color: #5E5184;
+      color: #e0e0e0;
+  }
+}

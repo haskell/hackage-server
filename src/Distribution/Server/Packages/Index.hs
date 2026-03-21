@@ -24,15 +24,12 @@ import Distribution.Server.Users.Users
          ( Users, userIdToName )
 import Distribution.Server.Users.Types
          ( UserId(..), UserName(..) )
-import Distribution.Server.Util.ParseSpecVer
 
 import Distribution.Text
          ( display )
 import Distribution.Types.PackageName
 import Distribution.Package
          ( Package, PackageId, packageName, packageVersion )
-import Distribution.CabalSpecVersion
-         ( pattern CabalSpecV2_0 )
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Clock.POSIX
@@ -43,7 +40,7 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy (LazyByteString, fromStrict)
 import System.FilePath.Posix
 import Data.Maybe (mapMaybe)
 
@@ -76,7 +73,7 @@ data TarIndexEntry =
     -- | Additional entries that we add to the tarball
     --
     -- This is currently used for @preferred-versions@.
-  | ExtraEntry !FilePath !ByteString !UTCTime
+  | ExtraEntry !FilePath !LazyByteString !UTCTime
   deriving (Eq, Show)
 
 type RevisionNo = Int
@@ -92,7 +89,7 @@ deriveSafeCopy 0 'base ''TarIndexEntry
 -- a package index, an index tarball. This tarball has the modification times
 -- and uploading users built-in.
 
-writeIncremental :: PackageIndex PkgInfo -> [TarIndexEntry] -> ByteString
+writeIncremental :: PackageIndex PkgInfo -> [TarIndexEntry] -> LazyByteString
 writeIncremental pkgs =
     Tar.write . mapMaybe mkTarEntry
   where
@@ -107,7 +104,7 @@ writeIncremental pkgs =
         tarPath   <- either (const Nothing) Just $
                      Tar.toTarPath False fileName
         let !tarEntry = addTimestampAndOwner timestamp userid username $
-                          Tar.fileEntry tarPath cabalfile
+                          Tar.fileEntry tarPath $ fromStrict cabalfile
         return tarEntry
       where
         pkgname = unPackageName (packageName pkgid)
@@ -144,14 +141,14 @@ utcToUnixTime :: UTCTime -> Int64
 utcToUnixTime = truncate . utcTimeToPOSIXSeconds
 
 -- | Extract legacy entries
-legacyExtras :: [TarIndexEntry] -> Map String (ByteString, UTCTime)
+legacyExtras :: [TarIndexEntry] -> Map String (LazyByteString, UTCTime)
 legacyExtras = go Map.empty
   where
     -- Later entries in the update log will override earlier ones. This is
     -- intentional.
-    go :: Map String (ByteString, UTCTime)
+    go :: Map String (LazyByteString, UTCTime)
        -> [TarIndexEntry]
-       -> Map String (ByteString, UTCTime)
+       -> Map String (LazyByteString, UTCTime)
     go acc [] = acc
     go acc (ExtraEntry fp bs time : es) =
        let acc' = Map.insert fp (bs, time) acc
@@ -173,9 +170,9 @@ legacyExtras = go Map.empty
 -- compression), contains at most one preferred-version per package (important
 -- because of a bug in cabal which would otherwise merge all preferred-versions
 -- files for a package), and does not contain the TUF files.
-writeLegacy :: Users -> Map String (ByteString, UTCTime) -> PackageIndex PkgInfo -> ByteString
+writeLegacy :: Users -> Map String (LazyByteString, UTCTime) -> PackageIndex PkgInfo -> LazyByteString
 writeLegacy users =
-    writeLegacyAux (cabalFileByteString . pkgLatestCabalFileText) setModTime
+    writeLegacyAux (fromStrict . cabalFileByteString . pkgLatestCabalFileText) setModTime
   . extraEntries
   where
     setModTime pkgInfo entry =
@@ -192,13 +189,13 @@ writeLegacy users =
 
     userName = display . userIdToName users
 
-    extraEntries :: Map FilePath (ByteString, UTCTime) -> [Tar.Entry]
+    extraEntries :: Map FilePath (LazyByteString, UTCTime) -> [Tar.Entry]
     extraEntries emap = do
         (path, (entry, mtime)) <- Map.toList emap
         Right tarPath <- return $ Tar.toTarPath False path
         return $ (Tar.fileEntry tarPath entry) { Tar.entryTime = utcToUnixTime mtime }
 
--- | Create an uncompressed tar repository index file as a 'ByteString'.
+-- | Create an uncompressed tar repository index file as a 'LazyByteString'.
 --
 -- Takes a couple functions to turn a package into a tar entry. Extra
 -- entries are also accepted.
@@ -206,11 +203,11 @@ writeLegacy users =
 -- This used to live in Distribution.Server.Util.Index.
 --
 writeLegacyAux :: Package pkg
-               => (pkg -> ByteString)
+               => (pkg -> LazyByteString)
                -> (pkg -> Tar.Entry -> Tar.Entry)
                -> [Tar.Entry]
                -> PackageIndex pkg
-               -> ByteString
+               -> LazyByteString
 writeLegacyAux externalPackageRep updateEntry extras =
   Tar.write . (extras++) . map entry . PackageIndex.allPackages
   where

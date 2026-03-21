@@ -48,7 +48,7 @@ mkPackageWithCabalFileSuffix name intVersion cabalFileSuffix =
 \name: " <> BSL.fromStrict (Char8.pack $ unPackageName name) <> "\n\
 \version: " <> dotVersion <> "\n"
     cabalFile :: CabalFileText
-    cabalFile = CabalFileText $ cabalFilePrefix <> cabalFileSuffix
+    cabalFile = CabalFileText $ BSL.toStrict $ cabalFilePrefix <> cabalFileSuffix
   in
   PkgInfo
   (PackageIdentifier name version)

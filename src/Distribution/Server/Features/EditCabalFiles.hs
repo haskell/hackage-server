@@ -23,7 +23,8 @@ import Distribution.Server.Util.CabalRevisions
          (Change(..), diffCabalRevisions, insertRevisionField)
 import Text.StringTemplate.Classes (SElem(SM))
 
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString (StrictByteString)
+import Data.ByteString.Lazy (LazyByteString)
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map as Map
 import Data.Time (getCurrentTime)
@@ -84,7 +85,7 @@ editCabalFilesFeature _env templates
         ok $ toResponse $ template
           [ "pkgid"     $= pkgid
           , "cabalfile" $= insertRevisionField (pkgNumRevisions pkg)
-                             (cabalFileByteString (pkgLatestCabalFileText pkg))
+                             (BS.L.fromStrict (cabalFileByteString (pkgLatestCabalFileText pkg)))
           ]
 
     serveEditCabalFilePost :: DynamicPath -> ServerPartE Response
@@ -98,11 +99,11 @@ editCabalFilesFeature _env templates
         uid <- guardAuthorised [ InGroup (maintainersGroup pkgname)
                                , InGroup trusteesGroup ]
         let oldVersion = cabalFileByteString (pkgLatestCabalFileText pkg)
-        newRevision <- getCabalFile
+        newRevision <- BS.L.toStrict <$> getCabalFile
         shouldPublish <- getPublish
         case diffCabalRevisionsByteString oldVersion newRevision of
           Left errs ->
-            responseTemplate template pkgid newRevision
+            responseTemplate template pkgid (BS.L.fromStrict newRevision)
                              shouldPublish [errs] []
 
           Right changes
@@ -117,7 +118,7 @@ editCabalFilesFeature _env templates
                   , "changes"   $= changes
                   ]
             | otherwise ->
-                responseTemplate template pkgid newRevision
+                responseTemplate template pkgid (BS.L.fromStrict newRevision)
                                  shouldPublish [] changes
 
        where
@@ -126,7 +127,7 @@ editCabalFilesFeature _env templates
                                (look "publish" >> return True)
 
          responseTemplate :: ([TemplateAttr] -> Template) -> PackageId
-                          -> ByteString -> Bool -> [String] -> [Change]
+                          -> LazyByteString -> Bool -> [String] -> [Change]
                           -> ServerPartE Response
          responseTemplate template pkgid cabalFile publish errors changes =
            ok $ toResponse $ template
@@ -139,11 +140,11 @@ editCabalFilesFeature _env templates
 
 
 -- | Wrapper around 'diffCabalRevisions' which operates on
--- 'ByteString' decoded with lenient UTF8 and with any leading BOM
+-- 'LazyByteString' decoded with lenient UTF8 and with any leading BOM
 -- stripped.
-diffCabalRevisionsByteString :: ByteString -> ByteString -> Either String [Change]
+diffCabalRevisionsByteString :: StrictByteString -> StrictByteString -> Either String [Change]
 diffCabalRevisionsByteString oldRevision newRevision =
-    maybe (diffCabalRevisions (BS.L.toStrict oldRevision) (BS.L.toStrict newRevision))
+    maybe (diffCabalRevisions oldRevision newRevision)
           Left
           parseSpecVerCheck
   where

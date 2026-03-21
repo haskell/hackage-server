@@ -351,12 +351,14 @@ getJSONStrings :: RelativeURL -> IO [String]
 getJSONStrings url = getUrl NoAuth url >>= decodeJSON
 
 checkIsForbidden :: Authorization -> RelativeURL -> IO ()
-checkIsForbidden auth url = void $
-  Http.execRequest' auth (mkGetReq url) isForbidden
+checkIsForbidden = checkIsExpectedCode isForbidden
 
 checkIsUnauthorized :: Authorization -> RelativeURL -> IO ()
-checkIsUnauthorized auth url = void $
-  Http.execRequest' auth (mkGetReq url) isUnauthorized
+checkIsUnauthorized = checkIsExpectedCode isUnauthorized
+
+checkIsExpectedCode :: ExpectedCode -> Authorization -> RelativeURL -> IO ()
+checkIsExpectedCode expectedCode auth url = void $
+  Http.execRequest' auth (mkGetReq url) expectedCode
 
 delete :: ExpectedCode -> Authorization -> RelativeURL -> IO ()
 delete expectedCode auth url = void $
