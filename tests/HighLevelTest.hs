@@ -28,6 +28,8 @@ import Util
 import HttpUtils ( isOk
                  , isNoContent
                  , isForbidden
+                 , isSeeOther
+                 , isNotFound
                  , Authorization(..)
                  )
 import HackageClientUtils
@@ -158,6 +160,15 @@ runPackageUploadTests = do
        post (Auth "admin" "admin") "/packages/uploaders/" [
            ("user", "HackageTestUser1")
          ]
+    do info "Uploading testpackage candidate"
+       postFile isSeeOther
+                (Auth "HackageTestUser1" "testpass1")
+                "/packages/candidates" "package"
+                (testpackageTarFilename, testpackageTarFileContent)
+    do info "Checking Package Candidate Exists"
+       xs <- validate NoAuth "/package/testpackage-1.0.0.0/candidate"
+       unless (">testpackage: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
+           die ("Bad package candidate info: " ++ show xs)
     do info "Uploading testpackage"
        postFile isOk
                 (Auth "HackageTestUser1" "testpass1")
@@ -171,6 +182,8 @@ runPackageUploadTests = do
        xs <- validate NoAuth "/package/testpackage-1.0.0.0"
        unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
            die ("Bad package info: " ++ show xs)
+    do info "Checking Package Candidate no longer exists after package upload"
+       checkIsExpectedCode isNotFound NoAuth "/package/testpackage-1.0.0.0/candidate"
     do info "Setting upload time"
        putText (Auth "HackageTestUser1" "testpass1")
            "/package/testpackage-1.0.0.0/upload-time"

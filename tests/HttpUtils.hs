@@ -11,6 +11,7 @@ module HttpUtils (
   , isNotModified
   , isUnauthorized
   , isForbidden
+  , isNotFound
   , parseQuery
   -- * Stateful functions
   , Authorization(..)
@@ -51,6 +52,7 @@ type ExpectedCode = (Int, Int, Int) -> Bool
 
 isOk, isAccepted, isNoContent, isSeeOther :: ExpectedCode
 isNotModified, isUnauthorized, isForbidden :: ExpectedCode
+isNotFound :: ExpectedCode
 isOk           = (== (2, 0, 0))
 isAccepted     = (== (2, 0, 2))
 isNoContent    = (== (2, 0, 4))
@@ -58,6 +60,7 @@ isSeeOther     = (== (3, 0, 3))
 isNotModified  = (== (3, 0, 4))
 isUnauthorized = (== (4, 0, 1))
 isForbidden    = (== (4, 0, 3))
+isNotFound     = (== (4, 0, 4))
 
 parseQuery :: String -> [(String, String)]
 parseQuery = map parseAssignment . explode '&'

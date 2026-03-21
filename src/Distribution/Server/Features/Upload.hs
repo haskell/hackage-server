@@ -49,6 +49,9 @@ data UploadFeature = UploadFeature {
     -- For new pacakges lifecycle, this should be removed
     uploadPackage      :: ServerPartE UploadResult,
 
+    -- | Notification that a new package was uploaded.
+    packageUploaded    :: Hook PackageId (),
+
     --TODO: consider moving the trustee and/or per-package maintainer groups
     --      lower down in the feature hierarchy; many other features want to
     --      use the trustee group purely for auth decisions
@@ -110,6 +113,8 @@ initUploadFeature env@ServerEnv{serverStateDir} = do
     uploadersState   <- uploadersStateComponent   serverStateDir
     maintainersState <- maintainersStateComponent serverStateDir
 
+    packageUploaded  <- newHook
+
     return $ \user@UserFeature{..} core@CoreFeature{..} -> do
 
       -- Recusively tie the knot: the feature contains new user group resources
@@ -122,6 +127,7 @@ initUploadFeature env@ServerEnv{serverStateDir} = do
                                 trusteesState    trusteesGroup    trusteesGroupResource
                                 uploadersState   uploadersGroup   uploadersGroupResource
                                 maintainersState maintainersGroup maintainersGroupResource
+                                packageUploaded
 
           (trusteesGroup,  trusteesGroupResource) <-
             groupResourceAt "/packages/trustees"  trusteesGroupDescription
@@ -184,6 +190,7 @@ uploadFeature :: ServerEnv
               -> StateComponent AcidState HackageTrustees    -> UserGroup -> GroupResource
               -> StateComponent AcidState HackageUploaders   -> UserGroup -> GroupResource
               -> StateComponent AcidState PackageMaintainers -> (PackageName -> UserGroup) -> GroupResource
+              -> Hook PackageId ()
               -> (UploadFeature,
                   UserGroup,
                   UserGroup,
@@ -198,6 +205,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
               trusteesState    trusteesGroup    trusteesGroupResource
               uploadersState   uploadersGroup   uploadersGroupResource
               maintainersState maintainersGroup maintainersGroupResource
+              packageUploaded
    = ( UploadFeature {..}
      , trusteesGroupDescription, uploadersGroupDescription, maintainersGroupDescription)
    where
@@ -314,6 +322,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                 liftIO $ addUserToGroup group uid
                 runHook_ groupChangedHook (groupDesc group, True,uid,uid,"initial upload")
 
+            runHook_ packageUploaded pkgid
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]

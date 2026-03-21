@@ -139,13 +139,15 @@ initPackageCandidatesFeature :: ServerEnv
 initPackageCandidatesFeature env@ServerEnv{serverStateDir} = do
     candidatesState <- candidatesStateComponent False serverStateDir
 
-    return $ \user core upload tarIndexCache -> do
+    return $ \user core upload@UploadFeature{..} tarIndexCache -> do
       -- one-off migration
       CandidatePackages{candidateMigratedPkgTarball = migratedPkgTarball} <-
         queryState candidatesState GetCandidatePackages
       unless migratedPkgTarball $ do
         migrateCandidatePkgTarball_v1_to_v2 env candidatesState
         updateState candidatesState SetMigratedPkgTarball
+
+      registerHook packageUploaded $ updateState candidatesState . DeleteCandidate
 
       let feature = candidatesFeature env
                                       user core upload tarIndexCache
