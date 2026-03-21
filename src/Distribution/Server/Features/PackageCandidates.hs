@@ -406,10 +406,13 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                 candWarnings = uploadWarnings uresult,
                 candPublic = True -- do withDataFn
             }
-        void $ updateState candidatesState $ AddCandidate candidate
-        let group = maintainersGroup (packageName pkgid)
-        liftIO $ Group.addUserToGroup group uid
-        return candidate
+        checkCandidate "Upload failed" uid regularIndex candidate >>= \case
+            Just failed -> throwError failed
+            Nothing -> do
+                void $ updateState candidatesState $ AddCandidate candidate
+                let group = maintainersGroup (packageName pkgid)
+                liftIO $ Group.addUserToGroup group uid
+                return candidate
 
     -- | Helper function for uploadCandidate.
     processCandidate :: (PackageId -> Bool) -> PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
@@ -473,12 +476,16 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
 
     -- | Helper function for publishCandidate that ensures it's safe to insert into the main index.
+    checkPublish :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse)
+    checkPublish = checkCandidate "Publish failed"
+
+    -- | Helper function that ensures it would be safe to insert a package candidate into the main index.
     --
     -- TODO: share code w/ 'Distribution.Server.Features.Upload.processUpload'
-    checkPublish :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse)
-    checkPublish uid packages candidate
+    checkCandidate :: forall m. MonadIO m => String -> Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse)
+    checkCandidate errorTitle uid packages candidate
       | Just _ <- find ((== candVersion) . packageVersion) pkgs
-        = return $ Just $ ErrorResponse 403 [] "Publish failed" [MText "Package name and version already exist in the database"]
+        = return $ Just $ ErrorResponse 403 [] errorTitle [MText "Package name and version already exist in the database"]
 
       | packageExists packages candidate = return Nothing
 
@@ -487,7 +494,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           PackageIndex.Unambiguous (mp:_) -> do
             group <- liftIO $ (Group.queryUserGroup . maintainersGroup . packageName) mp
             if not $ uid `Group.member` group
-              then return $ Just $ ErrorResponse 403 [] "Publish failed" (caseClash [mp])
+              then return $ Just $ ErrorResponse 403 [] errorTitle (caseClash [mp])
               else return Nothing
 
           PackageIndex.Unambiguous [] -> return Nothing -- can this ever occur?
@@ -496,7 +503,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             let matchingPackages = concatMap (take 1) mps
             groups <- mapM (liftIO . Group.queryUserGroup . maintainersGroup . packageName) matchingPackages
             if not . any (uid `Group.member`) $ groups
-              then return $ Just $ ErrorResponse 403 [] "Publish failed" (caseClash matchingPackages)
+              then return $ Just $ ErrorResponse 403 [] errorTitle (caseClash matchingPackages)
               else return Nothing
 
           -- no case-neighbors
