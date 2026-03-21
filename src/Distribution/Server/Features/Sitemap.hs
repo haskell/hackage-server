@@ -35,7 +35,7 @@ import qualified Data.TarIndex as Tar
 import System.FilePath (takeExtension)
 
 data Sitemap
-  = Sitemap 
+  = Sitemap
     { sitemapIndex :: XMLResponse
     , sitemaps     :: [XMLResponse]
     }
@@ -66,7 +66,7 @@ initSitemapFeature env@ServerEnv{ serverCacheDelay,
 
   return $ \coref@CoreFeature{..}
             docsCore@DocumentationFeature{..}
-            tagsf@TagsFeature{..} 
+            tagsf@TagsFeature{..}
             tarf@TarIndexCacheFeature{..} -> do
 
     rec let (feature, updateSitemapCache) =
@@ -178,7 +178,7 @@ generateSitemap :: URI
                 -> (BlobId -> IO Tar.TarIndex)
                 -> IO [ByteString]
 generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarIndex = do
-  versionedDocSubEntries <- versionedDocSubEntriesIO
+  -- versionedDocSubEntries <- versionedDocSubEntriesIO
   let -- Combine and build sitemap
       allEntries = miscEntries
                 ++ tagEntries
@@ -186,7 +186,7 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarI
                 ++ nameVersEntries
                 ++ baseDocEntries
                 ++ versionedDocEntries
-                ++ versionedDocSubEntries
+                -- ++ versionedDocSubEntries
   pure $ renderSitemap serverBaseURI <$> chunksOf 50000 allEntries
   where
     -- Misc. pages
@@ -270,6 +270,7 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarI
         ]
         pageBuildDate Monthly 0.25
 
+{-
     -- Versioned doc pages in subdirectories
     --  versionedSubDocURIs :: [path :: String]
     --  e.g. ["http://myhackage.com/packages/mypackage-1.0.2/docs/Lib.html", ...]
@@ -281,7 +282,7 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarI
       pkgIndices <- traverse (\(pkg, blob) -> (pkg,) <$> cachedTarIndex blob) pkgs
       pure $ urlsToSitemapEntries
         [ prefixPkgURI ++ display (packageId pkg) ++ "/docs" ++ fp
-        | (pkg, tarIndex) <- pkgIndices 
+        | (pkg, tarIndex) <- pkgIndices
         , Just tar <- [Tar.lookup tarIndex ""]
         , fp <- entryToPaths "/" tar
         , takeExtension fp == ".html"
@@ -290,5 +291,6 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarI
 
     entryToPaths :: FilePath -> Tar.TarIndexEntry -> [FilePath]
     entryToPaths _    (Tar.TarFileEntry _) = []
-    entryToPaths base (Tar.TarDir content) = map ((base </>) . fst) content ++ 
+    entryToPaths base (Tar.TarDir content) = map ((base </>) . fst) content ++
       [ file | (folder, entry) <- content, file <- entryToPaths (base </> folder) entry ]
+-}

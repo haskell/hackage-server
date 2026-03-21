@@ -28,6 +28,10 @@ module Distribution.Server.Framework.Auth (
     -- ** Errors
     AuthError(..),
     authErrorResponse,
+
+    -- ** Internal details
+    AuthMethod(..),
+    probeAttemptedAuthMethod,
   ) where
 
 import qualified Data.Text as T
@@ -124,20 +128,32 @@ checkAuthenticated realm users ServerEnv { serverRequiredBaseHostHeader } = do
            Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
            Just (AuthToken,  ahdr) -> checkTokenAuth  users       ahdr
            Nothing                 -> Left NoAuthError
-    getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
-    getHeaderAuth req =
-        case getHeader "authorization" req of
-          Just hdr
-            |  BS.isPrefixOf (BS.pack "Digest ") hdr
-            -> Just (DigestAuth, BS.drop 7 hdr)
-            |  BS.isPrefixOf (BS.pack "X-ApiKey ") hdr
-            -> Just (AuthToken, BS.drop 9 hdr)
-            |  BS.isPrefixOf (BS.pack "Basic ") hdr
-            -> Just (BasicAuth,  BS.drop 6 hdr)
-          _ -> Nothing
 
-data AuthType = BasicAuth | DigestAuth | AuthToken
+-- | Authentication methods supported by hackage-server.
+data AuthMethod
+  = -- | HTTP Basic authentication.
+    BasicAuth
+  | -- | HTTP Digest authentication.
+    DigestAuth
+  | -- | Authentication usinng an API token via the @X-ApiKey@ header.
+    AuthToken
 
+getHeaderAuth :: Request -> Maybe (AuthMethod, BS.ByteString)
+getHeaderAuth req =
+  case getHeader "authorization" req of
+    Just hdr
+      |  BS.isPrefixOf (BS.pack "Digest ") hdr
+      -> Just (DigestAuth, BS.drop 7 hdr)
+      |  BS.isPrefixOf (BS.pack "X-ApiKey ") hdr
+      -> Just (AuthToken, BS.drop 9 hdr)
+      |  BS.isPrefixOf (BS.pack "Basic ") hdr
+      -> Just (BasicAuth,  BS.drop 6 hdr)
+    _ -> Nothing
+
+-- | Reads the request headers to determine which @AuthMethod@ the client has attempted to use, if
+-- any. Note that this does not /validate/ the authentication credentials.
+probeAttemptedAuthMethod :: Request -> Maybe AuthMethod
+probeAttemptedAuthMethod = fmap fst . getHeaderAuth
 
 data PrivilegeCondition = InGroup    Group.UserGroup
                         | IsUserId   UserId
