@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, RecursiveDo #-}
 module Distribution.Server.Features.Distro (
     DistroFeature(..),
     DistroResource(..),
@@ -20,6 +20,7 @@ import Distribution.Text (display, simpleParse)
 import Distribution.Package
 
 import Data.List (intercalate)
+import qualified Data.Text as T
 import Text.CSV (parseCSV)
 
 -- TODO:
@@ -29,7 +30,6 @@ import Text.CSV (parseCSV)
 data DistroFeature = DistroFeature {
     distroFeatureInterface :: HackageFeature,
     distroResource   :: DistroResource,
-    maintainersGroup :: DynamicPath -> IO (Maybe UserGroup),
     queryPackageStatus :: forall m. MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]
 }
 
@@ -48,8 +48,28 @@ initDistroFeature :: ServerEnv
 initDistroFeature ServerEnv{serverStateDir} = do
     distrosState <- distrosStateComponent serverStateDir
 
-    return $ \user core -> do
-      let feature = distroFeature user core distrosState
+    return $ \user@UserFeature{adminGroup, groupResourcesAt} core@CoreFeature{coreResource} -> do
+      rec
+        let
+          maintainersUserGroup :: DistroName -> UserGroup
+          maintainersUserGroup name =
+            UserGroup {
+              groupDesc             = maintainerGroupDescription name,
+              queryUserGroup        = queryState  distrosState $ GetDistroMaintainers name,
+              addUserToGroup        = updateState distrosState . AddDistroMaintainer name,
+              removeUserFromGroup   = updateState distrosState . RemoveDistroMaintainer name,
+              groupsAllowedToAdd    = [adminGroup],
+              groupsAllowedToDelete = [adminGroup]
+            }
+          feature = distroFeature user core distrosState maintainersGroupResource maintainersUserGroup
+        distroNames <- queryState distrosState EnumerateDistros
+        (_maintainersGroup, maintainersGroupResource) <-
+          groupResourcesAt "/distro/:package/maintainers"
+                           maintainersUserGroup
+                           (\distroName -> [("package", display distroName)])
+                           (packageInPath coreResource)
+                           distroNames
+
       return feature
 
 distrosStateComponent :: FilePath -> IO (StateComponent AcidState Distros)
@@ -68,15 +88,21 @@ distrosStateComponent stateDir = do
 distroFeature :: UserFeature
               -> CoreFeature
               -> StateComponent AcidState Distros
+              -> GroupResource
+              -> (DistroName -> UserGroup)
               -> DistroFeature
 distroFeature UserFeature{..}
               CoreFeature{coreResource=CoreResource{packageInPath}}
               distrosState
+              maintainersGroupResource
+              distroGroup
   = DistroFeature{..}
   where
     distroFeatureInterface = (emptyHackageFeature "distro") {
         featureResources =
-          map ($ distroResource) [
+         groupResource maintainersGroupResource
+         : groupUserResource maintainersGroupResource
+         : map ($ distroResource) [
               distroIndexPage
             , distroAllPage
             , distroPackages
@@ -109,10 +135,6 @@ distroFeature UserFeature{..}
               }
           }
 
-    maintainersGroup = \dpath -> case simpleParse =<< lookup "distro" dpath of
-            Nothing -> return Nothing
-            Just dname -> getMaintainersGroup adminGroup dname
-
     textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (queryState distrosState EnumerateDistros)
     textDistroPkgs dpath = withDistroPath dpath $ \dname pkgs -> do
         let pkglines = map (\(name, info) -> display name ++ " at " ++ display (distroVersion info) ++ ": " ++ distroUrl info) pkgs
@@ -124,7 +146,7 @@ distroFeature UserFeature{..}
     -- result: see-other uri, or an error: not authenticated or not found (todo)
     distroDelete dpath =
       withDistroNamePath dpath $ \distro -> do
-        guardAuthorised_ [InGroup adminGroup] --TODO: use the per-distro maintainer groups
+        guardAuthorised_ [InGroup adminGroup]
         -- should also check for existence here of distro here
         void $ updateState distrosState $ RemoveDistro distro
         seeOther "/distros/" (toResponse ())
@@ -132,7 +154,7 @@ distroFeature UserFeature{..}
     -- result: ok response or not-found error
     distroPackageDelete dpath =
       withDistroPackagePath dpath $ \dname pkgname info -> do
-        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
+        guardAuthorised_ [InGroup $ distroGroup dname]
         case info of
             Nothing -> notFound . toResponse $ "Package not found for " ++ display pkgname
             Just {} -> do
@@ -142,14 +164,14 @@ distroFeature UserFeature{..}
     -- result: see-other response, or an error: not authenticated or not found (todo)
     distroPackagePut dpath =
       withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
-        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
+        guardAuthorised_ [InGroup $ distroGroup dname]
         void $ updateState distrosState $ AddPackage dname pkgname newPkgInfo
         seeOther ("/distro/" ++ display dname ++ "/" ++ display pkgname) $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authentcated or bad request
     distroPostNew _ =
       lookDistroName $ \dname -> do
-        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
+        guardAuthorised_ [InGroup adminGroup]
         success <- updateState distrosState $ AddDistro dname
         if success
             then seeOther ("/distro/" ++ display dname) $ toResponse "Ok!"
@@ -157,7 +179,7 @@ distroFeature UserFeature{..}
 
     distroPutNew dpath =
       withDistroNamePath dpath $ \dname -> do
-        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
+        guardAuthorised_ [InGroup adminGroup]
         _success <- updateState distrosState $ AddDistro dname
         -- it doesn't matter if it exists already or not
         ok $ toResponse "Ok!"
@@ -165,7 +187,7 @@ distroFeature UserFeature{..}
     -- result: ok repsonse or not-found error
     distroPackageListPut dpath =
       withDistroPath dpath $ \dname _pkgs -> do
-        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
+        guardAuthorised_ [InGroup $ distroGroup dname]
         lookCSVFile $ \csv ->
             case csvToPackageList csv of
                 Left  msg  ->
@@ -216,21 +238,6 @@ distroFeature UserFeature{..}
         Just distro -> func distro
         _ -> badRequest $ toResponse "Not a valid distro name"
 
-    getMaintainersGroup :: UserGroup -> DistroName -> IO (Maybe UserGroup)
-    getMaintainersGroup admins dname = do
-        isDist <- queryState distrosState (IsDistribution dname)
-        case isDist of
-          False -> return Nothing
-          True  -> return . Just $ UserGroup
-            { groupDesc             = maintainerGroupDescription dname
-            , queryUserGroup        = queryState distrosState $ GetDistroMaintainers dname
-            , addUserToGroup        = updateState distrosState . AddDistroMaintainer dname
-            , removeUserFromGroup   = updateState distrosState . RemoveDistroMaintainer dname
-            , groupsAllowedToAdd    = [admins]
-            , groupsAllowedToDelete = [admins]
-            }
-
-
 maintainerGroupDescription :: DistroName -> GroupDescription
 maintainerGroupDescription dname = nullDescription
   { groupTitle = "Maintainers"
@@ -260,6 +267,7 @@ csvToPackageList (CSVFile records)
     fromRecord [packageStr, versionStr, uri]
       | Just package <- simpleParse packageStr
       , Just version <- simpleParse versionStr
+      , T.pack "https:" `T.isPrefixOf` T.pack uri
       = return (package, DistroPackageInfo version uri)
-    fromRecord rec
-      = Left $ "Invalid distro package entry: " ++ show rec
+    fromRecord record
+      = Left $ "Invalid distro package entry: " ++ show record
