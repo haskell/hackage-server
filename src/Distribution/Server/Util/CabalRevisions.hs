@@ -250,21 +250,6 @@ checkFlag flagOld flagNew = do
     checkSame "Cannot change ordering of flags"
               (flagName flagOld) (flagName flagNew)
 
-    -- Automatic flags' defaults may be changed as they don't make new
-    -- configurations reachable by the solver that weren't before
-    --
-    -- Moreover, automatic flags may be converted into manual flags
-    -- but not the other way round.
-    --
-    -- NB: We always allow to change the flag description as it has
-    --     purely informational value
-    when (flagManual flagOld) $ do
-        checkSame "Cannot change the default of a manual flag"
-                  (flagDefault flagOld) (flagDefault flagNew)
-
-        checkSame "Cannot change a manual flag into an automatic flag"
-                  (flagManual flagOld) (flagManual flagNew)
-
     let fname = unFlagName (flagName flagOld)
 
     changesOk ("type of flag '" ++ fname ++ "'")
