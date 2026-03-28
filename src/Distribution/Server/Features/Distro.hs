@@ -227,8 +227,8 @@ distroFeature UserFeature{..}
             pVerStr <- look "version"
             pUriStr  <- look "uri"
             case simpleParse pVerStr of
-                Nothing -> mzero
-                Just pVer -> return $ DistroPackageInfo pVer pUriStr
+                Just pVer | isValidDistroURI pUriStr -> return $ DistroPackageInfo pVer pUriStr
+                _ -> mzero
         case mInfo of
             (Left errs) -> ok $ toResponse $ unlines $ "Sorry, something went wrong there." : errs
             (Right pInfo) -> func pInfo
@@ -260,6 +260,10 @@ packageListToCSV :: [(PackageName, DistroPackageInfo)] -> CSVFile
 packageListToCSV entries
     = CSVFile $ map (\(pn,DistroPackageInfo version url) -> [display pn, display version, url]) entries
 
+isValidDistroURI :: String -> Bool
+isValidDistroURI uri =
+  T.pack "https:" `T.isPrefixOf` T.pack uri
+
 csvToPackageList :: CSVFile -> Either String [(PackageName, DistroPackageInfo)]
 csvToPackageList (CSVFile records)
     = mapM fromRecord records
@@ -267,7 +271,7 @@ csvToPackageList (CSVFile records)
     fromRecord [packageStr, versionStr, uri]
       | Just package <- simpleParse packageStr
       , Just version <- simpleParse versionStr
-      , T.pack "https:" `T.isPrefixOf` T.pack uri
+      , isValidDistroURI uri
       = return (package, DistroPackageInfo version uri)
     fromRecord record
       = Left $ "Invalid distro package entry: " ++ show record
