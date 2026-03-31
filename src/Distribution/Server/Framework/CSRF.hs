@@ -24,6 +24,8 @@ isCsrfSafe req
             (`BS.isPrefixOf` ua)
             -- UA set by `cabal upload` and such
             [ BS.pack "cabal-install/"
+              -- UA set by Stack
+            , BS.pack "The Haskell Stack"
             , -- Add some other common CLI tools here too?
               BS.pack "curl/"
             , -- referenced in this repository. Unclear whether strictly needed, but whitelisting just in case:
