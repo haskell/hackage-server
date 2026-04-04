@@ -49,9 +49,9 @@
             hackage-server.check = false;
 
             Cabal-syntax = { super, ... }:
-              { custom = _: super.Cabal-syntax_3_16_0_0; };
+              { custom = _: super.Cabal-syntax_3_16_1_0; };
             Cabal = { super, ... }:
-              { custom = _: super.Cabal_3_16_0_0; };
+              { custom = _: super.Cabal_3_16_1_0; };
 
             sandwich.check = false;
 
