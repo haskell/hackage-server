@@ -611,7 +611,7 @@ processPkg verbosity opts config docInfo = do
       createDirectoryIfMissing True $ resultsDirectory opts
       notice verbosity $ "Writing cabal.project for " ++ display (docInfoPackage docInfo)
       let projectFile = installDirectory opts </> "cabal.project"
-      cabal opts "unpack" [show (docInfoTarGzURI config docInfo)] Nothing
+      cabal opts "unpack" [cabalPackageTarget config docInfo] Nothing
       writeFile projectFile $ "packages: */*.cabal" -- ++ show (docInfoTarGzURI config docInfo)
 
     setTestOutcome :: String -> [String] -> [String]
@@ -756,14 +756,7 @@ buildPackage verbosity opts config docInfo = do
              "--haddock-hoogle",
              -- Generate the quickjump index files
              "--haddock-option=--quickjump",
-             -- For candidates we need to use the full URL, because
-             -- otherwise cabal-install will not find the package.
-             -- For regular packages however we need to use just the
-             -- package name, otherwise cabal-install will not
-             -- generate a report
-             if docInfoIsCandidate docInfo
-               then show (docInfoTarGzURI config docInfo)
-               else display pkgid
+             cabalPackageTarget config docInfo
              ]
 
     -- The installDirectory is purely temporary, while the resultsDirectory is
@@ -829,6 +822,18 @@ cabal opts cmd args moutput = do
     ph <- runProcess "cabal" all_args (Just $ installDirectory opts)
                         Nothing Nothing moutput moutput
     waitForProcess ph
+
+cabalPackageTarget :: BuildConfig -> DocInfo -> String
+cabalPackageTarget config docInfo =
+    -- For candidates we need to use the full URL, because
+    -- otherwise cabal install/unpack will not find the package.
+    -- For regular packages however we need to use just the
+    -- package name, otherwise cabal install will not
+    -- generate a report and cabal unpack will not use the
+    -- latest cabal file revision from the package archive.
+    if docInfoIsCandidate docInfo
+        then show (docInfoTarGzURI config docInfo)
+        else display (docInfoPackage docInfo)
 
 pruneHaddockFiles :: FilePath -> IO ()
 pruneHaddockFiles dir = do
