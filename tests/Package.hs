@@ -8,13 +8,16 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Char
 import System.FilePath
 
-mkPackage :: String -> (FilePath,   -- Tar filename
-                        String,     -- Tar file content
-                        FilePath,   -- Cabal filename in index
-                        String,     -- Cabal file content
-                        FilePath,   -- Haskell filename in source tree
-                        String)     -- Haskell file content
-mkPackage name = (name ++ "-1.0.0.0.tar.gz",               BS.unpack targz,
+mkPackage :: String -> -- Package name
+             Maybe String -> -- Optional additional Cabal file contents
+             (FilePath,   -- Tar filename
+              String,     -- Tar file content
+              FilePath,   -- Cabal filename in index
+              String,     -- Cabal file content
+              FilePath,   -- Haskell filename in source tree
+              String)     -- Haskell file content
+mkPackage name additionalCabalFileContents =
+                 (name ++ "-1.0.0.0.tar.gz",               BS.unpack targz,
                   name ++ "/1.0.0.0/" ++ name ++ ".cabal", cabalFile,
                   modName <.> "hs",                        modFile)
     where targz = compress tar
@@ -40,7 +43,7 @@ mkPackage name = (name ++ "-1.0.0.0.tar.gz",               BS.unpack targz,
                           "Library {",
                           "    default-language:  Haskell98",
                           "    exposed-modules: " ++ modName,
-                          "}"]
+                          "}"] ++ maybe "" ("\n" ++) additionalCabalFileContents
           modFile = unlines [
                         "module " ++ modName ++ " where",
                         "f" ++ name ++ " :: () -> ()",

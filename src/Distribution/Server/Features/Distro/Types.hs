@@ -8,6 +8,7 @@
 
 module Distribution.Server.Features.Distro.Types where
 
+import Distribution.Server.Framework (FromReqURI(..))
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Users.State()
@@ -22,6 +23,7 @@ import Distribution.Package
 import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Compat.CharParsing as P
+import Distribution.Text (simpleParse)
 
 import qualified Text.PrettyPrint as Disp
 import qualified Data.Char as Char
@@ -38,6 +40,9 @@ instance Pretty DistroName where
 
 instance Parsec DistroName where
   parsec = DistroName <$> P.munch1 (\c -> Char.isAlphaNum c || c `elem` "-_()[]{}=$,;")
+
+instance FromReqURI DistroName where
+  fromReqURI = simpleParse
 
 -- | Listing of known distributions and their maintainers
 data Distributions = Distributions {
