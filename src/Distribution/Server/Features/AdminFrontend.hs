@@ -12,6 +12,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.UserSignup
 import Distribution.Server.Features.LegacyPasswds
+import qualified Distribution.Server.Features.LegacyPasswds.Acid as Acid
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Users as Users
@@ -201,7 +202,7 @@ adminFrontendFeature _env templates
         cacheControlWithoutETag [Private]
         template     <- getTemplate templates "legacy.html"
         usersdb      <- queryGetUserDb
-        legacyUsers  <- enumerateAllUserLegacyPasswd <$> queryLegacyPasswds
+        legacyUsers  <- Acid.enumerateAllUserLegacyPasswd <$> queryLegacyPasswds
         ok $ toResponse $ template
           [ "accounts" $= [ accountBasicInfoToTemplate uid uinfo
                           | uid <- legacyUsers
@@ -226,7 +227,7 @@ adminFrontendFeature _env templates
         uinfo     <- lookupUserInfo uid
         mudetails <- queryUserDetails uid
         resetInfo <- lookupPasswordReset uid <$> queryAllSignupResetInfo
-        mlegacy   <- lookupUserLegacyPasswd uid <$> queryLegacyPasswds
+        mlegacy   <- Acid.lookupUserLegacyPasswd uid <$> queryLegacyPasswds
 
         ok $ toResponse $ template
           [ "account" $= accountBasicInfoToTemplate uid uinfo
