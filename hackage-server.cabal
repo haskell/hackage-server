@@ -336,6 +336,9 @@ library
       Distribution.Server.Features.PackageContents
       Distribution.Server.Features.AdminFrontend
       Distribution.Server.Features.AdminLog
+      Distribution.Server.Features.AdminLog.Acid
+      Distribution.Server.Features.AdminLog.Backup
+      Distribution.Server.Features.AdminLog.Types
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
       Distribution.Server.Features.BuildReports.BuildReports

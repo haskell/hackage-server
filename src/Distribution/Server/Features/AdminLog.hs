@@ -1,9 +1,11 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, BangPatterns,
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, BangPatterns,
              GeneralizedNewtypeDeriving, NamedFieldPuns, RecordWildCards,
              PatternGuards, RankNTypes #-}
 
 module Distribution.Server.Features.AdminLog where
 
+import qualified Distribution.Server.Features.AdminLog.Acid as Acid
+import Distribution.Server.Features.AdminLog.Types
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.Group
 import Distribution.Server.Framework
@@ -12,31 +14,12 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Pages.AdminLog
 import Distribution.Server.Features.Users
 
-import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Maybe(mapMaybe)
-import Control.Monad.Reader
-import qualified Control.Monad.State as State
 import Data.Time (UTCTime)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Text.Read (readMaybe)
 import Distribution.Server.Util.Parse
-
-data GroupDesc = MaintainerGroup BS.ByteString | AdminGroup | TrusteeGroup | OtherGroup BS.ByteString deriving (Eq, Ord, Read, Show)
-
-deriveSafeCopy 0 'base ''GroupDesc
-
-instance MemSize GroupDesc where
-    memSize (MaintainerGroup x) = memSize x
-    memSize _ = 0
-
-data AdminAction = Admin_GroupAddUser UserId GroupDesc | Admin_GroupDelUser UserId GroupDesc deriving (Eq, Ord, Read, Show)
-
-instance MemSize AdminAction where
-    memSize (Admin_GroupAddUser x y) = memSize2 x y
-    memSize (Admin_GroupDelUser x y) = memSize2 x y
-
-deriveSafeCopy 0 'base ''AdminAction
 
 --TODO Maybe Reason
 
@@ -47,36 +30,9 @@ mkAdminAction gd isAdd uid = (if isAdd then Admin_GroupAddUser else Admin_GroupD
                     | Just (pn,_) <- groupEntity gd, groupTitle gd == "Maintainers" = MaintainerGroup (packUTF8 pn)
                     | otherwise = OtherGroup $ packUTF8 (groupTitle gd ++ maybe "" ((' ':) . fst) (groupEntity gd))
 
-newtype AdminLog = AdminLog {
-      adminLog :: [(UTCTime,UserId,AdminAction,BS.ByteString)]
-} deriving (Show, MemSize)
-
-deriveSafeCopy 0 'base ''AdminLog
-
-initialAdminLog :: AdminLog
-initialAdminLog = AdminLog []
-
-getAdminLog :: Query AdminLog AdminLog
-getAdminLog = ask
-
-addAdminLog :: (UTCTime, UserId, AdminAction, BS.ByteString) -> Update AdminLog ()
-addAdminLog x = State.modify (\(AdminLog xs) -> AdminLog (x : xs))
-
-instance Eq AdminLog where
-    (AdminLog (x:_)) == (AdminLog (y:_)) = x == y
-    (AdminLog []) == (AdminLog []) = True
-    _ == _ = False
-
-replaceAdminLog :: AdminLog -> Update AdminLog ()
-replaceAdminLog = State.put
-
-makeAcidic ''AdminLog ['getAdminLog
-                      ,'replaceAdminLog
-                      ,'addAdminLog]
-
 data AdminLogFeature = AdminLogFeature {
       adminLogFeatureInterface :: HackageFeature
-    , queryGetAdminLog :: forall m. MonadIO m => m AdminLog
+    , queryGetAdminLog :: forall m. MonadIO m => m Acid.AdminLog
 }
 
 instance IsHackageFeature AdminLogFeature where
@@ -91,13 +47,13 @@ initAdminLogFeature ServerEnv{serverStateDir} = do
 
     registerHook groupChangedHook $ \(gd,addOrDel,actorUid,targetUid,reason) -> do
         now <- getCurrentTime
-        updateState adminLogState $ AddAdminLog
+        updateState adminLogState $ Acid.AddAdminLog
             (now, actorUid, mkAdminAction gd addOrDel targetUid, packUTF8 reason)
 
     return feature
 
 adminLogFeature :: UserFeature
-                -> StateComponent AcidState AdminLog
+                -> StateComponent AcidState Acid.AdminLog
                 -> AdminLogFeature
 adminLogFeature UserFeature{..} adminLogState
   = AdminLogFeature {..}
@@ -117,41 +73,41 @@ adminLogFeature UserFeature{..} adminLogState
         resourceGet  = [("html", serveAdminLogGet)]
       }
 
-    queryGetAdminLog :: MonadIO m => m AdminLog
-    queryGetAdminLog = queryState adminLogState GetAdminLog
+    queryGetAdminLog :: MonadIO m => m Acid.AdminLog
+    queryGetAdminLog = queryState adminLogState Acid.GetAdminLog
 
     serveAdminLogGet _ = do
-      aLog  <- queryState adminLogState GetAdminLog
+      aLog  <- queryState adminLogState Acid.GetAdminLog
       users <- queryGetUserDb
-      return . toResponse . adminLogPage users . map mkRow . adminLog $ aLog
+      return . toResponse . adminLogPage users . map mkRow . Acid.adminLog $ aLog
 
     mkRow (time, actorId, Admin_GroupDelUser targetId group, reason) =
-          (time, actorId, "Delete", targetId, nameIt group, unpackUTF8 reason)
+          (time, actorId, "Acid.Delete", targetId, nameIt group, unpackUTF8 reason)
     mkRow (time, actorId, Admin_GroupAddUser targetId group, reason) =
-          (time, actorId, "Add", targetId, nameIt group, unpackUTF8 reason)
+          (time, actorId, "Acid.Add", targetId, nameIt group, unpackUTF8 reason)
 
     nameIt (MaintainerGroup pn) = "Maintainers for " ++ unpackUTF8 pn
     nameIt AdminGroup           = "Administrators"
     nameIt TrusteeGroup         = "Trustees"
     nameIt (OtherGroup s)       = unpackUTF8 s
 
-adminLogStateComponent :: FilePath -> IO (StateComponent AcidState AdminLog)
+adminLogStateComponent :: FilePath -> IO (StateComponent AcidState Acid.AdminLog)
 adminLogStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "AdminLog") initialAdminLog
+  st <- openLocalStateFrom (stateDir </> "db" </> "AdminLog") Acid.initialAdminLog
   return StateComponent {
       stateDesc    = "AdminLog"
     , stateHandle  = st
-    , getState     = query st GetAdminLog
-    , putState     = update st . ReplaceAdminLog
-    , backupState  = \_ (AdminLog xs) ->
+    , getState     = query st Acid.GetAdminLog
+    , putState     = update st . Acid.ReplaceAdminLog
+    , backupState  = \_ (Acid.AdminLog xs) ->
                       [BackupByteString ["adminLog.txt"] . backupLogEntries $ xs]
     , restoreState = restoreAdminLogBackup
     , resetState   = adminLogStateComponent
     }
 
-restoreAdminLogBackup :: RestoreBackup AdminLog
+restoreAdminLogBackup :: RestoreBackup Acid.AdminLog
 restoreAdminLogBackup =
-    go (AdminLog [])
+    go (Acid.AdminLog [])
   where
     go logs =
       RestoreBackup {
@@ -162,9 +118,9 @@ restoreAdminLogBackup =
       , restoreFinalize = return logs
       }
 
-importLogs :: AdminLog -> BS.ByteString -> AdminLog
-importLogs (AdminLog ls) =
-    AdminLog . (++ls) . mapMaybe fromRecord . lines . unpackUTF8
+importLogs :: Acid.AdminLog -> BS.ByteString -> Acid.AdminLog
+importLogs (Acid.AdminLog ls) =
+    Acid.AdminLog . (++ls) . mapMaybe fromRecord . lines . unpackUTF8
   where
     fromRecord :: String -> Maybe (UTCTime,UserId,AdminAction,BS.ByteString)
     fromRecord = readMaybe
