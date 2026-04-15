@@ -380,6 +380,7 @@ library
       Distribution.Server.Features.Votes
       Distribution.Server.Features.Votes.Render
       Distribution.Server.Features.Votes.State
+      Distribution.Server.Features.Votes.Types
       Distribution.Server.Features.Vouch
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
