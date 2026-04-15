@@ -288,7 +288,6 @@ library
     Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.Validators
     Distribution.Server.Util.Validators.Internal
-    -- [unused] Distribution.Server.Util.TarIndex
     Distribution.Server.Util.GZip
     Distribution.Server.Util.ContentType
     Distribution.Server.Util.SigTerm
