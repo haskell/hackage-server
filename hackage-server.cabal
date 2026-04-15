@@ -410,6 +410,9 @@ library
       Distribution.Server.Features.UserDetails.Backup
       Distribution.Server.Features.UserDetails.Types
       Distribution.Server.Features.UserSignup
+      Distribution.Server.Features.UserSignup.Acid
+      Distribution.Server.Features.UserSignup.Backup
+      Distribution.Server.Features.UserSignup.Types
       Distribution.Server.Features.StaticFiles
       Distribution.Server.Features.ServerIntrospect
       Distribution.Server.Features.Sitemap
