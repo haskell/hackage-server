@@ -10,7 +10,7 @@ module Distribution.Server.Features.Documentation (
 import Distribution.Server.Features.Security.SHA256       (sha256)
 import Distribution.Server.Framework
 
-import Distribution.Server.Features.Documentation.State
+import qualified Distribution.Server.Features.Documentation.State as Acid
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
@@ -110,24 +110,24 @@ initDocumentationFeature name
                                          documentationChangeHook
       return feature
 
-documentationStateComponent :: String -> FilePath -> IO (StateComponent AcidState Documentation)
+documentationStateComponent :: String -> FilePath -> IO (StateComponent AcidState Acid.Documentation)
 documentationStateComponent name stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> name) initialDocumentation
+  st <- openLocalStateFrom (stateDir </> "db" </> name) Acid.initialDocumentation
   return StateComponent {
       stateDesc    = "Package documentation"
     , stateHandle  = st
-    , getState     = query st GetDocumentation
-    , putState     = update st . ReplaceDocumentation
+    , getState     = query st Acid.GetDocumentation
+    , putState     = update st . Acid.ReplaceDocumentation
     , backupState  = \_ -> dumpBackup
-    , restoreState = updateDocumentation (Documentation Map.empty)
+    , restoreState = updateDocumentation (Acid.Documentation Map.empty)
     , resetState   = documentationStateComponent name
     }
   where
     dumpBackup doc =
         let exportFunc (pkgid, blob) = BackupBlob [display pkgid, "documentation.tar"] blob
-        in map exportFunc . Map.toList $ documentation doc
+        in map exportFunc . Map.toList $ Acid.documentation doc
 
-    updateDocumentation :: Documentation -> RestoreBackup Documentation
+    updateDocumentation :: Acid.Documentation -> RestoreBackup Acid.Documentation
     updateDocumentation docs = RestoreBackup {
         restoreEntry = \entry ->
           case entry of
@@ -139,9 +139,9 @@ documentationStateComponent name stateDir = do
       , restoreFinalize = return docs
       }
 
-    importDocumentation :: PackageId -> BlobId -> Documentation -> Restore Documentation
-    importDocumentation pkgId blobId (Documentation docs) =
-      return (Documentation (Map.insert pkgId blobId docs))
+    importDocumentation :: PackageId -> BlobId -> Acid.Documentation -> Restore Acid.Documentation
+    importDocumentation pkgId blobId (Acid.Documentation docs) =
+      return (Acid.Documentation (Map.insert pkgId blobId docs))
 
 documentationFeature :: String
                      -> ServerEnv
@@ -152,7 +152,7 @@ documentationFeature :: String
                      -> ReportsFeature
                      -> UserFeature
                      -> VersionsFeature
-                     -> StateComponent AcidState Documentation
+                     -> StateComponent AcidState Acid.Documentation
                      -> Hook PackageId ()
                      -> DocumentationFeature
 documentationFeature name
@@ -186,14 +186,14 @@ documentationFeature name
       }
 
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool
-    queryHasDocumentation pkgid = queryState documentationState (HasDocumentation pkgid)
+    queryHasDocumentation pkgid = queryState documentationState (Acid.HasDocumentation pkgid)
 
     queryDocumentation :: MonadIO m => PackageIdentifier -> m (Maybe BlobId)
-    queryDocumentation pkgid = queryState documentationState (LookupDocumentation pkgid)
+    queryDocumentation pkgid = queryState documentationState (Acid.LookupDocumentation pkgid)
 
     queryDocumentationIndex :: MonadIO m => m (Map.Map PackageId BlobId)
     queryDocumentationIndex =
-      liftM documentation (queryState documentationState GetDocumentation)
+      liftM Acid.documentation (queryState documentationState Acid.GetDocumentation)
 
     documentationResource = fix $ \r -> DocumentationResource {
         packageDocsContent = (extendResourcePath "/docs/.." corePackagePage) {
@@ -363,12 +363,12 @@ documentationFeature name
       fileContents <- expectCompressedTarball
       let filename = display pkgid ++ "-docs" <.> "tar.gz"
           unpacked = Gzip.decompressNamed filename fileContents
-      mres <- liftIO $ BlobStorage.addWith store unpacked 
+      mres <- liftIO $ BlobStorage.addWith store unpacked
                          (\content -> return (checkDocTarball pkgid content))
       case mres of
         Left  err -> errBadRequest "Invalid documentation tarball" [MText err]
         Right ((), blobid) -> do
-          updateState documentationState $ InsertDocumentation pkgid blobid
+          updateState documentationState $ Acid.InsertDocumentation pkgid blobid
           runHook_ documentationChangeHook pkgid
           noContent (toResponse ())
 
@@ -401,7 +401,7 @@ documentationFeature name
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-      updateState documentationState $ RemoveDocumentation pkgid
+      updateState documentationState $ Acid.RemoveDocumentation pkgid
       runHook_ documentationChangeHook pkgid
       noContent (toResponse ())
 
@@ -465,7 +465,7 @@ documentationFeature name
                 tempRedirect latestPkgPath (toResponse "")
               Nothing -> errNotFoundH "Not Found" [MText "There is no documentation for this package."]
         False -> do
-          mdocs <- queryState documentationState $ LookupDocumentation pkgid
+          mdocs <- queryState documentationState $ Acid.LookupDocumentation pkgid
           case mdocs of
             Nothing ->
               errNotFoundH "Not Found"
