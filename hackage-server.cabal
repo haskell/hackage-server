@@ -398,6 +398,9 @@ library
       Distribution.Server.Features.AnalyticsPixels.State
       Distribution.Server.Features.AnalyticsPixels.Types
       Distribution.Server.Features.UserDetails
+      Distribution.Server.Features.UserDetails.Acid
+      Distribution.Server.Features.UserDetails.Backup
+      Distribution.Server.Features.UserDetails.Types
       Distribution.Server.Features.UserSignup
       Distribution.Server.Features.StaticFiles
       Distribution.Server.Features.ServerIntrospect

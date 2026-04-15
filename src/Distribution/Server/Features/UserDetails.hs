@@ -1,5 +1,8 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, RankNTypes,
-    NamedFieldPuns, RecordWildCards, RecursiveDo, BangPatterns, OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
+
 module Distribution.Server.Features.UserDetails (
     initUserDetailsFeature,
     UserDetailsFeature(..),
@@ -8,6 +11,8 @@ module Distribution.Server.Features.UserDetails (
     AccountKind(..)
   ) where
 
+import qualified Distribution.Server.Features.UserDetails.Acid as Acid
+import Distribution.Server.Features.UserDetails.Types
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
@@ -20,17 +25,9 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Users.Types
 import Distribution.Server.Util.Validators (guardValidLookingEmail, guardValidLookingName)
 
-import Data.SafeCopy (base, deriveSafeCopy)
-
-import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Aeson as Aeson
-import Data.Aeson.TH
-
-import Control.Monad.Reader (ask)
-import Control.Monad.State (get, put)
 
 import Distribution.Text (display)
 import Data.Version
@@ -50,121 +47,18 @@ instance IsHackageFeature UserDetailsFeature where
   getFeatureInterface = userDetailsFeatureInterface
 
 
--------------------------
--- Types of stored data
---
-
-data AccountDetails = AccountDetails {
-                        accountName         :: !Text,
-                        accountContactEmail :: !Text,
-                        accountKind         :: Maybe AccountKind,
-                        accountAdminNotes   :: !Text
-                      }
-  deriving (Eq, Show)
-
-
-data AccountKind = AccountKindRealUser | AccountKindSpecial
-  deriving (Eq, Show, Enum, Bounded)
-
-newtype UserDetailsTable = UserDetailsTable (IntMap AccountDetails)
-  deriving (Eq, Show)
-
-data NameAndContact = NameAndContact { ui_name  :: Text, ui_contactEmailAddress :: Text }
-data AdminInfo      = AdminInfo      { ui_accountKind :: Maybe AccountKind, ui_notes :: Text }
-
-deriveJSON (compatAesonOptionsDropPrefix "ui_") ''NameAndContact
-deriveJSON  compatAesonOptions                  ''AccountKind
-deriveJSON (compatAesonOptionsDropPrefix "ui_") ''AdminInfo
-
-emptyAccountDetails :: AccountDetails
-emptyAccountDetails   = AccountDetails T.empty T.empty Nothing T.empty
-
-emptyUserDetailsTable :: UserDetailsTable
-emptyUserDetailsTable = UserDetailsTable IntMap.empty
-
-$(deriveSafeCopy 0 'base ''AccountKind)
-$(deriveSafeCopy 0 'base ''AccountDetails)
-$(deriveSafeCopy 0 'base ''UserDetailsTable)
-
-instance MemSize AccountDetails where
-    memSize (AccountDetails a b c d) = memSize4 a b c d
-
-instance MemSize AccountKind where
-    memSize _ = memSize0
-
-instance MemSize UserDetailsTable where
-    memSize (UserDetailsTable a) = memSize1 a
-
-
-------------------------------
--- State queries and updates
---
-
-getUserDetailsTable :: Query UserDetailsTable UserDetailsTable
-getUserDetailsTable = ask
-
-replaceUserDetailsTable :: UserDetailsTable -> Update UserDetailsTable ()
-replaceUserDetailsTable = put
-
-lookupUserDetails :: UserId -> Query UserDetailsTable (Maybe AccountDetails)
-lookupUserDetails (UserId uid) = do
-    UserDetailsTable tbl <- ask
-    return $! IntMap.lookup uid tbl
-
-setUserDetails :: UserId -> AccountDetails -> Update UserDetailsTable ()
-setUserDetails (UserId uid) udetails = do
-    UserDetailsTable tbl <- get
-    put $! UserDetailsTable (IntMap.insert uid udetails tbl)
-
-deleteUserDetails :: UserId -> Update UserDetailsTable Bool
-deleteUserDetails (UserId uid) = do
-    UserDetailsTable tbl <- get
-    if IntMap.member uid tbl
-      then do put $! UserDetailsTable (IntMap.delete uid tbl)
-              return True
-      else return False
-
-setUserNameContact :: UserId -> Text -> Text -> Update UserDetailsTable ()
-setUserNameContact (UserId uid) name email = do
-    UserDetailsTable tbl <- get
-    put $! UserDetailsTable (IntMap.alter upd uid tbl)
-  where
-    upd Nothing         = Just emptyAccountDetails { accountName = name, accountContactEmail = email }
-    upd (Just udetails) = Just udetails            { accountName = name, accountContactEmail = email }
-
-setUserAdminInfo :: UserId -> Maybe AccountKind -> Text -> Update UserDetailsTable ()
-setUserAdminInfo (UserId uid) akind notes = do
-    UserDetailsTable tbl <- get
-    put $! UserDetailsTable (IntMap.alter upd uid tbl)
-  where
-    upd Nothing         = Just emptyAccountDetails { accountKind = akind, accountAdminNotes = notes }
-    upd (Just udetails) = Just udetails            { accountKind = akind, accountAdminNotes = notes }
-
-makeAcidic ''UserDetailsTable [
-    --queries
-    'getUserDetailsTable,
-    'lookupUserDetails,
-    --updates
-    'replaceUserDetailsTable,
-    'setUserDetails,
-    'setUserNameContact,
-    'setUserAdminInfo,
-    'deleteUserDetails
-  ]
-
-
 ---------------------
 -- State components
 --
 
-userDetailsStateComponent :: FilePath -> IO (StateComponent AcidState UserDetailsTable)
+userDetailsStateComponent :: FilePath -> IO (StateComponent AcidState Acid.UserDetailsTable)
 userDetailsStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") emptyUserDetailsTable
+  st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") Acid.emptyUserDetailsTable
   return StateComponent {
       stateDesc    = "Extra details associated with user accounts, email addresses etc"
     , stateHandle  = st
-    , getState     = query st GetUserDetailsTable
-    , putState     = update st . ReplaceUserDetailsTable
+    , getState     = query st Acid.GetUserDetailsTable
+    , putState     = update st . Acid.ReplaceUserDetailsTable
     , backupState  = \backuptype users ->
         [csvToBackup ["users.csv"] (userDetailsToCSV backuptype users)]
     , restoreState = userDetailsBackup
@@ -175,10 +69,10 @@ userDetailsStateComponent stateDir = do
 -- Data backup and restore
 --
 
-userDetailsBackup :: RestoreBackup UserDetailsTable
-userDetailsBackup = updateUserBackup emptyUserDetailsTable
+userDetailsBackup :: RestoreBackup Acid.UserDetailsTable
+userDetailsBackup = updateUserBackup Acid.emptyUserDetailsTable
 
-updateUserBackup :: UserDetailsTable -> RestoreBackup UserDetailsTable
+updateUserBackup :: Acid.UserDetailsTable -> RestoreBackup Acid.UserDetailsTable
 updateUserBackup users = RestoreBackup {
     restoreEntry = \entry -> case entry of
       BackupByteString ["users.csv"] bs -> do
@@ -191,11 +85,11 @@ updateUserBackup users = RestoreBackup {
      return users
   }
 
-importUserDetails :: CSV -> UserDetailsTable -> Restore UserDetailsTable
+importUserDetails :: CSV -> Acid.UserDetailsTable -> Restore Acid.UserDetailsTable
 importUserDetails = concatM . map fromRecord . drop 2
   where
-    fromRecord :: Record -> UserDetailsTable -> Restore UserDetailsTable
-    fromRecord [idStr, nameStr, emailStr, kindStr, notesStr] (UserDetailsTable tbl) = do
+    fromRecord :: Record -> Acid.UserDetailsTable -> Restore Acid.UserDetailsTable
+    fromRecord [idStr, nameStr, emailStr, kindStr, notesStr] (Acid.UserDetailsTable tbl) = do
         UserId uid <- parseText "user id" idStr
         akind      <- parseKind kindStr
         let udetails = AccountDetails {
@@ -204,7 +98,7 @@ importUserDetails = concatM . map fromRecord . drop 2
                         accountKind         = akind,
                         accountAdminNotes   = T.pack notesStr
                       }
-        return $! UserDetailsTable (IntMap.insert uid udetails tbl)
+        return $! Acid.UserDetailsTable (IntMap.insert uid udetails tbl)
 
     fromRecord x _ = fail $ "Error processing user details record: " ++ show x
 
@@ -213,8 +107,8 @@ importUserDetails = concatM . map fromRecord . drop 2
     parseKind "special" = return (Just AccountKindSpecial)
     parseKind sts       = fail $ "unable to parse account kind: " ++ sts
 
-userDetailsToCSV :: BackupType -> UserDetailsTable -> CSV
-userDetailsToCSV backuptype (UserDetailsTable tbl)
+userDetailsToCSV :: BackupType -> Acid.UserDetailsTable -> CSV
+userDetailsToCSV backuptype (Acid.UserDetailsTable tbl)
     = ([showVersion userCSVVer]:) $
       (userdetailsCSVKey:) $
 
@@ -271,7 +165,7 @@ initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTempl
 
 
 userDetailsFeature :: Templates
-                   -> StateComponent AcidState UserDetailsTable
+                   -> StateComponent AcidState Acid.UserDetailsTable
                    -> UserFeature
                    -> CoreFeature
                    -> UploadFeature
@@ -318,11 +212,11 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
     --
 
     queryUserDetails :: MonadIO m => UserId -> m (Maybe AccountDetails)
-    queryUserDetails uid = queryState userDetailsState (LookupUserDetails uid)
+    queryUserDetails uid = queryState userDetailsState (Acid.LookupUserDetails uid)
 
     updateUserDetails :: MonadIO m => UserId -> AccountDetails -> m ()
     updateUserDetails uid udetails = do
-      updateState userDetailsState (SetUserDetails uid udetails)
+      updateState userDetailsState (Acid.SetUserDetails uid udetails)
 
     -- Request handlers
     --
@@ -374,14 +268,14 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
         NameAndContact name email <- expectAesonContent
         guardValidLookingName name
         guardValidLookingEmail email
-        updateState userDetailsState (SetUserNameContact uid name email)
+        updateState userDetailsState (Acid.SetUserNameContact uid name email)
         noContent $ toResponse ()
 
     handlerDeleteUserNameContact :: DynamicPath -> ServerPartE Response
     handlerDeleteUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-        updateState userDetailsState (SetUserNameContact uid T.empty T.empty)
+        updateState userDetailsState (Acid.SetUserNameContact uid T.empty T.empty)
         noContent $ toResponse ()
 
     handlerGetAdminInfo :: DynamicPath -> ServerPartE Response
@@ -403,12 +297,12 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
         AdminInfo akind notes <- expectAesonContent
-        updateState userDetailsState (SetUserAdminInfo uid akind notes)
+        updateState userDetailsState (Acid.SetUserAdminInfo uid akind notes)
         noContent $ toResponse ()
 
     handlerDeleteAdminInfo :: DynamicPath -> ServerPartE Response
     handlerDeleteAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
-        updateState userDetailsState (SetUserAdminInfo uid Nothing T.empty)
+        updateState userDetailsState (Acid.SetUserAdminInfo uid Nothing T.empty)
         noContent $ toResponse ()
