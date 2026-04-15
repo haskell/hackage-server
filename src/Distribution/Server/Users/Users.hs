@@ -145,19 +145,6 @@ emptyUsers = Users {
     authTokenMap = Map.empty
   }
 
--- error codes
-data ErrUserNameClash = ErrUserNameClash
-data ErrUserIdClash   = ErrUserIdClash
-data ErrNoSuchUserId  = ErrNoSuchUserId
-data ErrDeletedUser   = ErrDeletedUser
-data ErrTokenNotOwned = ErrTokenNotOwned
-
-$(deriveSafeCopy 0 'base ''ErrUserNameClash)
-$(deriveSafeCopy 0 'base ''ErrUserIdClash)
-$(deriveSafeCopy 0 'base ''ErrNoSuchUserId)
-$(deriveSafeCopy 0 'base ''ErrDeletedUser)
-$(deriveSafeCopy 0 'base ''ErrTokenNotOwned)
-
 (?!) :: Maybe a -> e -> Either e a
 ma ?! e = maybe (Left e) Right ma
 
