@@ -322,6 +322,9 @@ library
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
     Distribution.Server.Features.UserNotify
+    Distribution.Server.Features.UserNotify.Acid
+    Distribution.Server.Features.UserNotify.Backup
+    Distribution.Server.Features.UserNotify.Types
 
 
   if flag(minimal)
