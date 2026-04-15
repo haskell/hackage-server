@@ -382,6 +382,8 @@ library
       Distribution.Server.Features.Votes.State
       Distribution.Server.Features.Votes.Types
       Distribution.Server.Features.Vouch
+      Distribution.Server.Features.Vouch.State
+      Distribution.Server.Features.Vouch.Types
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
       Distribution.Server.Features.PreferredVersions.State
