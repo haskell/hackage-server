@@ -8,6 +8,7 @@ module Distribution.Server.Features.Tags.Backup (
   ) where
 
 import Distribution.Server.Features.Tags.State
+import Distribution.Server.Features.Tags.Types
 import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Package

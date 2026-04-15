@@ -2,67 +2,25 @@
 
 module Distribution.Server.Features.Tags.State where
 
+import Distribution.Server.Features.Tags.Types
+
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
-import qualified Distribution.Compat.CharParsing as P
-import Distribution.Parsec (Parsec(..), parsecCommaList)
-import Distribution.Pretty (Pretty(..))
 import Distribution.Package
-import qualified Text.PrettyPrint as Disp
 
 import Data.Acid (Query, Update, makeAcidic)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Control.Monad (liftM2)
 import Data.SafeCopy (base, deriveSafeCopy)
-import qualified Data.Char as Char
 import Data.Functor ( (<&>) )
 import Data.Maybe (fromMaybe)
 import Data.List (find, foldl')
 import Control.Monad.State (get, put, modify)
 import Control.Monad.Reader (ask, asks)
 import Control.DeepSeq
-
-newtype TagList = TagList [Tag] deriving (Show)
-
-instance Pretty TagList where
-    pretty (TagList tags) = Disp.hsep . Disp.punctuate Disp.comma $ map pretty tags
-instance Parsec TagList where
-    parsec = fmap TagList $ P.spaces >> parsecCommaList parsec
-
--- A tag is a string describing a package; presently the preferred word-separation
--- character is the dash.
-newtype Tag = Tag String deriving (Show, Ord, Eq, NFData, MemSize)
-
-instance Pretty Tag where
-    pretty (Tag tag) = Disp.text tag
-instance Parsec Tag where
-    parsec = do
-        -- adding 'many1 $ do' here would allow multiword tags.
-        -- spaces aren't very aesthetic in URIs, though.
-        strs <- do
-            t <- liftM2 (:) (P.satisfy tagInitialChar)
-               $ P.munch1 tagLaterChar
-            P.spaces
-            return t
-        return $ Tag strs
-
-tagInitialChar, tagLaterChar :: Char -> Bool
--- reserve + and - first-letters for queries
-tagInitialChar c = Char.isAlphaNum c || c `elem` ".#*"
-tagLaterChar   c = Char.isAlphaNum c || c `elem` "-+#*."
-
--- mutilates a string to appease the parser
-tagify :: String -> Tag
-tagify (x:xs) = Tag $ (if tagInitialChar x then (x:) else id) $ tagify' xs
-  where tagify' (c:cs) | tagLaterChar c = c:tagify' cs
-        tagify' (c:cs) | c `elem` " /\\" = '-':tagify' cs -- dash is the preferred word separator?
-        tagify' (_:cs) = tagify' cs
-        tagify' [] = []
-tagify [] = Tag ""
 
 data PackageTags = PackageTags {
     -- the primary index
@@ -97,12 +55,6 @@ emptyPackageTags = PackageTags Map.empty Map.empty Map.empty
 emptyTagAlias :: TagAlias
 emptyTagAlias = TagAlias Map.empty
 
-tagToPackages :: Tag -> PackageTags -> Set PackageName
-tagToPackages tag = Map.findWithDefault Set.empty tag . tagPackages
-
-packageToTags :: PackageName -> PackageTags -> Set Tag
-packageToTags pkg = Map.findWithDefault Set.empty pkg . packageTags
-
 alterTags :: PackageName -> Maybe (Set Tag) -> PackageTags -> PackageTags
 alterTags name mtagList pt@(PackageTags tags packages _) =
     let tagList = fromMaybe Set.empty mtagList
@@ -121,9 +73,6 @@ setTags pkgname tagList = alterTags pkgname (keepSet tagList)
 
 setAliases :: Tag -> Set Tag -> TagAlias -> TagAlias
 setAliases tag aliases (TagAlias ta) = TagAlias (Map.insertWith Set.union tag aliases ta)
-
-deletePackageTags :: PackageName -> PackageTags -> PackageTags
-deletePackageTags name = alterTags name Nothing
 
 addTag :: PackageName -> Tag -> PackageTags -> Maybe PackageTags
 addTag name tag (PackageTags tags packages review) =
@@ -162,16 +111,8 @@ keepSet s = if Set.null s then Nothing else Just s
 setTag :: Tag -> Set PackageName -> PackageTags -> PackageTags
 setTag tag pkgs = alterTag tag (keepSet pkgs)
 
-deleteTag :: Tag -> PackageTags -> PackageTags
-deleteTag tag = alterTag tag Nothing
-
-renameTag :: Tag -> Tag -> PackageTags -> PackageTags
-renameTag tag tag' pkgTags@(PackageTags _ packages _) =
-    let oldPkgs = Map.findWithDefault Set.empty tag packages
-    in setTag tag' oldPkgs . deleteTag tag $ pkgTags
 -------------------------------------------------------------------------------
 
-$(deriveSafeCopy 0 'base ''Tag)
 $(deriveSafeCopy 0 'base ''PackageTags)
 $(deriveSafeCopy 0 'base ''TagAlias)
 
@@ -275,3 +216,4 @@ $(makeAcidic ''PackageTags ['tagsForPackage
                          ,'lookupReviewTags
                          ,'clearReviewTags
                          ])
+
