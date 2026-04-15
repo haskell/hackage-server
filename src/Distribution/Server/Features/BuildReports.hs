@@ -13,7 +13,7 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Features.BuildReports.Backup
-import Distribution.Server.Features.BuildReports.State
+import qualified Distribution.Server.Features.BuildReports.State as Acid
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildCovg(..), BuildLog(..), TestLog(..))
@@ -87,12 +87,12 @@ initBuildReportsFeature name env@ServerEnv{serverStateDir} = do
 
 reportsStateComponent :: String -> FilePath -> IO (StateComponent AcidState BuildReports)
 reportsStateComponent name stateDir = do
-  st  <- openLocalStateFrom (stateDir </> "db" </> name) initialBuildReports
+  st  <- openLocalStateFrom (stateDir </> "db" </> name) Acid.initialBuildReports
   return StateComponent {
       stateDesc    = "Build reports"
     , stateHandle  = st
-    , getState     = query st GetBuildReports
-    , putState     = update st . ReplaceBuildReports
+    , getState     = query st Acid.GetBuildReports
+    , putState     = update st . Acid.ReplaceBuildReports
     , backupState  = \_ -> dumpBackup
     , restoreState = restoreBackup
     , resetState   = reportsStateComponent name
@@ -204,14 +204,14 @@ buildReportsFeature name
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
-      mreport  <- queryState reportsState $ LookupReportCovg pkgid reportId
+      mreport  <- queryState reportsState $ Acid.LookupReportCovg pkgid reportId
       case mreport of
         Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
         Just (report, mlog, mtest, covg) -> return (reportId, report, mlog, mtest, covg)
 
     queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)]
     queryPackageReports pkgid = do
-        reports <- queryState reportsState $ LookupPackageReports pkgid
+        reports <- queryState reportsState $ Acid.LookupPackageReports pkgid
         return $ map (second (\(a, _, _) -> a)) reports
 
     queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog
@@ -226,9 +226,9 @@ buildReportsFeature name
 
     pkgReportDetails :: MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails--(PackageIdentifier, Bool, Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
     pkgReportDetails (pkgid, docs) = do
-      failCnt   <- queryState reportsState $ LookupFailCount pkgid
-      latestRpt <- queryState reportsState $ LookupLatestReport pkgid
-      runTests  <- fmap Just . queryState reportsState $ LookupRunTests pkgid
+      failCnt   <- queryState reportsState $ Acid.LookupFailCount pkgid
+      latestRpt <- queryState reportsState $ Acid.LookupLatestReport pkgid
+      runTests  <- fmap Just . queryState reportsState $ Acid.LookupRunTests pkgid
       (time, ghcId) <- case latestRpt of
         Nothing -> return (Nothing,Nothing)
         Just (_, brp, _, _, _) -> do
@@ -238,13 +238,13 @@ buildReportsFeature name
 
     queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe (BuildReportId, BuildReport, Maybe BuildCovg))
     queryLastReportStats pkgid = do
-      lookupRes <- queryState reportsState $ LookupLatestReport pkgid
+      lookupRes <- queryState reportsState $ Acid.LookupLatestReport pkgid
       case lookupRes of
         Nothing -> return Nothing
         Just (rptId, rpt, _, _, covg) -> return (Just (rptId, rpt, covg))
 
     queryRunTests :: MonadIO m =>  PackageId -> m Bool
-    queryRunTests pkgid = queryState reportsState $ LookupRunTests pkgid
+    queryRunTests pkgid = queryState reportsState $ Acid.LookupRunTests pkgid
 
     ---------------------------------------------------------------------------
 
@@ -289,7 +289,7 @@ buildReportsFeature name
                   -- Check that the submitter can actually upload docs
                   guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
               report' <- liftIO $ BuildReport.affixTimestamp report
-              reportId <- updateState reportsState $ AddReport pkgid (report', Nothing)
+              reportId <- updateState reportsState $ Acid.AddReport pkgid (report', Nothing)
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
@@ -310,7 +310,7 @@ buildReportsFeature name
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
       guardAuthorised_ [InGroup trusteesGroup]
-      success <- updateState reportsState $ DeleteReport pkgid reportId
+      success <- updateState reportsState $ Acid.DeleteReport pkgid reportId
       if success
           then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
           else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
@@ -324,7 +324,7 @@ buildReportsFeature name
       guardAuthorised_ [AnyKnownUser]
       blogbody <- expectTextPlain
       buildLog <- liftIO $ BlobStorage.add store blogbody
-      void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+      void $ updateState reportsState $ Acid.SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
       noContent (toResponse ())
 
     putTestLog :: DynamicPath -> ServerPartE Response
@@ -336,7 +336,7 @@ buildReportsFeature name
       guardAuthorised_ [AnyKnownUser]
       blogbody <- expectTextPlain
       testLog <- liftIO $ BlobStorage.add store blogbody
-      void $ updateState reportsState $ SetTestLog pkgid reportId (Just $ TestLog testLog)
+      void $ updateState reportsState $ Acid.SetTestLog pkgid reportId (Just $ TestLog testLog)
       noContent (toResponse ())
 
     {-
@@ -355,7 +355,7 @@ buildReportsFeature name
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
       guardAuthorised_ [InGroup trusteesGroup]
-      void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
+      void $ updateState reportsState $ Acid.SetBuildLog pkgid reportId Nothing
       noContent (toResponse ())
 
     deleteTestLog :: DynamicPath -> ServerPartE Response
@@ -364,7 +364,7 @@ buildReportsFeature name
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
       guardAuthorised_ [InGroup trusteesGroup]
-      void $ updateState reportsState $ SetTestLog pkgid reportId Nothing
+      void $ updateState reportsState $ Acid.SetTestLog pkgid reportId Nothing
       noContent (toResponse ())
 
     guardAuthorisedAsMaintainerOrTrustee pkgname =
@@ -375,7 +375,7 @@ buildReportsFeature name
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-      success <- updateState reportsState $ ResetFailCount pkgid
+      success <- updateState reportsState $ Acid.ResetFailCount pkgid
       if success
           then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
           else errNotFound "Report not found" [MText "Build report does not exist"]
@@ -394,7 +394,7 @@ buildReportsFeature name
       runTests <- body $ looks "runTests"
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-      success <- updateState reportsState $ SetRunTests pkgid ("on" `elem` runTests)
+      success <- updateState reportsState $ Acid.SetRunTests pkgid ("on" `elem` runTests)
       if success
           then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
           else errNotFound "Package not found" [MText "Package does not exist"]
@@ -412,7 +412,7 @@ buildReportsFeature name
           covgBody    = BuildReport.coverageContent buildFiles
           failStatus  = BuildReport.buildFail buildFiles
 
-      updateState reportsState $ SetFailStatus pkgid failStatus
+      updateState reportsState $ Acid.SetFailStatus pkgid failStatus
 
       -- Upload BuildReport
       case BuildReport.parse $ toStrict $ fromString $ fromMaybe "" reportBody of
@@ -425,7 +425,7 @@ buildReportsFeature name
               logBlob   <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) logBody
               testBlob  <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) testBody
               reportId  <- updateState reportsState $
-                                  AddRptLogTestCovg pkgid (report', (fmap BuildLog logBlob), (fmap TestLog testBlob),  (fmap BuildReport.parseCovg covgBody))
+                                  Acid.AddRptLogTestCovg pkgid (report', (fmap BuildLog logBlob), (fmap TestLog testBlob),  (fmap BuildReport.parseCovg covgBody))
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
