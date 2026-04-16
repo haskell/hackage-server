@@ -26,6 +26,8 @@ isCsrfSafe req
             [ BS.pack "cabal-install/"
               -- UA set by Stack
             , BS.pack "The Haskell Stack"
+              -- UA set by hackage-cli
+            , BS.pack "hackage-cli/"
             , -- Add some other common CLI tools here too?
               BS.pack "curl/"
             , -- referenced in this repository. Unclear whether strictly needed, but whitelisting just in case:
