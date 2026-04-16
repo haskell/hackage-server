@@ -27,7 +27,7 @@ import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(.
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
 import Distribution.Server.Features.Tags (Tag(..))
-import Distribution.Server.Features.UserDetails (AccountDetails(..), UserDetailsFeature(..))
+import Distribution.Server.Features.UserDetails (AccountDetails(..), UserDetailsFeature(..), dbQueryUserDetails)
 import Distribution.Server.Features.UserNotify
   ( Notification(..)
   , NotifyMaintainerUpdateType(..)
@@ -45,7 +45,8 @@ import Distribution.Server.Framework.BackupRestore (runRestore)
 import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
 import Distribution.Server.Framework.ServerEnv (ServerEnv(..))
-import Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (CabalFileText(..), PkgInfo(..))
 import Distribution.Server.Framework.Templating
 import Distribution.Server.Users.Types
@@ -54,11 +55,11 @@ import Distribution.Server.Users.Types
   , UserId(..)
   , UserName(..)
   )
-import Distribution.Server.Users.UserIdSet as UserIdSet
+import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Version (mkVersion, version0)
 
-import Test.Tasty (TestName, TestTree, defaultMain, testGroup)
+import Test.Tasty (TestName, TestTree, defaultMain, testGroup, withResource)
 import Test.Tasty.Golden (goldenVsString)
 import Test.Tasty.Hedgehog (testProperty)
 import Test.Tasty.HUnit
@@ -73,12 +74,18 @@ import           Hedgehog
   , PropertyT
   , Range
   , checkSequential
+  , evalIO
   , forAll
   , property
   , withTests
   )
 
 import RevDepCommon (Package(..), TestPackage(..), mkPackage, mkPackageWithCabalFileSuffix, packToPkgInfo)
+
+import Distribution.Server.Features.Database
+import Distribution.Server.Features.UserDetails.State
+import Database.Beam
+import Control.Exception (bracket)
 
 mtlBeelineLens :: [PkgInfo]
 mtlBeelineLens =
@@ -325,10 +332,13 @@ getNotificationEmailsTests =
   testGroup "getNotificationEmails"
     [ testProperty "All general notifications batched in one email" . withTests 30 . property $ do
         notifs <- forAll $ Gen.list (Range.linear 1 10) $ Gen.filterT isGeneral genNotification
-        emails <- liftIO $ getNotificationEmailsMocked $ map (userWatcher,) notifs
+        emails <- evalIO $ testDatabaseFeature bracket $ \ database -> do
+                    withTransaction database seedDatabase
+                    getNotificationEmailsMocked database $ map (userWatcher,) notifs
         length emails === 1
-    , testGolden "Render NotifyNewVersion" "getNotificationEmails-NotifyNewVersion.golden" $
-        fmap renderMail . getNotificationEmailMocked userWatcher $
+    , testGolden "Render NotifyNewVersion" "getNotificationEmails-NotifyNewVersion.golden" $ \database -> do
+        withTransaction database seedDatabase
+        fmap renderMail . getNotificationEmailMocked database userWatcher $
           NotifyNewVersion
             { notifyPackageInfo =
                 PkgInfo
@@ -337,18 +347,20 @@ getNotificationEmailsTests =
                   , pkgTarballRevisions = mempty
                   }
             }
-    , testGolden "Render NotifyNewRevision" "getNotificationEmails-NotifyNewRevision.golden" $ do
+    , testGolden "Render NotifyNewRevision" "getNotificationEmails-NotifyNewRevision.golden" $ \database -> do
+        withTransaction database seedDatabase
         let mkRev rev = (CabalFileText "", (rev, userActor))
             rev0 = (0 * Time.nominalDay) `Time.addUTCTime` timestamp
             rev1 = (1 * Time.nominalDay) `Time.addUTCTime` timestamp
             rev2 = (2 * Time.nominalDay) `Time.addUTCTime` timestamp
-        fmap renderMail . getNotificationEmailMocked userWatcher $
+        fmap renderMail . getNotificationEmailMocked database userWatcher $
           NotifyNewRevision
             { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
             , notifyRevisions = map (, userActor) [rev1, rev2]
             }
-    , testGolden "Render NotifyMaintainerUpdate-MaintainerAdded" "getNotificationEmails-NotifyMaintainerUpdate-MaintainerAdded.golden" $
-        fmap renderMail . getNotificationEmailMocked userWatcher $
+    , testGolden "Render NotifyMaintainerUpdate-MaintainerAdded" "getNotificationEmails-NotifyMaintainerUpdate-MaintainerAdded.golden" $ \database -> do
+        withTransaction database seedDatabase
+        fmap renderMail . getNotificationEmailMocked database userWatcher $
           NotifyMaintainerUpdate
             { notifyMaintainerUpdateType = MaintainerAdded
             , notifyUserActor = userActor
@@ -357,8 +369,9 @@ getNotificationEmailsTests =
             , notifyReason = "User is cool"
             , notifyUpdatedAt = timestamp
             }
-    , testGolden "Render NotifyMaintainerUpdate-MaintainerRemoved" "getNotificationEmails-NotifyMaintainerUpdate-MaintainerRemoved.golden" $
-        fmap renderMail . getNotificationEmailMocked userWatcher $
+    , testGolden "Render NotifyMaintainerUpdate-MaintainerRemoved" "getNotificationEmails-NotifyMaintainerUpdate-MaintainerRemoved.golden" $ \database -> do
+        withTransaction database seedDatabase
+        fmap renderMail . getNotificationEmailMocked database userWatcher $
           NotifyMaintainerUpdate
             { notifyMaintainerUpdateType = MaintainerRemoved
             , notifyUserActor = userActor
@@ -367,29 +380,34 @@ getNotificationEmailsTests =
             , notifyReason = "User is no longer cool"
             , notifyUpdatedAt = timestamp
             }
-    , testGolden "Render NotifyDocsBuild-success" "getNotificationEmails-NotifyDocsBuild-success.golden" $
-        fmap renderMail . getNotificationEmailMocked userWatcher $
+    , testGolden "Render NotifyDocsBuild-success" "getNotificationEmails-NotifyDocsBuild-success.golden" $ \database -> do
+        withTransaction database seedDatabase
+        fmap renderMail . getNotificationEmailMocked database userWatcher $
           NotifyDocsBuild
             { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
             , notifyBuildSuccess = True
             }
-    , testGolden "Render NotifyDocsBuild-failure" "getNotificationEmails-NotifyDocsBuild-failure.golden" $
-        fmap renderMail . getNotificationEmailMocked userWatcher $
+    , testGolden "Render NotifyDocsBuild-failure" "getNotificationEmails-NotifyDocsBuild-failure.golden" $ \database -> do
+        withTransaction database seedDatabase
+        fmap renderMail . getNotificationEmailMocked database userWatcher $
           NotifyDocsBuild
             { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
             , notifyBuildSuccess = False
             }
-    , testGolden "Render NotifyUpdateTags" "getNotificationEmails-NotifyUpdateTags.golden" $
-        fmap renderMail . getNotificationEmailMocked userWatcher $
+    , testGolden "Render NotifyUpdateTags" "getNotificationEmails-NotifyUpdateTags.golden" $ \database -> do
+        withTransaction database seedDatabase
+        fmap renderMail . getNotificationEmailMocked database userWatcher $
           NotifyUpdateTags
             { notifyPackageName = "base"
             , notifyAddedTags = Set.fromList . map Tag $ ["bsd3", "library", "prelude"]
             , notifyDeletedTags = Set.fromList . map Tag $ ["example", "bad", "foo"]
             }
-    , testGolden "Render NotifyDependencyUpdate-Always" "getNotificationEmails-NotifyDependencyUpdate-Always.golden" $
+    , testGolden "Render NotifyDependencyUpdate-Always" "getNotificationEmails-NotifyDependencyUpdate-Always.golden" $ \database -> do
+        withTransaction database seedDatabase
         fmap renderMail
           . getNotificationEmail
               testServerEnv
+              database
               testUserDetailsFeature
               allUsers
               userWatcher
@@ -398,10 +416,12 @@ getNotificationEmailsTests =
               , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
               , notifyTriggerBounds = Always
               }
-    , testGolden "Render NotifyDependencyUpdate-NewIncompatibility" "getNotificationEmails-NotifyDependencyUpdate-NewIncompatibility.golden" $
+    , testGolden "Render NotifyDependencyUpdate-NewIncompatibility" "getNotificationEmails-NotifyDependencyUpdate-NewIncompatibility.golden" $ \database -> do
+        withTransaction database seedDatabase
         fmap renderMail
           . getNotificationEmail
               testServerEnv
+              database
               testUserDetailsFeature
               allUsers
               userWatcher
@@ -410,10 +430,12 @@ getNotificationEmailsTests =
               , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
               , notifyTriggerBounds = NewIncompatibility
               }
-    , testGolden "Render NotifyDependencyUpdate-BoundsOutOfRange" "getNotificationEmails-NotifyDependencyUpdate-BoundsOutOfRange.golden" $
+    , testGolden "Render NotifyDependencyUpdate-BoundsOutOfRange" "getNotificationEmails-NotifyDependencyUpdate-BoundsOutOfRange.golden" $ \database -> do
+        withTransaction database seedDatabase
         fmap renderMail
           . getNotificationEmail
               testServerEnv
+              database
               testUserDetailsFeature
               allUsers
               userWatcher
@@ -422,11 +444,13 @@ getNotificationEmailsTests =
               , notifyWatchedPackages = [PackageIdentifier "mtl" (mkVersion [2, 3])]
               , notifyTriggerBounds = BoundsOutOfRange
               }
-    , testGolden "Render NotifyVouchingCompleted" "getNotificationEmails-NotifyVouchingCompleted.golden" $
-        fmap renderMail $ getNotificationEmailMocked userWatcher NotifyVouchingCompleted
-    , testGolden "Render general notifications in single batched email" "getNotificationEmails-batched.golden" $ do
+    , testGolden "Render NotifyVouchingCompleted" "getNotificationEmails-NotifyVouchingCompleted.golden" $ \database -> do
+        withTransaction database seedDatabase
+        fmap renderMail $ getNotificationEmailMocked database userWatcher NotifyVouchingCompleted
+    , testGolden "Render general notifications in single batched email" "getNotificationEmails-batched.golden" $ \database -> do
+        withTransaction database seedDatabase
         emails <-
-          getNotificationEmailsMocked . map (userWatcher,) $
+          getNotificationEmailsMocked database . map (userWatcher,) $
             [ NotifyNewRevision
                 { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
                 , notifyRevisions = [(timestamp, userActor)]
@@ -482,8 +506,22 @@ getNotificationEmailsTests =
           <*> addUser "user-actor"
           <*> addUser "user-subject"
 
-    getNotificationEmail env details users uid notif =
-      getNotificationEmails env details users (mockTemplates ["datafiles/templates/UserNotify"] ["endorsements-complete.txt"]) [(uid, notif)] >>= \case
+    seedDatabase :: Transaction ()
+    seedDatabase = do
+      Distribution.Server.Features.Database.runInsert $
+        insert (_tblAccountDetails hackageDb) $
+          insertValues
+            [ AccountDetailsRow
+                { _adUserId = userWatcher
+                , _adName = "user-watcher"
+                , _adContactEmail = "user-watcher@example.com"
+                , _adKind = Nothing
+                , _adAdminNotes = ""
+                }
+            ]
+
+    getNotificationEmail env database details users uid notif =
+      getNotificationEmails env database details users (mockTemplates ["datafiles/templates/UserNotify"] ["endorsements-complete.txt"]) [(uid, notif)] >>= \case
         [email] -> pure email
         _ -> error "Did not get exactly one email"
 
@@ -491,28 +529,24 @@ getNotificationEmailsTests =
       ServerEnv
         { serverBaseURI = fromJust $ parseURI "https://hackage.haskell.org"
         }
+
     testUserDetailsFeature =
       UserDetailsFeature
-        { queryUserDetails = \uid ->
-            pure $ do
-              guard $ uid == userWatcher
-              Just
-                AccountDetails
-                  { accountName = "user-watcher"
-                  , accountContactEmail = "user-watcher@example.com"
-                  , accountKind = Nothing
-                  , accountAdminNotes = ""
-                  }
+        { userDetailsFeatureInterface = undefined,
+          queryUserDetails = dbQueryUserDetails,
+          updateUserDetails = undefined
         }
-    getNotificationEmailsMocked =
+    getNotificationEmailsMocked database =
       getNotificationEmails
         testServerEnv
+        database
         testUserDetailsFeature
         allUsers
         (mockTemplates ["datafiles/templates/UserNotify"] ["endorsements-complete.txt"])
-    getNotificationEmailMocked =
+    getNotificationEmailMocked database =
       getNotificationEmail
         testServerEnv
+        database
         testUserDetailsFeature
         allUsers
 
@@ -664,8 +698,14 @@ hedgehogTests =
     , ("prop_csvBackupRoundtrips", prop_csvBackupRoundtrips)
     ]
 
-testGolden :: TestName -> FilePath -> IO Lazy.ByteString -> TestTree
-testGolden name fp = goldenVsString name ("tests/golden/ReverseDependenciesTest/" <> fp)
+testGolden :: TestName -> FilePath -> (DatabaseFeature -> IO Lazy.ByteString) -> TestTree
+testGolden name fp body = 
+  testDatabaseFeatureIO withResource $ \ioDatabase ->
+    goldenVsString name ("tests/golden/ReverseDependenciesTest/" <> fp) (do
+      database <- ioDatabase
+      body database
+    )
+  
 
 main :: IO ()
 main = defaultMain allTests

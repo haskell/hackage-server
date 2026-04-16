@@ -44,6 +44,7 @@ import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.AdminLog
 import Distribution.Server.Features.BuildReports
+import Distribution.Server.Features.Database (DatabaseFeature(..))
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..))
@@ -430,7 +431,8 @@ notifyStateComponent stateDir = do
 --
 
 initUserNotifyFeature :: ServerEnv
-                      -> IO (UserFeature
+                      -> IO (DatabaseFeature
+                          -> UserFeature
                           -> CoreFeature
                           -> UploadFeature
                           -> AdminLogFeature
@@ -450,9 +452,9 @@ initUserNotifyFeature ServerEnv{ serverStateDir, serverTemplatesDir,
                    [serverTemplatesDir, serverTemplatesDir </> "UserNotify"]
                    [ "user-notify-form.html", "endorsements-complete.txt" ]
 
-    return $ \users core uploadfeature adminlog userdetails reports tags revers vouch -> do
+    return $ \database users core uploadfeature adminlog userdetails reports tags revers vouch -> do
       let feature = userNotifyFeature
-                      users core uploadfeature adminlog userdetails reports tags
+                      database users core uploadfeature adminlog userdetails reports tags
                       revers vouch notifyState templates
       return feature
 
@@ -575,7 +577,8 @@ pkgInfoToPkgId :: PkgInfo -> PackageIdentifier
 pkgInfoToPkgId pkgInfo =
   PackageIdentifier (packageName pkgInfo) (packageVersion pkgInfo)
 
-userNotifyFeature :: UserFeature
+userNotifyFeature :: DatabaseFeature
+                  -> UserFeature
                   -> CoreFeature
                   -> UploadFeature
                   -> AdminLogFeature
@@ -587,7 +590,8 @@ userNotifyFeature :: UserFeature
                   -> StateComponent AcidState NotifyData
                   -> Templates
                   -> UserNotifyFeature
-userNotifyFeature UserFeature{..}
+userNotifyFeature database
+                  UserFeature{..}
                   CoreFeature{..}
                   UploadFeature{..}
                   AdminLogFeature{..}
@@ -714,8 +718,10 @@ userNotifyFeature UserFeature{..}
 
         vouchNotifications <- fmap (, NotifyVouchingCompleted) <$> drainQueuedNotifications
 
+        -- CHECK: maybe the transaction should be initialized in a different place
+        --        currently it is done in getNotificationEmails.
         emails <-
-          getNotificationEmails userFeatureServerEnv userDetailsFeature users templates $
+          getNotificationEmails userFeatureServerEnv database userDetailsFeature users templates $
             concat
               [ revisionUploadNotifications
               , groupActionNotifications
@@ -921,6 +927,7 @@ data NotificationGroup
 -- | Get all the emails to send for the given notifications.
 getNotificationEmails
   :: ServerEnv
+  -> DatabaseFeature
   -> UserDetailsFeature
   -> Users.Users
   -> Templates
@@ -928,12 +935,13 @@ getNotificationEmails
   -> IO [Mail]
 getNotificationEmails
   ServerEnv{serverBaseURI}
+  DatabaseFeature{withTransaction}
   UserDetailsFeature{queryUserDetails}
   allUsers
   templates
   notifications = do
     let userIds = Set.fromList $ map fst notifications
-    userIdToDetails <- Map.mapMaybe id <$> fromSetM queryUserDetails userIds
+    userIdToDetails <- withTransaction $ Map.mapMaybe id <$> fromSetM queryUserDetails userIds
     vouchTemplate <- renderTemplate . ($ []) <$> getTemplate templates "endorsements-complete.txt"
     pure $
       let emails = groupNotifications $ map (fmap (renderNotification vouchTemplate)) notifications

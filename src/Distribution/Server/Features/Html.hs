@@ -14,6 +14,7 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.Database (DatabaseFeature(..))
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.BuildReports
 import Distribution.Server.Features.BuildReports.Render
@@ -103,7 +104,8 @@ instance IsHackageFeature HtmlFeature where
 -- This means of generating HTML is somewhat temporary, in that a more advanced
 -- (and better-looking) HTML ajaxy scheme should come about later on.
 initHtmlFeature :: ServerEnv
-                -> IO (UserFeature
+                -> IO (DatabaseFeature
+                    -> UserFeature
                     -> CoreFeature
                     -> PackageContentsFeature
                     -> UploadFeature -> PackageCandidatesFeature
@@ -147,7 +149,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    ]
 
 
-    return $ \user core@CoreFeature{packageChangeHook}
+    return $ \database user core@CoreFeature{packageChangeHook}
               packages upload
               candidates versions
               reversef
@@ -163,7 +165,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
               recentPackagesFeature -> do
       -- do rec, tie the knot
       rec let (feature, packageIndex, packagesPage) =
-                htmlFeature env user core
+                htmlFeature env database user core
                             packages upload
                             candidates versions
                             reversef
@@ -207,6 +209,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
       return feature
 
 htmlFeature :: ServerEnv
+            -> DatabaseFeature
             -> UserFeature
             -> CoreFeature
             -> PackageContentsFeature
@@ -236,6 +239,7 @@ htmlFeature :: ServerEnv
             -> (HtmlFeature, IO Response, IO Response)
 
 htmlFeature env@ServerEnv{..}
+            database
             user
             core@CoreFeature{queryGetPackageIndex}
             packages upload
@@ -299,7 +303,7 @@ htmlFeature env@ServerEnv{..}
                                       names
                                       candidates
                                       recentPackagesFeature
-    htmlUsers      = mkHtmlUsers      user usersdetails
+    htmlUsers      = mkHtmlUsers      database user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
     htmlDownloads  = mkHtmlDownloads  utilities download
@@ -864,8 +868,8 @@ data HtmlUsers = HtmlUsers {
     htmlUsersResources :: [Resource]
   }
 
-mkHtmlUsers :: UserFeature -> UserDetailsFeature -> HtmlUsers
-mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
+mkHtmlUsers :: DatabaseFeature -> UserFeature -> UserDetailsFeature -> HtmlUsers
+mkHtmlUsers DatabaseFeature{..} UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
   where
     users = userResource
 
@@ -911,7 +915,7 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
     serveUserPage dpath = do
       uname    <- userNameInPath dpath
       uid      <- lookupUserName uname
-      udetails <- queryUserDetails uid
+      udetails <- withTransaction $ queryUserDetails uid
       let realname = maybe (display uname) (T.unpack . accountName) udetails
       uris     <- getGroupIndex uid
       uriPairs <- forM uris $ \uri -> do
