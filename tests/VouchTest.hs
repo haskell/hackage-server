@@ -2,7 +2,8 @@ module Main where
 
 import Data.Time (UTCTime(UTCTime), fromGregorian)
 
-import Distribution.Server.Features.Vouch (VouchError(..), VouchSuccess(..), judgeVouch)
+import Distribution.Server.Features.Vouch (judgeVouch)
+import Distribution.Server.Features.Vouch.Types (VouchError(..), VouchSuccess(..))
 import Distribution.Server.Users.UserIdSet (fromList)
 import Distribution.Server.Users.Types (UserId(UserId))
 
