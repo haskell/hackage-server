@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies,
-             RankNTypes, NamedFieldPuns, RecordWildCards,
-             RecursiveDo, BangPatterns #-}
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Distribution.Server.Features.LegacyPasswds (
     initLegacyPasswdsFeature,
     LegacyPasswdsFeature(..),

@@ -1,7 +1,9 @@
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE RecordWildCards #-}
+
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
-             TypeFamilies, TemplateHaskell,
-             RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns #-}
+
 module Distribution.Server.Features.UserSignup (
     initUserSignupFeature,
     UserSignupFeature(..),

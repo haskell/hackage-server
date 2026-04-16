@@ -1,6 +1,6 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, BangPatterns,
-             GeneralizedNewtypeDeriving, NamedFieldPuns, RecordWildCards,
-             PatternGuards, RankNTypes #-}
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Distribution.Server.Features.AdminLog where
 

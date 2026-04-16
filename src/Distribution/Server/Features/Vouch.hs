@@ -1,8 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Distribution.Server.Features.Vouch (VouchFeature(..), initVouchFeature, judgeVouch) where
