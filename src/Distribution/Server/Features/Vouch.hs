@@ -67,17 +67,6 @@ isWithinLastMonth :: UTCTime -> (UserId, UTCTime) -> Bool
 isWithinLastMonth now (_, vouchTime) =
   addUTCTime (30 * nominalDay) vouchTime >= now
 
-data VouchError
-  = NotAnUploader
-  | You'reTooNew
-  | VoucheeAlreadyUploader
-  | AlreadySufficientlyVouched
-  | YouAlreadyVouched
-  deriving stock (Show, Eq)
-
-data VouchSuccess = AddVouchComplete | AddVouchIncomplete Int
-  deriving stock (Show, Eq)
-
 judgeVouch
   :: Group.UserIdSet
   -> UTCTime

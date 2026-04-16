@@ -6,9 +6,6 @@
 module Distribution.Server.Features.UserDetails (
     initUserDetailsFeature,
     UserDetailsFeature(..),
-
-    AccountDetails(..),
-    AccountKind(..)
   ) where
 
 import qualified Distribution.Server.Features.UserDetails.Acid as Acid

@@ -11,6 +11,7 @@ module Distribution.Server.Features.UserSignup (
 
 import qualified Distribution.Server.Features.UserSignup.Acid as Acid
 import Distribution.Server.Features.UserSignup.Backup
+import Distribution.Server.Features.UserSignup.Types
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
@@ -19,6 +20,7 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
+import Distribution.Server.Features.UserDetails.Types
 
 import Distribution.Server.Users.Group
 import Distribution.Server.Users.Types

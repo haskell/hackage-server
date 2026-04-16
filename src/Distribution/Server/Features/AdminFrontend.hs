@@ -7,9 +7,11 @@ module Distribution.Server.Features.AdminFrontend (
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
+import Distribution.Server.Features.UserSignup.Types
 
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
+import Distribution.Server.Features.UserDetails.Types
 import Distribution.Server.Features.UserSignup
 import Distribution.Server.Features.LegacyPasswds
 import qualified Distribution.Server.Features.LegacyPasswds.Acid as Acid

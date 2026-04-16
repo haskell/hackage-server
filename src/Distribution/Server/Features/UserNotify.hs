@@ -7,10 +7,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 module Distribution.Server.Features.UserNotify (
-    Acid.NotifyData(..),
-    Acid.NotifyPref(..),
-    NotifyRevisionRange(..),
-    NotifyTriggerBounds(..),
     UserNotifyFeature(..),
     getUserNotificationsOnRelease,
     importNotifyPref,
@@ -18,8 +14,6 @@ module Distribution.Server.Features.UserNotify (
     notifyDataToCSV,
 
     -- * getNotificationEmails
-    Notification(..),
-    NotifyMaintainerUpdateType(..),
     getNotificationEmails,
   ) where
 
@@ -75,7 +69,7 @@ import Data.Hashable (Hashable(..))
 import Data.List (maximumBy, sortOn)
 import Data.Maybe (fromMaybe, listToMaybe, mapMaybe, maybeToList)
 import Data.Ord (Down(..), comparing)
-import Data.Time (UTCTime(..), addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
+import Data.Time (addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
 import Distribution.Text (display)
 import Network.Mail.Mime
 import Network.URI (uriAuthority, uriPath, uriRegName)
@@ -85,7 +79,6 @@ import Text.XHtml hiding (base, text, (</>))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Lazy.Char8 as BS
-import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
@@ -678,44 +671,6 @@ userNotifyFeature UserFeature{..}
       -- delay sending out emails, to avoid spamming people if we accidentally
       -- send out too many emails
       threadDelay 250000
-
-data Notification
-  = NotifyNewVersion
-      { notifyPackageInfo :: PkgInfo
-      }
-  | NotifyNewRevision
-      { notifyPackageId :: PackageId
-      , notifyRevisions :: [UploadInfo]
-      }
-  | NotifyMaintainerUpdate
-      { notifyMaintainerUpdateType :: NotifyMaintainerUpdateType
-      , notifyUserActor :: UserId
-      , notifyUserSubject :: UserId
-      , notifyPackageName :: PackageName
-      , notifyReason :: Text
-      , notifyUpdatedAt :: UTCTime
-      }
-  | NotifyDocsBuild
-      { notifyPackageId :: PackageId
-      , notifyBuildSuccess :: Bool
-      }
-  | NotifyUpdateTags
-      { notifyPackageName :: PackageName
-      , notifyAddedTags :: Set Tag
-      , notifyDeletedTags :: Set Tag
-      }
-  | NotifyDependencyUpdate
-      { notifyPackageId :: PackageId
-        -- ^ Dependency that was updated
-      , notifyWatchedPackages :: [PackageId]
-        -- ^ Packages maintained by user that depend on updated dep
-      , notifyTriggerBounds :: NotifyTriggerBounds
-      }
-  | NotifyVouchingCompleted
-  deriving (Show)
-
-data NotifyMaintainerUpdateType = MaintainerAdded | MaintainerRemoved
-  deriving (Show)
 
 -- | Notifications in the same group are batched in the same email.
 --
