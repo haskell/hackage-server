@@ -15,8 +15,8 @@ import qualified Data.Map as Map
 
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put)
-import Data.SafeCopy (Migrate(migrate), MigrateFrom, base, deriveSafeCopy, extension)
 import Data.Time (UTCTime(..), getCurrentTime)
+import Data.Acid.Compat
 
 
 -------------------------
@@ -113,14 +113,115 @@ addNotifyPref uid info = do
     NotifyData (m,t) <- get
     put $! NotifyData (Map.insert uid info m,t)
 
-makeAcidic ''NotifyData [
-    --queries
-    'getNotifyData,
-    'lookupNotifyPref,
-    'getNotifyTime,
-    --updates
-    'replaceNotifyData,
-    'addNotifyPref,
-    'setNotifyTime
-  ]
+------------------------------
+-- IsAcidic machinery
+--
+-- See Note [Acid Migration] in "Data.Acid.Compat"
+-- original module name was Distribution.Server.Features.UserNotify"
+
+--makeAcidic ''NotifyData [
+--    --queries
+--    'getNotifyData,
+--    'lookupNotifyPref,
+--    'getNotifyTime,
+--    --updates
+--    'replaceNotifyData,
+--    'addNotifyPref,
+--    'setNotifyTime
+--  ]
+
+instance IsAcidic NotifyData where
+  acidEvents
+    = [QueryEvent
+         (\ GetNotifyData -> getNotifyData) safeCopyMethodSerialiser,
+       QueryEvent
+         (\ (LookupNotifyPref arg_aDhJ) -> lookupNotifyPref arg_aDhJ)
+         safeCopyMethodSerialiser,
+       QueryEvent
+         (\ GetNotifyTime -> getNotifyTime) safeCopyMethodSerialiser,
+       UpdateEvent
+         (\ (ReplaceNotifyData arg_aDhK) -> replaceNotifyData arg_aDhK)
+         safeCopyMethodSerialiser,
+       UpdateEvent
+         (\ (AddNotifyPref arg_aDhL arg_aDhM)
+            -> addNotifyPref arg_aDhL arg_aDhM)
+         safeCopyMethodSerialiser,
+       UpdateEvent
+         (\ (SetNotifyTime arg_aDhN) -> setNotifyTime arg_aDhN)
+         safeCopyMethodSerialiser]
+data GetNotifyData = GetNotifyData
+instance SafeCopy GetNotifyData where
+  putCopy GetNotifyData = contain (do return ())
+  getCopy = contain (return GetNotifyData)
+  errorTypeName _ = "Data.SafeCopy.SafeCopy.SafeCopy GetNotifyData"
+instance Data.Acid.Compat.Method GetNotifyData where
+  type MethodResult GetNotifyData = NotifyData
+  type MethodState GetNotifyData = NotifyData
+  methodTag = movedMethodTag "Distribution.Server.Features.UserNotify"
+instance QueryEvent GetNotifyData
+newtype LookupNotifyPref = LookupNotifyPref UserId
+instance SafeCopy LookupNotifyPref where
+  putCopy (LookupNotifyPref arg_aDgW)
+    = contain
+        (do safePut arg_aDgW
+            return ())
+  getCopy = contain (return LookupNotifyPref <*> safeGet)
+  errorTypeName _
+    = "Data.SafeCopy.SafeCopy.SafeCopy LookupNotifyPref"
+instance Data.Acid.Compat.Method LookupNotifyPref where
+  type MethodResult LookupNotifyPref = Maybe NotifyPref
+  type MethodState LookupNotifyPref = NotifyData
+  methodTag = movedMethodTag "Distribution.Server.Features.UserNotify"
+instance QueryEvent LookupNotifyPref
+data GetNotifyTime = GetNotifyTime
+instance SafeCopy GetNotifyTime where
+  putCopy GetNotifyTime = contain (do return ())
+  getCopy = contain (return GetNotifyTime)
+  errorTypeName _ = "Data.SafeCopy.SafeCopy.SafeCopy GetNotifyTime"
+instance Data.Acid.Compat.Method GetNotifyTime where
+  type MethodResult GetNotifyTime = UTCTime
+  type MethodState GetNotifyTime = NotifyData
+  methodTag = movedMethodTag "Distribution.Server.Features.UserNotify"
+instance QueryEvent GetNotifyTime
+newtype ReplaceNotifyData = ReplaceNotifyData NotifyData
+instance SafeCopy ReplaceNotifyData where
+  putCopy (ReplaceNotifyData arg_aDh5)
+    = contain
+        (do safePut arg_aDh5
+            return ())
+  getCopy = contain (return ReplaceNotifyData <*> safeGet)
+  errorTypeName _
+    = "Data.SafeCopy.SafeCopy.SafeCopy ReplaceNotifyData"
+instance Data.Acid.Compat.Method ReplaceNotifyData where
+  type MethodResult ReplaceNotifyData = ()
+  type MethodState ReplaceNotifyData = NotifyData
+  methodTag = movedMethodTag "Distribution.Server.Features.UserNotify"
+instance UpdateEvent ReplaceNotifyData
+data AddNotifyPref = AddNotifyPref UserId NotifyPref
+instance SafeCopy AddNotifyPref where
+  putCopy (AddNotifyPref arg_aDha arg_aDhb)
+    = contain
+        (do safePut arg_aDha
+            safePut arg_aDhb
+            return ())
+  getCopy = contain ((return AddNotifyPref <*> safeGet) <*> safeGet)
+  errorTypeName _ = "Data.SafeCopy.SafeCopy.SafeCopy AddNotifyPref"
+instance Data.Acid.Compat.Method AddNotifyPref where
+  type MethodResult AddNotifyPref = ()
+  type MethodState AddNotifyPref = NotifyData
+  methodTag = movedMethodTag "Distribution.Server.Features.UserNotify"
+instance UpdateEvent AddNotifyPref
+newtype SetNotifyTime = SetNotifyTime UTCTime
+instance SafeCopy SetNotifyTime where
+  putCopy (SetNotifyTime arg_aDhg)
+    = contain
+        (do safePut arg_aDhg
+            return ())
+  getCopy = contain (return SetNotifyTime <*> safeGet)
+  errorTypeName _ = "Data.SafeCopy.SafeCopy.SafeCopy SetNotifyTime"
+instance Data.Acid.Compat.Method SetNotifyTime where
+  type MethodResult SetNotifyTime = ()
+  type MethodState SetNotifyTime = NotifyData
+  methodTag = movedMethodTag "Distribution.Server.Features.UserNotify"
+instance UpdateEvent SetNotifyTime
 
