@@ -218,6 +218,8 @@ library
     Paths_hackage_server
 
   exposed-modules:
+    Data.Acid.Compat
+
     Distribution.Server
 
     Distribution.Server.Prelude
@@ -435,6 +437,7 @@ library
     , http-types             >= 0.10      && < 0.13
     , QuickCheck             >= 2.14      && < 2.16
     , acid-state            ^>= 0.16
+    , safecopy               >= 0.6       && < 0.11
     , async                 ^>= 2.2.1
     -- requires bumping http-io-streams
     , attoparsec            ^>= 0.14.4
