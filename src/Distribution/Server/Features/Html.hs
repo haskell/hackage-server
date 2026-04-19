@@ -33,6 +33,7 @@ import Distribution.Server.Features.Distro
 import Distribution.Server.Features.Documentation
 import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.UserDetails
+import Distribution.Server.Features.UserDetails.Types
 import Distribution.Server.Features.EditCabalFiles
 import Distribution.Server.Features.Html.HtmlUtilities
 import Distribution.Server.Features.Security.SHA256

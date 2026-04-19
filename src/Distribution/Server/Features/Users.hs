@@ -15,9 +15,9 @@ import Distribution.Server.Framework.Templating
 import qualified Distribution.Server.Framework.Auth as Auth
 
 import Distribution.Server.Users.Types
-import Distribution.Server.Users.State
+import qualified Distribution.Server.Users.State as Acid
 import Distribution.Server.Users.Backup
-import qualified Distribution.Server.Users.Users as Users
+import qualified Distribution.Server.Users.Users as Acid
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group
          (UserGroup(..), GroupDescription(..), UserIdSet, nullDescription)
@@ -67,39 +67,39 @@ data UserFeature = UserFeature {
     guardAuthorised'    :: [PrivilegeCondition] -> ServerPartE Bool,
     -- | Require being logged in, giving the id of the current user.
     guardAuthenticated :: ServerPartE UserId,
-    -- | Gets the authentication if it exists.
+    -- Gets the authentication if it exists.
     checkAuthenticated :: ServerPartE (Maybe UserId),
     -- | A hook to override the default authentication error in particular
     -- circumstances.
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
     -- | Retrieves the entire user base.
-    queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
+    queryGetUserDb    :: forall m. MonadIO m => m Acid.Users,
 
     -- | Creates a Hackage 2 user credential.
     newUserAuth       :: UserName -> PasswdPlain -> UserAuth,
-    -- | Adds a user with a fresh name.
-    updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either Users.ErrUserNameClash UserId),
-    -- | Sets the account-enabled status of an existing user to True or False.
+    -- Adds a user with a fresh name.
+    updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either Acid.ErrUserNameClash UserId),
+    -- Sets the account-enabled status of an existing user to True or False.
     updateSetUserEnabledStatus :: forall m. MonadIO m => UserId -> Bool
-                               -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser)),
-    -- | Sets the credentials of an existing user.
+                               -> m (Maybe (Either Acid.ErrNoSuchUserId Acid.ErrDeletedUser)),
+    -- Sets the credentials of an existing user.
     updateSetUserAuth :: forall m. MonadIO m => UserId -> UserAuth
-                      -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser)),
+                      -> m (Maybe (Either Acid.ErrNoSuchUserId Acid.ErrDeletedUser)),
 
-    -- | Adds a user to a group based on a "user" path component.
+    -- Adds a user to a group based on a "user" path component.
     --
     -- Use the UserGroup or GroupResource directly instead, as this is a hack.
     groupAddUser        :: UserGroup -> DynamicPath -> ServerPartE (),
     -- | Likewise, deletes a user, will go away soon.
     groupDeleteUser     :: UserGroup -> DynamicPath -> ServerPartE (),
 
-    -- | Get a username from a path.
+    -- Get a username from a path.
     userNameInPath      :: forall m. MonadPlus m => DynamicPath -> m UserName,
-    -- | Lookup a `UserId` from a name, if the name exists.
+    -- Lookup a `UserId` from a name, if the name exists.
     lookupUserName      :: UserName -> ServerPartE UserId,
-    -- | Lookup full `UserInfo` from a name, if the name exists.
+    -- Lookup full `UserInfo` from a name, if the name exists.
     lookupUserNameFull  :: UserName -> ServerPartE (UserId, UserInfo),
-    -- | Lookup full `UserInfo` from an id, if the id exists.
+    -- Lookup full `UserInfo` from an id, if the id exists.
     lookupUserInfo      :: UserId -> ServerPartE UserInfo,
 
     -- | An action to change a password directly, using "password" and
@@ -268,35 +268,35 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
 
     return feature
 
-usersStateComponent :: FilePath -> IO (StateComponent AcidState Users.Users)
+usersStateComponent :: FilePath -> IO (StateComponent AcidState Acid.Users)
 usersStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "Users") initialUsers
+  st <- openLocalStateFrom (stateDir </> "db" </> "Users") Acid.initialUsers
   return StateComponent {
       stateDesc    = "List of users"
     , stateHandle  = st
-    , getState     = query st GetUserDb
-    , putState     = update st . ReplaceUserDb
+    , getState     = query st Acid.GetUserDb
+    , putState     = update st . Acid.ReplaceUserDb
     , backupState  = usersBackup
     , restoreState = usersRestore
     , resetState   = usersStateComponent
     }
 
-adminsStateComponent :: FilePath -> IO (StateComponent AcidState HackageAdmins)
+adminsStateComponent :: FilePath -> IO (StateComponent AcidState Acid.HackageAdmins)
 adminsStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "HackageAdmins") initialHackageAdmins
+  st <- openLocalStateFrom (stateDir </> "db" </> "HackageAdmins") Acid.initialHackageAdmins
   return StateComponent {
       stateDesc    = "Admins"
     , stateHandle  = st
-    , getState     = query st GetHackageAdmins
-    , putState     = update st . ReplaceHackageAdmins . adminList
-    , backupState  = \_ (HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
-    , restoreState = HackageAdmins <$> groupBackup ["admins.csv"]
+    , getState     = query st Acid.GetHackageAdmins
+    , putState     = update st . Acid.ReplaceHackageAdmins . Acid.adminList
+    , backupState  = \_ (Acid.HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
+    , restoreState = Acid.HackageAdmins <$> groupBackup ["admins.csv"]
     , resetState   = adminsStateComponent
     }
 
 userFeature :: Templates
-            -> StateComponent AcidState Users.Users
-            -> StateComponent AcidState HackageAdmins
+            -> StateComponent AcidState Acid.Users
+            -> StateComponent AcidState Acid.HackageAdmins
             -> MemState GroupIndex
             -> Hook () ()
             -> Hook Auth.AuthError (Maybe ErrorResponse)
@@ -396,19 +396,19 @@ userFeature templates usersState adminsState
     -- Queries and updates
     --
 
-    queryGetUserDb :: MonadIO m => m Users.Users
-    queryGetUserDb = queryState usersState GetUserDb
+    queryGetUserDb :: MonadIO m => m Acid.Users
+    queryGetUserDb = queryState usersState Acid.GetUserDb
 
-    updateAddUser :: MonadIO m => UserName -> UserAuth -> m (Either Users.ErrUserNameClash UserId)
-    updateAddUser uname auth = updateState usersState (AddUserEnabled uname auth)
+    updateAddUser :: MonadIO m => UserName -> UserAuth -> m (Either Acid.ErrUserNameClash UserId)
+    updateAddUser uname auth = updateState usersState (Acid.AddUserEnabled uname auth)
 
     updateSetUserEnabledStatus :: MonadIO m => UserId -> Bool
-                               -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser))
-    updateSetUserEnabledStatus uid isenabled = updateState usersState (SetUserEnabledStatus uid isenabled)
+                               -> m (Maybe (Either Acid.ErrNoSuchUserId Acid.ErrDeletedUser))
+    updateSetUserEnabledStatus uid isenabled = updateState usersState (Acid.SetUserEnabledStatus uid isenabled)
 
     updateSetUserAuth :: MonadIO m => UserId -> UserAuth
-                      -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser))
-    updateSetUserAuth uid auth = updateState usersState (SetUserAuth uid auth)
+                      -> m (Maybe (Either Acid.ErrNoSuchUserId Acid.ErrDeletedUser))
+    updateSetUserAuth uid auth = updateState usersState (Acid.SetUserAuth uid auth)
 
     --
     -- Authorisation: authentication checks and privilege checks
@@ -485,7 +485,7 @@ userFeature templates usersState adminsState
 
     -- As above but using the given userdb snapshot
     -- See note about "authn" cookie above
-    guardAuthenticatedWithErrHook :: Users.Users -> ServerPartE UserId
+    guardAuthenticatedWithErrHook :: Acid.Users -> ServerPartE UserId
     guardAuthenticatedWithErrHook users = do
         uid <- Auth.checkAuthenticated realm users userFeatureServerEnv
                    >>= either handleAuthError return
@@ -532,7 +532,7 @@ userFeature templates usersState adminsState
 
     serveUsersGet :: DynamicPath -> ServerPartE Response
     serveUsersGet _ = do
-      userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
+      userlist <- Acid.enumerateActiveUsers <$> queryGetUserDb
       let users = [ UserNameIdResource {
                       ui_username = userName uinfo,
                       ui_userid   = uid
@@ -555,9 +555,9 @@ userFeature templates usersState adminsState
     serveUserPut dpath = do
       guardAuthorised_ [InGroup adminGroup]
       username <- userNameInPath dpath
-      muid     <- updateState usersState $ AddUserDisabled username
+      muid     <- updateState usersState $ Acid.AddUserDisabled username
       case muid of
-        Left  Users.ErrUserNameClash ->
+        Left  Acid.ErrUserNameClash ->
           errBadRequest "Username already exists"
             [MText "Cannot create a new user account with that username because already exists"]
         Right uid -> return . toResponse $
@@ -570,11 +570,11 @@ userFeature templates usersState adminsState
     serveUserDelete dpath = do
       guardAuthorised_ [InGroup adminGroup]
       uid  <- lookupUserName =<< userNameInPath dpath
-      merr <- updateState usersState $ DeleteUser uid
+      merr <- updateState usersState $ Acid.DeleteUser uid
       case merr of
         Nothing -> noContent $ toResponse ()
         --TODO: need to be able to delete user by name to fix this race condition
-        Just Users.ErrNoSuchUserId -> errInternalError [MText "uid does not exist"]
+        Just Acid.ErrNoSuchUserId -> errInternalError [MText "uid does not exist"]
 
     serveUserEnabledGet :: DynamicPath -> ServerPartE Response
     serveUserEnabledGet dpath = do
@@ -590,12 +590,12 @@ userFeature templates usersState adminsState
       guardAuthorised_ [InGroup adminGroup]
       uid  <- lookupUserName =<< userNameInPath dpath
       EnabledResource enabled <- expectAesonContent
-      merr <- updateState usersState (SetUserEnabledStatus uid enabled)
+      merr <- updateState usersState (Acid.SetUserEnabledStatus uid enabled)
       case merr of
         Nothing -> noContent $ toResponse ()
-        Just (Left Users.ErrNoSuchUserId) ->
+        Just (Left Acid.ErrNoSuchUserId) ->
           errInternalError [MText "uid does not exist"]
-        Just (Right Users.ErrDeletedUser) ->
+        Just (Right Acid.ErrDeletedUser) ->
           errBadRequest "User deleted"
             [MText "Cannot disable account, it has already been deleted"]
 
@@ -634,7 +634,7 @@ userFeature templates usersState adminsState
           template <- getTemplate templates "token-created.html"
           origTok  <- liftIO generateOriginalToken
           let storeTok = convertToken origTok
-          res <- updateState usersState (AddAuthToken uid storeTok desc)
+          res <- updateState usersState (Acid.AddAuthToken uid storeTok desc)
           case res of
             Nothing ->
               ok $ toResponse $
@@ -642,7 +642,7 @@ userFeature templates usersState adminsState
                   [ "username" $= display (userName uinfo)
                   , "token"    $= viewOriginalToken origTok
                   ]
-            Just Users.ErrNoSuchUserId ->
+            Just Acid.ErrNoSuchUserId ->
               errInternalError [MText "uid does not exist"]
 
         "revoke-auth-token" -> do
@@ -653,14 +653,14 @@ userFeature templates usersState adminsState
                           [MText "The auth token provided is malformed: "
                           ,MText err]
             Right authToken -> do
-              res <- updateState usersState (RevokeAuthToken uid authToken)
+              res <- updateState usersState (Acid.RevokeAuthToken uid authToken)
               case res of
                 Nothing ->
                   ok $ toResponse $
                     template [ "username" $= display (userName uinfo) ]
-                Just (Left Users.ErrNoSuchUserId) ->
+                Just (Left Acid.ErrNoSuchUserId) ->
                   errInternalError [MText "uid does not exist"]
-                Just (Right Users.ErrTokenNotOwned) ->
+                Just (Right Acid.ErrTokenNotOwned) ->
                   errBadRequest "Invalid auth token"
                     [MText "Cannot revoke this token, no such token."]
 
@@ -678,8 +678,8 @@ userFeature templates usersState adminsState
 
     lookupUserNameFull :: UserName -> ServerPartE (UserId, UserInfo)
     lookupUserNameFull uname = do
-        users <- queryState usersState GetUserDb
-        case Users.lookupUserName uname users of
+        users <- queryState usersState Acid.GetUserDb
+        case Acid.lookupUserName uname users of
           Just u  -> return u
           Nothing -> userLost "Could not find user: not presently registered"
       where userLost = errNotFound "User not found" . return . MText
@@ -689,8 +689,8 @@ userFeature templates usersState adminsState
 
     lookupUserInfo :: UserId -> ServerPartE UserInfo
     lookupUserInfo uid = do
-        users <- queryState usersState GetUserDb
-        case Users.lookupUserId uid users of
+        users <- queryState usersState Acid.GetUserDb
+        case Acid.lookupUserId uid users of
           Just uinfo -> return uinfo
           Nothing    -> errInternalError [MText "user id does not exist"]
 
@@ -717,15 +717,15 @@ userFeature templates usersState adminsState
         Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
         Just uname -> do
           let auth = newUserAuth uname password
-          muid <- updateState usersState $ AddUserEnabled uname auth
+          muid <- updateState usersState $ Acid.AddUserEnabled uname auth
           case muid of
-            Left Users.ErrUserNameClash -> errForbidden "Error registering user" [MText "A user account with that user name already exists."]
+            Left Acid.ErrUserNameClash -> errForbidden "Error registering user" [MText "A user account with that user name already exists."]
             Right _                     -> return uname
 
     -- Arguments: the auth'd user id, the user path id (derived from the :username)
     canChangePassword :: MonadIO m => UserId -> UserId -> m Bool
     canChangePassword uid userPathId = do
-        admins <- queryState adminsState GetAdminList
+        admins <- queryState adminsState Acid.GetAdminList
         return $ uid == userPathId || (uid `Group.member` admins)
 
     --FIXME: this thing is a total mess!
@@ -740,11 +740,11 @@ userFeature templates usersState adminsState
           forbidChange "Copies of new password do not match or is an invalid password (ex: blank)"
         let passwd = PasswdPlain passwd1
             auth   = newUserAuth username passwd
-        res <- updateState usersState (SetUserAuth uid auth)
+        res <- updateState usersState (Acid.SetUserAuth uid auth)
         case res of
           Nothing -> return ()
-          Just (Left  Users.ErrNoSuchUserId) -> errInternalError [MText "user id lookup failure"]
-          Just (Right Users.ErrDeletedUser)  -> forbidChange "Cannot set passwords for deleted users"
+          Just (Left  Acid.ErrNoSuchUserId) -> errInternalError [MText "user id lookup failure"]
+          Just (Right Acid.ErrDeletedUser)  -> forbidChange "Cannot set passwords for deleted users"
       where
         forbidChange = errForbidden "Error changing password" . return . MText
 
@@ -755,9 +755,9 @@ userFeature templates usersState adminsState
     adminGroupDesc :: UserGroup
     adminGroupDesc = UserGroup {
           groupDesc             = nullDescription { groupTitle = "Hackage admins" },
-          queryUserGroup        = queryState  adminsState   GetAdminList,
-          addUserToGroup        = updateState adminsState . AddHackageAdmin,
-          removeUserFromGroup   = updateState adminsState . RemoveHackageAdmin,
+          queryUserGroup        = queryState  adminsState   Acid.GetAdminList,
+          addUserToGroup        = updateState adminsState . Acid.AddHackageAdmin,
+          removeUserFromGroup   = updateState adminsState . Acid.RemoveHackageAdmin,
           groupsAllowedToAdd    = [adminGroupDesc],
           groupsAllowedToDelete = [adminGroupDesc]
         }
@@ -765,12 +765,12 @@ userFeature templates usersState adminsState
     groupAddUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupAddUser group _ = do
         actorUid <- guardAuthorised (map InGroup (groupsAllowedToAdd group))
-        users <- queryState usersState GetUserDb
+        users <- queryState usersState Acid.GetUserDb
         muser <- optional $ look "user"
         reason <- optional $ look "reason"
         case muser of
             Nothing -> addError "Bad request (could not find 'user' argument)"
-            Just ustr -> case simpleParse ustr >>= \uname -> Users.lookupUserName uname users of
+            Just ustr -> case simpleParse ustr >>= \uname -> Acid.lookupUserName uname users of
                 Nothing      -> addError $ "No user with name " ++ show ustr ++ " found"
                 Just (uid,_) -> do
                              liftIO $ addUserToGroup group uid
@@ -893,7 +893,7 @@ userFeature templates usersState adminsState
             ui_title       = T.pack $ groupTitle (groupDesc group),
             ui_description = T.pack $ groupPrologue (groupDesc group),
             ui_members     = [ UserNameIdResource {
-                                 ui_username = Users.userIdToName userDb uid,
+                                 ui_username = Acid.userIdToName userDb uid,
                                  ui_userid   = uid
                                }
                              | uid <- Group.toList userlist ]

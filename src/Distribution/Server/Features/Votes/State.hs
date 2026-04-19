@@ -3,6 +3,7 @@
 
 module Distribution.Server.Features.Votes.State where
 
+import Distribution.Server.Features.Votes.Types
 import Distribution.Server.Framework.MemSize
 
 import Distribution.Package (PackageName)
@@ -22,8 +23,6 @@ import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
 
 import qualified Control.Monad.State as State
 import Control.Monad.Reader.Class (ask)
-
-type Score = Int
 
 newtype VotesState_v0 = VotesState_v0 { votesMap :: Map PackageName UserIdSet }
 

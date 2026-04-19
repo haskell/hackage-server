@@ -27,20 +27,11 @@ import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(.
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
 import Distribution.Server.Features.Tags (Tag(..))
-import Distribution.Server.Features.UserDetails (AccountDetails(..), UserDetailsFeature(..))
+import Distribution.Server.Features.UserDetails (UserDetailsFeature(..))
+import Distribution.Server.Features.UserDetails.Types (AccountDetails(..))
 import Distribution.Server.Features.UserNotify
-  ( Notification(..)
-  , NotifyMaintainerUpdateType(..)
-  , NotifyData(..)
-  , NotifyPref(..)
-  , NotifyRevisionRange(..)
-  , NotifyTriggerBounds(..)
-  , defaultNotifyPrefs
-  , getNotificationEmails
-  , getUserNotificationsOnRelease
-  , importNotifyPref
-  , notifyDataToCSV
-  )
+import Distribution.Server.Features.UserNotify.Acid
+import Distribution.Server.Features.UserNotify.Types
 import Distribution.Server.Framework.BackupRestore (runRestore)
 import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)

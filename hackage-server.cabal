@@ -218,6 +218,8 @@ library
     Paths_hackage_server
 
   exposed-modules:
+    Data.Acid.Compat
+
     Distribution.Server
 
     Distribution.Server.Prelude
@@ -322,6 +324,9 @@ library
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
     Distribution.Server.Features.UserNotify
+    Distribution.Server.Features.UserNotify.Acid
+    Distribution.Server.Features.UserNotify.Backup
+    Distribution.Server.Features.UserNotify.Types
 
 
   if flag(minimal)
@@ -332,10 +337,15 @@ library
       Distribution.Server.Features.TarIndexCache.State
       Distribution.Server.Features.LegacyRedirects
       Distribution.Server.Features.LegacyPasswds
+      Distribution.Server.Features.LegacyPasswds.Acid
       Distribution.Server.Features.LegacyPasswds.Auth
+      Distribution.Server.Features.LegacyPasswds.Backup
       Distribution.Server.Features.PackageContents
       Distribution.Server.Features.AdminFrontend
       Distribution.Server.Features.AdminLog
+      Distribution.Server.Features.AdminLog.Acid
+      Distribution.Server.Features.AdminLog.Backup
+      Distribution.Server.Features.AdminLog.Types
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
       Distribution.Server.Features.BuildReports.BuildReports
@@ -380,7 +390,10 @@ library
       Distribution.Server.Features.Votes
       Distribution.Server.Features.Votes.Render
       Distribution.Server.Features.Votes.State
+      Distribution.Server.Features.Votes.Types
       Distribution.Server.Features.Vouch
+      Distribution.Server.Features.Vouch.State
+      Distribution.Server.Features.Vouch.Types
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
       Distribution.Server.Features.PreferredVersions.State
@@ -390,10 +403,18 @@ library
       Distribution.Server.Features.Tags
       Distribution.Server.Features.Tags.Backup
       Distribution.Server.Features.Tags.State
+      Distribution.Server.Features.Tags.Types
       Distribution.Server.Features.AnalyticsPixels
       Distribution.Server.Features.AnalyticsPixels.State
+      Distribution.Server.Features.AnalyticsPixels.Types
       Distribution.Server.Features.UserDetails
+      Distribution.Server.Features.UserDetails.Acid
+      Distribution.Server.Features.UserDetails.Backup
+      Distribution.Server.Features.UserDetails.Types
       Distribution.Server.Features.UserSignup
+      Distribution.Server.Features.UserSignup.Acid
+      Distribution.Server.Features.UserSignup.Backup
+      Distribution.Server.Features.UserSignup.Types
       Distribution.Server.Features.StaticFiles
       Distribution.Server.Features.ServerIntrospect
       Distribution.Server.Features.Sitemap
@@ -416,6 +437,7 @@ library
     , http-types             >= 0.10      && < 0.13
     , QuickCheck             >= 2.14      && < 2.16
     , acid-state            ^>= 0.16
+    , safecopy               >= 0.6       && < 0.11
     , async                 ^>= 2.2.1
     -- requires bumping http-io-streams
     , attoparsec            ^>= 0.14.4

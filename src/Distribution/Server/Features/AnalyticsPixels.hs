@@ -10,7 +10,8 @@ module Distribution.Server.Features.AnalyticsPixels
 
 import Data.Set (Set)
 
-import Distribution.Server.Features.AnalyticsPixels.State
+import Distribution.Server.Features.AnalyticsPixels.Types
+import qualified Distribution.Server.Features.AnalyticsPixels.State as Acid
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupRestore
@@ -64,26 +65,26 @@ initAnalyticsPixelsFeature env@ServerEnv{serverStateDir} = do
     return feature
 
 -- | Define the backing store (i.e. database component)
-analyticsPixelsStateComponent :: FilePath -> IO (StateComponent AcidState AnalyticsPixelsState)
+analyticsPixelsStateComponent :: FilePath -> IO (StateComponent AcidState Acid.AnalyticsPixelsState)
 analyticsPixelsStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "AnalyticsPixels") initialAnalyticsPixelsState
+  st <- openLocalStateFrom (stateDir </> "db" </> "AnalyticsPixels") Acid.initialAnalyticsPixelsState
   return StateComponent {
       stateDesc    = "Backing store for AnalyticsPixels feature"
     , stateHandle  = st
-    , getState     = query st GetAnalyticsPixelsState
-    , putState     = update st . ReplaceAnalyticsPixelsState
+    , getState     = query st Acid.GetAnalyticsPixelsState
+    , putState     = update st . Acid.ReplaceAnalyticsPixelsState
     , resetState   = analyticsPixelsStateComponent
     , backupState  = \_ _ -> []
     , restoreState = RestoreBackup {
                          restoreEntry    = error "Unexpected backup entry"
-                       , restoreFinalize = return initialAnalyticsPixelsState
+                       , restoreFinalize = return Acid.initialAnalyticsPixelsState
                        }
    }
 
 
 -- | Default constructor for building this feature.
 analyticsPixelsFeature :: ServerEnv
-                      -> StateComponent AcidState AnalyticsPixelsState
+                      -> StateComponent AcidState Acid.AnalyticsPixelsState
                       -> CoreFeature                          -- To get site package list
                       -> UserFeature                          -- To authenticate users
                       -> UploadFeature                        -- For accessing package maintainers and trustees
@@ -113,16 +114,16 @@ analyticsPixelsFeature  ServerEnv{..}
     userAnalyticsPixelsResource = resourceAt "/user/:username/analytics-pixels.:format"
 
     getPackageAnalyticsPixels :: MonadIO m => PackageName -> m (Set AnalyticsPixel)
-    getPackageAnalyticsPixels name = 
-        queryState analyticsPixelsState (AnalyticsPixelsForPackage name)
+    getPackageAnalyticsPixels name =
+        queryState analyticsPixelsState (Acid.AnalyticsPixelsForPackage name)
 
     addPackageAnalyticsPixel :: MonadIO m => PackageName -> AnalyticsPixel -> m Bool
     addPackageAnalyticsPixel name pixel = do
-        added <- updateState analyticsPixelsState (AddPackageAnalyticsPixel name pixel)
+        added <- updateState analyticsPixelsState (Acid.AddPackageAnalyticsPixel name pixel)
         when added $ runHook_ analyticsPixelAdded (name, pixel)
         pure added
 
     removePackageAnalyticsPixel :: MonadIO m => PackageName -> AnalyticsPixel -> m ()
     removePackageAnalyticsPixel name pixel = do
-        updateState analyticsPixelsState (RemovePackageAnalyticsPixel name pixel)
+        updateState analyticsPixelsState (Acid.RemovePackageAnalyticsPixel name pixel)
         runHook_ analyticsPixelRemoved (name, pixel)

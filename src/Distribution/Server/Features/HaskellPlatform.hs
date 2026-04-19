@@ -8,7 +8,7 @@ module Distribution.Server.Features.HaskellPlatform (
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupRestore
 
-import Distribution.Server.Features.HaskellPlatform.State
+import qualified Distribution.Server.Features.HaskellPlatform.State as Acid
 
 import Distribution.Package
 import Distribution.Version
@@ -53,14 +53,14 @@ initPlatformFeature ServerEnv{serverStateDir} = do
       let feature = platformFeature platformState
       return feature
 
-platformStateComponent :: FilePath -> IO (StateComponent AcidState PlatformPackages)
+platformStateComponent :: FilePath -> IO (StateComponent AcidState Acid.PlatformPackages)
 platformStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "PlatformPackages") initialPlatformPackages
+  st <- openLocalStateFrom (stateDir </> "db" </> "Acid.PlatformPackages") Acid.initialPlatformPackages
   return StateComponent {
       stateDesc    = "Platform packages"
     , stateHandle  = st
-    , getState     = query st GetPlatformPackages
-    , putState     = update st . ReplacePlatformPackages
+    , getState     = query st Acid.GetPlatformPackages
+    , putState     = update st . Acid.ReplacePlatformPackages
     , resetState   = platformStateComponent
     -- TODO: backup
     -- For now backup is just empty, as this package is basically featureless
@@ -68,11 +68,11 @@ platformStateComponent stateDir = do
     , backupState  = \_ _ -> []
     , restoreState = RestoreBackup {
                          restoreEntry    = error "Unexpected backup entry for platform"
-                       , restoreFinalize = return initialPlatformPackages
+                       , restoreFinalize = return Acid.initialPlatformPackages
                        }
     }
 
-platformFeature :: StateComponent AcidState PlatformPackages
+platformFeature :: StateComponent AcidState Acid.PlatformPackages
                 -> PlatformFeature
 platformFeature platformState
   = PlatformFeature{..}
@@ -107,14 +107,14 @@ platformFeature platformState
     ------------------------------------------
     -- functionality: showing status for a single package, and for all packages, adding a package, deleting a package
     platformVersions :: MonadIO m => PackageName -> m [Version]
-    platformVersions pkgname = liftM Set.toList $ queryState platformState $ GetPlatformPackage pkgname
+    platformVersions pkgname = liftM Set.toList $ queryState platformState $ Acid.GetPlatformPackage pkgname
 
     platformPackageLatest :: MonadIO m => m [(PackageName, Version)]
-    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ queryState platformState GetPlatformPackages
+    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . Acid.blessedPackages) $ queryState platformState Acid.GetPlatformPackages
 
     setPlatform :: MonadIO m => PackageName -> [Version] -> m ()
-    setPlatform pkgname versions = updateState platformState $ SetPlatformPackage pkgname (Set.fromList versions)
+    setPlatform pkgname versions = updateState platformState $ Acid.SetPlatformPackage pkgname (Set.fromList versions)
 
     removePlatform :: MonadIO m => PackageName -> m ()
-    removePlatform pkgname = updateState platformState $ SetPlatformPackage pkgname Set.empty
+    removePlatform pkgname = updateState platformState $ Acid.SetPlatformPackage pkgname Set.empty
 

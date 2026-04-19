@@ -39,7 +39,6 @@ import qualified Distribution.Server.Features as Features
 import Distribution.Server.Features.Users
 
 import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 
 import Distribution.Text

@@ -1,9 +1,8 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
-             TypeFamilies, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TypeFamilies, TemplateHaskell #-}
+{-# OPTIONS_GHC -Wno-orphans                                                               #-}
 
-module Distribution.Server.Features.AnalyticsPixels.State 
-    ( AnalyticsPixel(..)
-    , AnalyticsPixelsState(..)
+module Distribution.Server.Features.AnalyticsPixels.State
+    ( AnalyticsPixelsState(..)
     , initialAnalyticsPixelsState
 
     -- * State queries and updates
@@ -14,12 +13,12 @@ module Distribution.Server.Features.AnalyticsPixels.State
     , ReplaceAnalyticsPixelsState(..)
     ) where
 
+import Distribution.Server.Features.AnalyticsPixels.Types
 import Distribution.Package (PackageName)
 
 import Distribution.Server.Framework.MemSize (MemSize)
 import Distribution.Server.Users.State ()
 
-import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import Data.Acid     (Query, Update, makeAcidic)
@@ -30,12 +29,6 @@ import qualified Data.Set as Set
 import Control.DeepSeq (NFData)
 import qualified Control.Monad.State as State
 import Control.Monad.Reader.Class (ask, asks)
-
-newtype AnalyticsPixel = AnalyticsPixel
-    {
-        analyticsPixelUrl :: Text
-    }
-    deriving (Show, Eq, Ord, NFData, MemSize)
 
 newtype AnalyticsPixelsState = AnalyticsPixelsState
     {
@@ -68,12 +61,12 @@ addPackageAnalyticsPixel name analyticsPixel = do
     pure successfullyInserted
     where
         insertAnalyticsPixel :: Maybe (Set AnalyticsPixel) -> (Bool, Maybe (Set AnalyticsPixel))
-        insertAnalyticsPixel Nothing = 
+        insertAnalyticsPixel Nothing =
             (True, Just (Set.singleton analyticsPixel))
         insertAnalyticsPixel existingPixels@(Just pixels)
-            | analyticsPixel `Set.member` pixels = 
+            | analyticsPixel `Set.member` pixels =
                 (False, existingPixels)
-            | otherwise = 
+            | otherwise =
                 (True, Just (Set.insert analyticsPixel pixels))
 
 -- | Removes a 'AnalyticsPixel' from a 'Package'.
