@@ -17,7 +17,6 @@ $hackagePageHeader()$
   <tr><td>Username:<td>$account.name$
   <tr><td>User ID:<td>$account.id$
   <tr><td><a href="#account-status">Status:</a><td>$account.status$
-  <tr><td><a href="#passwd-legacy">Legacy password:</a><td>$if(hasLegacyPassword)$<strong>Yes</strong>$else$No$endif$
   <tr><td><a href="#edit-details">Real name:</a><td>$details.realname$
   <tr><td><a href="#edit-details">Email:</a><td>$details.email$
   <tr><td><a href="#edit-details">Account type:</a><td>$details.kind$
@@ -150,36 +149,6 @@ Alternatively, as an administrator you can set account passwords directly.
 
   <p><input type="submit" value="Change password" /></p>
 </form>
-
-<h2 id="passwd-legacy">Legacy password</h2>
-
-<p>Legacy passwords are to enable a relatively smooth upgrade from
-<a href="/users/htpasswd-upgrade">old "htpasswd" style passwords</a>.
-</p>
-
-$if(hasLegacyPassword)$
-$if(!account.hasAuth)$
-<p>This account has a legacy "htpasswd" password set, and no new password set.
-It can be upgraded by the user that knows the old password. Alternatively
-you can simply delete the legacy "htpasswd" and set a new password.
-</p>
-$else$
-<p>This account has a new password set <em>but still has an legacy "htpasswd" password
-too</em>. The legacy one can safely be deleted. Indeed it is better to delete it as
-it otherwise prevents the account from being disabled should the need arise
-(the account could be reactivated by anyone knowing the legacy "htpasswd".)
-</p>
-$endif$
-<form class="box" action="/user/$account.name$/htpasswd" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="DELETE"/>
-  <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
-
-  <button type="submit">Delete legacy password</button>
-</form>
-$else$
-<p>This account has no legacy password.
-</p>
-$endif$
 
 <h2 id="edit-details">Edit account details</h2>
 
