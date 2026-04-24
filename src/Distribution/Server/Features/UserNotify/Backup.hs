@@ -11,9 +11,7 @@ import Distribution.Server.Framework.BackupRestore
 
 import qualified Data.Map as Map
 
-import Data.Maybe (fromJust)
-import Data.Time (defaultTimeLocale)
-import Data.Time.Format.Internal (buildTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Distribution.Text (display)
 import Text.CSV (CSV, Record)
 
@@ -38,7 +36,7 @@ userNotifyBackup = go []
          _ -> return (go st)
 
      , restoreFinalize =
-        return (Acid.NotifyData (Map.fromList st, fromJust (buildTime defaultTimeLocale []))) -- defaults to unixstart time
+        return (Acid.NotifyData (Map.fromList st, posixSecondsToUTCTime 0)) -- unixstart time
      }
 
 importNotifyPref :: CSV -> Restore [(UserId, Acid.NotifyPref)]
