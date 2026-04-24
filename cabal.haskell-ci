@@ -1,5 +1,8 @@
 branches: master
 
+error-incomplete-patterns: False
+error-unused-packages: False
+
 installed: +all -Cabal -Cabal-syntax -text -parsec -process
 
 -- Does not work with GHA:
