@@ -28,8 +28,9 @@ license:      BSD-3-Clause
 license-file: LICENSE
 
 tested-with:
-  GHC == 9.12.2
-  GHC == 9.10.2
+  GHC == 9.14.1
+  GHC == 9.12.4
+  GHC == 9.10.3
   GHC == 9.8.4
   GHC == 9.6.7
   -- Constraint transformers >= 0.6 forces GHC >= 9.6 for CI
