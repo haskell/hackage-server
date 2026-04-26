@@ -2,6 +2,7 @@ branches: master
 
 error-incomplete-patterns: False
 error-unused-packages: False
+error-missing-methods: none
 
 installed: +all -Cabal -Cabal-syntax -text -parsec -process
 
