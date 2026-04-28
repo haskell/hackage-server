@@ -4,6 +4,7 @@ module Distribution.Server.Features.PreferredVersions (
     VersionsFeature(..),
     VersionsResource(..),
     initVersionsFeature,
+    sumRange,
 
     PreferredInfo(..),
     VersionStatus(..),

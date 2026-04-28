@@ -52,7 +52,7 @@ importPreferredCSV st pkg ( _version
                           ) = do
   let info = PreferredInfo { preferredRanges    = ranges
                            , deprecatedVersions = deprecated
-                           , sumRange           = sumRange
+                           , unused_sumRange    = Nothing
                            }
   return st { preferredMap = Map.insert pkg info (preferredMap st) }
 importPreferredCSV _ _ _ = fail "Failed to read preferred.csv"
@@ -92,12 +92,12 @@ backupPreferredVersions (PreferredVersions preferredMap deprecatedMap _) =
   ++ map backupDeprecated (Map.toList deprecatedMap)
 
 backupPreferredInfo :: (PackageName, PreferredInfo) -> BackupEntry
-backupPreferredInfo (name, PreferredInfo {..}) =
+backupPreferredInfo (name, prefinfo@PreferredInfo {..}) =
     csvToBackup (pkgPath name "preferred.csv") $ [
         [showVersion versionCSV]
       , "preferredRanges" : map display preferredRanges
       , "deprecatedVersions" : map display deprecatedVersions
-      ] ++ case sumRange of
+      ] ++ case sumRange prefinfo of
              Nothing           -> []
              Just versionRange -> [["sumRange", display versionRange]]
   where

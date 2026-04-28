@@ -25,14 +25,16 @@ data PreferredVersions = PreferredVersions {
 data PreferredInfo = PreferredInfo {
     preferredRanges :: [VersionRange],
     deprecatedVersions :: [Version],
-    sumRange :: Maybe VersionRange -- cached form of 'consolidateRanges' below
+    -- | Use 'sumRange' instead.
+    unused_sumRange :: Maybe VersionRange
 } deriving (Show, Eq)
 
 emptyPreferredInfo :: PreferredInfo
 emptyPreferredInfo = PreferredInfo [] [] Nothing
 
-consolidateRanges :: [VersionRange] -> [Version] -> Maybe VersionRange
-consolidateRanges ranges depr =
+
+sumRange :: PreferredInfo -> Maybe VersionRange
+sumRange (PreferredInfo ranges depr _) =
     let range = simplifyVersionRange $ foldr intersectVersionRanges anyVersion (map notThisVersion depr ++ ranges)
     in if isAnyVersion range || isNoVersion range
         then Nothing
@@ -87,7 +89,7 @@ setPreferredInfo name ranges versions = do
     let prefinfo =  PreferredInfo {
           preferredRanges    = ranges,
           deprecatedVersions = versions,
-          sumRange           = consolidateRanges ranges versions
+          unused_sumRange    = Nothing
         }
     if null ranges && null versions
       then modify $ \p -> p {
@@ -140,7 +142,7 @@ alterPreferredInfo name func =
     }
   where res (PreferredInfo [] [] _)       = Nothing -- ie delete
         res (PreferredInfo ranges depr _) =
-          Just (PreferredInfo ranges depr (consolidateRanges ranges depr))
+          Just (PreferredInfo ranges depr Nothing)
 
 
 makeAcidic ''PreferredVersions ['setPreferredInfo
