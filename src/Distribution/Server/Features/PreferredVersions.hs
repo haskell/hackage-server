@@ -20,6 +20,7 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.PreferredVersions.State
 import Distribution.Server.Features.PreferredVersions.Backup
+import Distribution.Server.Features.PreferredVersions.Types
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload

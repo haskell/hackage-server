@@ -393,6 +393,7 @@ library
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
       Distribution.Server.Features.PreferredVersions.State
+      Distribution.Server.Features.PreferredVersions.Types
       Distribution.Server.Features.PreferredVersions.Backup
       Distribution.Server.Features.ReverseDependencies
       Distribution.Server.Features.ReverseDependencies.State

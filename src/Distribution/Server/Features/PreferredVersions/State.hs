@@ -38,8 +38,6 @@ consolidateRanges ranges depr =
         then Nothing
         else Just range
 
-data VersionStatus = NormalVersion | DeprecatedVersion | UnpreferredVersion deriving (Show, Eq, Ord, Enum)
-
 
 data PreferredVersions_v0
    = PreferredVersions_v0 (Map PackageName PreferredInfo)
