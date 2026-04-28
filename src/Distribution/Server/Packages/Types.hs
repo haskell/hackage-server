@@ -163,10 +163,20 @@ instance Package PkgInfo where
 -------------------------------------------------------------------------------}
 
 newtype MetadataRevIx = MRI { getMetadataRevIx :: Int }
-  deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON)
+  deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON, Serialize)
+
+instance SafeCopy MetadataRevIx where
+    getCopy = contain Serialize.get
+    putCopy = contain . Serialize.put
+    errorTypeName _ = "MetadataRevIx"
 
 newtype TarballRevIx = TRI { getTarballRevIx :: Int }
-  deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON)
+  deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON, Serialize)
+
+instance SafeCopy TarballRevIx where
+    getCopy = contain Serialize.get
+    putCopy = contain . Serialize.put
+    errorTypeName _ = "TarballRevIx"
 
 cabalFileString :: CabalFileText -> String
 cabalFileString = unpackUTF8Strict . cabalFileByteString
@@ -371,5 +381,3 @@ instance Migrate PkgInfo where
 
 deriveSafeCopy 4 'extension ''PkgInfo
 
-deriveSafeCopy 1 'base ''MetadataRevIx
-deriveSafeCopy 1 'base ''TarballRevIx
