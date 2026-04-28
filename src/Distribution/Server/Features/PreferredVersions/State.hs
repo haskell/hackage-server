@@ -22,12 +22,25 @@ data PreferredVersions = PreferredVersions {
     migratedEphemeralPrefs :: Bool
 } deriving (Show, Eq)
 
+
+-- NOTE: preferred versions no longer exist; this structure is actually only
+-- used to keep around 'deprecatedVersions'.
+--
+-- The unused fields are kept around so as to not change the
+-- automatically-derived serialization format.
 data PreferredInfo = PreferredInfo {
     unused_preferredRanges :: [VersionRange],
     deprecatedVersions :: [Version],
     -- | Use 'sumRange' instead.
     unused_sumRange :: Maybe VersionRange
 } deriving (Show, Eq)
+
+{-# DEPRECATED
+      unused_preferredRanges
+      "This field is completely unused, but is kept around to not change the automatically derived serialization format." #-}
+{-# DEPRECATED
+      unused_sumRange
+      "This field is completely unused, but is kept around to not change the automatically derived serialization format." #-}
 
 emptyPreferredInfo :: PreferredInfo
 emptyPreferredInfo = PreferredInfo [] [] Nothing
