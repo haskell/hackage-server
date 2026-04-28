@@ -1,6 +1,8 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable,
              StandaloneDeriving, TemplateHaskell, TypeFamilies,
              RecordWildCards #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.Packages.Types
@@ -158,6 +160,12 @@ instance Package PkgInfo where
   Utility
 -------------------------------------------------------------------------------}
 
+newtype MetadataRevIx = MRI { getMetadataRevIx :: Int }
+  deriving newtype (Eq, Ord, Show, MemSize)
+
+newtype TarballRevIx = TRI { getTarballRevIx :: Int }
+  deriving newtype (Eq, Ord, Show, MemSize)
+
 cabalFileString :: CabalFileText -> String
 cabalFileString = unpackUTF8Strict . cabalFileByteString
 
@@ -176,14 +184,14 @@ pkgOriginalUploadUser = snd . pkgOriginalUploadInfo
 pkgLatestRevision :: PkgInfo -> (CabalFileText, UploadInfo)
 pkgLatestRevision = Vec.last . pkgMetadataRevisions
 
-pkgSpecificRevision :: PkgInfo -> Int -> Maybe (CabalFileText, UploadInfo)
-pkgSpecificRevision pkg revno = pkgMetadataRevisions pkg Vec.!? revno
+pkgSpecificRevision :: PkgInfo -> MetadataRevIx -> Maybe (CabalFileText, UploadInfo)
+pkgSpecificRevision pkg (MRI revno) = pkgMetadataRevisions pkg Vec.!? revno
 
 pkgAllRevisionsCabalFiles :: PkgInfo -> [CabalFileText]
 pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
 
-pkgSpecificTarball :: PkgInfo -> Int -> Maybe (PkgTarball, UploadInfo)
-pkgSpecificTarball pkg revno = pkgTarballRevisions pkg Vec.!? revno
+pkgSpecificTarball :: PkgInfo -> TarballRevIx -> Maybe (PkgTarball, UploadInfo)
+pkgSpecificTarball pkg (TRI revno) = pkgTarballRevisions pkg Vec.!? revno
 
 pkgAllTarballs :: PkgInfo -> [(PkgTarball, UploadInfo)]
 pkgAllTarballs = Vec.toList . pkgTarballRevisions
@@ -360,3 +368,6 @@ instance Migrate PkgInfo where
       }
 
 deriveSafeCopy 4 'extension ''PkgInfo
+
+deriveSafeCopy 1 'base ''MetadataRevIx
+deriveSafeCopy 1 'base ''TarballRevIx
