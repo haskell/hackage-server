@@ -48,9 +48,9 @@ importPreferredCSV :: PreferredVersions
 importPreferredCSV st pkg ( _version
                           : (match "preferredRanges"    -> Just ranges)
                           : (match "deprecatedVersions" -> Just deprecated)
-                          : (optionalSumRange           -> Just sumRange)
+                          : (optionalSumRange           -> _)
                           ) = do
-  let info = PreferredInfo { preferredRanges    = ranges
+  let info = PreferredInfo { unused_preferredRanges    = ranges
                            , deprecatedVersions = deprecated
                            , unused_sumRange    = Nothing
                            }
@@ -95,7 +95,7 @@ backupPreferredInfo :: (PackageName, PreferredInfo) -> BackupEntry
 backupPreferredInfo (name, prefinfo@PreferredInfo {..}) =
     csvToBackup (pkgPath name "preferred.csv") $ [
         [showVersion versionCSV]
-      , "preferredRanges" : map display preferredRanges
+      , "preferredRanges" : map display unused_preferredRanges
       , "deprecatedVersions" : map display deprecatedVersions
       ] ++ case sumRange prefinfo of
              Nothing           -> []

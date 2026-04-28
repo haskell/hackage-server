@@ -23,7 +23,7 @@ data PreferredVersions = PreferredVersions {
 } deriving (Show, Eq)
 
 data PreferredInfo = PreferredInfo {
-    preferredRanges :: [VersionRange],
+    unused_preferredRanges :: [VersionRange],
     deprecatedVersions :: [Version],
     -- | Use 'sumRange' instead.
     unused_sumRange :: Maybe VersionRange
@@ -87,7 +87,7 @@ setPreferredInfo :: PackageName -> [VersionRange] -> [Version]
                                   -> Update PreferredVersions PreferredInfo
 setPreferredInfo name ranges versions = do
     let prefinfo =  PreferredInfo {
-          preferredRanges    = ranges,
+          unused_preferredRanges    = ranges,
           deprecatedVersions = versions,
           unused_sumRange    = Nothing
         }
@@ -127,7 +127,7 @@ setMigratedEphemeralPrefs = modify $ \p -> p { migratedEphemeralPrefs = True }
 
 setPreferredRanges :: PackageName -> [VersionRange] -> Update PreferredVersions ()
 setPreferredRanges name ranges =
-    alterPreferredInfo name $ \p -> p { preferredRanges = ranges }
+    alterPreferredInfo name $ \p -> p { unused_preferredRanges = ranges }
 
 setDeprecatedVersions :: PackageName -> [Version] -> Update PreferredVersions ()
 setDeprecatedVersions name versions =

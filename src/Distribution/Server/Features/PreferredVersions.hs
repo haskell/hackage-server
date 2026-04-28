@@ -385,7 +385,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     renderPrefInfo :: PreferredInfo -> PreferredRender
     renderPrefInfo pref = PreferredRender {
         rendSumRange = maybe "-any" display $ sumRange pref,
-        rendRanges   = map display $ preferredRanges pref,
+        rendRanges   = [],
         rendVersions = deprecatedVersions pref
     }
 
