@@ -285,11 +285,11 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
         let pvs = [ object [ Key.fromString "version"  .= (T.pack . display . packageVersion . candInfoId) p
                            , Key.fromString "sha256"   .= (blobInfoHashSHA256 . pkgTarballGz) tarball
-                           , Key.fromString "time"     .= (fst) uploadInfo
-                           , Key.fromString "uploader" .= (lupUserName . snd) uploadInfo
+                           , Key.fromString "time"     .= time
+                           , Key.fromString "uploader" .= lupUserName uploader
                            ]
                   | p <- pkgs
-                  , (tarball, uploadInfo, _) <- maybeToList $ pkgLatestTarball $ candPkgInfo p
+                  , (tarball, (time, uploader), _) <- maybeToList $ pkgLatestTarball $ candPkgInfo p
                   ]
 
         return . toResponse . toJSON $ pvs
