@@ -87,7 +87,7 @@ data PackageRender = PackageRender {
     rendChangeLog    :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
     rendReadme       :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
-    rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
+    rendUpdateInfo   :: Maybe (MetadataRevIx, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
     rendFlags        :: [PackageFlag],
     -- rendOther contains other useful fields which are merely strings, possibly empty
@@ -127,7 +127,7 @@ doPackageRender users info = PackageRender
     , rendUpdateInfo   = let maxrevision  = pkgMaxRevision info
                              (utime, uid) = pkgLatestUploadInfo info
                              uinfo        = Users.lookupUserId uid users
-                         in if maxrevision > 0
+                         in if maxrevision > MRI 0
                               then Just (maxrevision, utime, uinfo)
                               else Nothing
     , rendPkgUri       = pkgUri

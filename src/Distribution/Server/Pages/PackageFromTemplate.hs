@@ -269,7 +269,7 @@ packagePageTemplate render
       "" -> "None provided"
       x -> x
 
-    renderUpdateInfo :: Int -> UTCTime -> Maybe UserInfo -> Html
+    renderUpdateInfo :: MetadataRevIx -> UTCTime -> Maybe UserInfo -> Html
     renderUpdateInfo revisionNo utime uinfo =
         anchor ! [href revisionsURL] << ("Revision " +++ show revisionNo)
         +++ " made " +++

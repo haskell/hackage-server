@@ -19,6 +19,7 @@ module Distribution.Server.Packages.Types where
 
 import Distribution.Server.Prelude
 
+import Distribution.Server.Framework (FromReqURI(..))
 import Distribution.Server.Users.Types (UserId(..))
 import Distribution.Server.Framework.BlobStorage (BlobId, BlobId_v0, BlobStorage)
 import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
@@ -36,6 +37,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Parsec
          ( parseGenericPackageDescription, runParseResult )
 
+import Data.Aeson (ToJSON)
 import Data.Serialize (Serialize)
 import Data.ByteString (StrictByteString)
 import Data.ByteString.Lazy (LazyByteString)
@@ -161,10 +163,10 @@ instance Package PkgInfo where
 -------------------------------------------------------------------------------}
 
 newtype MetadataRevIx = MRI { getMetadataRevIx :: Int }
-  deriving newtype (Eq, Ord, Show, MemSize)
+  deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON)
 
 newtype TarballRevIx = TRI { getTarballRevIx :: Int }
-  deriving newtype (Eq, Ord, Show, MemSize)
+  deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON)
 
 cabalFileString :: CabalFileText -> String
 cabalFileString = unpackUTF8Strict . cabalFileByteString
@@ -214,8 +216,8 @@ pkgLatestUploadUser = snd . pkgLatestUploadInfo
 pkgNumRevisions :: PkgInfo -> Int
 pkgNumRevisions = Vec.length . pkgMetadataRevisions
 
-pkgMaxRevision :: PkgInfo -> Int
-pkgMaxRevision = subtract 1 . pkgNumRevisions
+pkgMaxRevision :: PkgInfo -> MetadataRevIx
+pkgMaxRevision = MRI . subtract 1 . pkgNumRevisions
 
 -- | The latest tarball for a package (if any)
 --

@@ -85,7 +85,7 @@ initSecurityFeature env = do
       case pkgLatestTarball pkgInfo of
         Nothing -> []
         Just (_tarball, (uploadTime, _uploadUserId), latestRev) ->
-          [MetadataEntry (pkgInfoId pkgInfo) latestRev uploadTime]
+          [MetadataEntry (pkgInfoId pkgInfo) (TRI latestRev) uploadTime]
 
 -- | The main security feature
 --
