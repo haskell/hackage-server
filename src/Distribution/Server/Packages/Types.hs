@@ -182,6 +182,12 @@ pkgSpecificRevision pkg revno = pkgMetadataRevisions pkg Vec.!? revno
 pkgAllRevisionsCabalFiles :: PkgInfo -> [CabalFileText]
 pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
 
+pkgSpecificTarball :: PkgInfo -> Int -> Maybe (PkgTarball, UploadInfo)
+pkgSpecificTarball pkg revno = pkgTarballRevisions pkg Vec.!? revno
+
+pkgAllTarballs :: PkgInfo -> [(PkgTarball, UploadInfo)]
+pkgAllTarballs = Vec.toList . pkgTarballRevisions
+
 pkgAllRevisionsUploadInfos :: PkgInfo -> [UploadInfo]
 pkgAllRevisionsUploadInfos = fmap snd . Vec.toList . pkgMetadataRevisions
 

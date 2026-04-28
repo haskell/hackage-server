@@ -119,7 +119,7 @@ doPackageRender users info = PackageRender
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
     , rendModules      = renderModules
-    , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
+    , rendHasTarball   = not . null $ pkgAllTarballs info
     , rendChangeLog    = Nothing -- populated later
     , rendReadme       = Nothing -- populated later
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info

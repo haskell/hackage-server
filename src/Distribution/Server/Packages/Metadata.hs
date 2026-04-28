@@ -29,8 +29,7 @@ computePkgMetadata :: PkgInfo   -- ^ Package
                    -> (FilePath, BS.Lazy.ByteString)
 computePkgMetadata pkg revNo = (inIndexPkgMetadata pkgId, raw)
   where
-    tarballs     = pkgTarballRevisions pkg
-    (tarball, _) = tarballs Vec.! revNo
+    Just (tarball, _) = pkgSpecificTarball pkg revNo
     pkgId        = pkgInfoId pkg
     targets      = pkgTarballTargets revNo pkgId tarball
     signed       = Sec.withSignatures' [] targets

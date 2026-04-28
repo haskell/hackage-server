@@ -17,7 +17,7 @@ import Distribution.Server.Framework.MemSize
 
 import Distribution.Server.Packages.Types
          ( CabalFileText(..), PkgInfo(..)
-         , pkgSpecificRevision, pkgTarballRevisions
+         , pkgSpecificRevision
          , pkgLatestCabalFileText, pkgLatestUploadInfo
          )
 import Distribution.Server.Packages.Metadata
