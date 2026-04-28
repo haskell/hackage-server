@@ -28,8 +28,9 @@ license:      BSD-3-Clause
 license-file: LICENSE
 
 tested-with:
-  GHC == 9.12.2
-  GHC == 9.10.2
+  GHC == 9.14.1
+  GHC == 9.12.4
+  GHC == 9.10.3
   GHC == 9.8.4
   GHC == 9.6.7
   -- Constraint transformers >= 0.6 forces GHC >= 9.6 for CI
@@ -147,7 +148,7 @@ common defaults
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
     , array                  >= 0.5   && < 0.6
-    , base                   >= 4.18  && < 4.22
+    , base                   >= 4.18  && < 4.23
     , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.11.2 && < 0.13
     , containers             >= 0.6.0 && < 0.9
@@ -158,15 +159,15 @@ common defaults
         -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , pretty                 >= 1.1   && < 1.2
     , text                  ^>= 1.2.5.0 || >= 2.0 && < 2.2
-    , time                   >= 1.9   && < 1.15
+    , time                   >= 1.9   && < 1.16
     , transformers           >= 0.5   && < 0.7
     , unix                   >= 2.7   && < 2.9
     , scientific
   -- other dependencies shared by most components
   build-depends:
     , aeson                  >= 2.1.0.0 && < 2.3
-    , Cabal                  >= 3.14.2.0 && < 3.18
-    , Cabal-syntax           >= 3.14.2.0 && < 3.18
+    , Cabal                  >= 3.16.0.0 && < 3.18
+    , Cabal-syntax           >= 3.16.0.0 && < 3.18
         -- Cabal-syntax needs to be bound to constrain hackage-security
         -- see https://github.com/haskell/hackage-server/issues/1130
     , network-bsd           ^>= 2.8
@@ -428,11 +429,11 @@ library
   -- NB: see also build-depends in `common defaults`!
   build-depends:
     , HStringTemplate       ^>= 0.8
-    , HTTP                  ^>= 4000.3.16 || ^>= 4000.4.1
+    , HTTP                   >= 4000.3.16 && < 4000.6
     , http-client           ^>= 0.7       && < 0.8
     , http-client-tls       ^>= 0.3
     , http-types             >= 0.10      && < 0.13
-    , QuickCheck             >= 2.14      && < 2.16
+    , QuickCheck             >= 2.14      && < 2.19
     , acid-state            ^>= 0.16
     , safecopy               >= 0.6       && < 0.11
     , async                 ^>= 2.2.1
@@ -636,7 +637,7 @@ test-suite ReverseDependenciesTest
     , tasty-hedgehog ^>= 1.4
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
-    , hedgehog      >= 1.4 && < 1.6
+    , hedgehog      >= 1.4 && < 1.8
     , exceptions
     , bimap
     , mime-mail
@@ -651,7 +652,7 @@ benchmark RevDeps
   main-is: RevDeps.hs
   build-tool-depends: hackage-server:hackage-server
   build-depends:
-    , random       ^>= 1.2
+    , random       >= 1.2
     , gauge
   -- gauge does not support base-4.20
   if impl(ghc >= 9.10)
