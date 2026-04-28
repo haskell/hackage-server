@@ -67,7 +67,6 @@ import Data.List (intercalate, intersperse, insert)
 import Data.Function (on)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Vector as Vec
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as BS (LazyByteString, fromStrict)
 import qualified Network.URI as URI
@@ -805,24 +804,25 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
       users    <- queryGetUserDb
       let pkgid        = packageId pkginfo
           pkgname      = packageName pkginfo
-          revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
+          cabalFiles   = reverse $ pkgAllRevisionsCabalFiles pkginfo
+          uploadInfos  = reverse $ pkgAllRevisionsUploadInfos pkginfo
           numRevisions = pkgNumRevisions pkginfo
 
           revchanges   :: [(SHA256Digest, [Change])]
-          revchanges   = start revisions where
+          revchanges   = start cabalFiles where
             start []          = []
             start (curr:rest) = go curr rest
 
-            go curr [] = [(sha256 (BS.fromStrict (cabalFileByteString (fst curr))), [])]
+            go curr [] = [(sha256 (BS.fromStrict (cabalFileByteString curr)), [])]
             go curr (prev:rest) =
-                ( sha256 (BS.fromStrict (cabalFileByteString (fst curr)))
+                ( sha256 (BS.fromStrict (cabalFileByteString curr))
                 , changes curr prev )
                 : go prev rest
 
             changes curr prev = either (const []) id $
               diffCabalRevisionsByteString
-                (cabalFileByteString (fst prev))
-                (cabalFileByteString (fst curr))
+                (cabalFileByteString prev)
+                (cabalFileByteString curr)
 
       cacheControl [NoCache] (etagFromHash numRevisions)
       template <- getTemplate templates "revisions.html"
@@ -830,7 +830,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         [ "pkgname"   $= pkgname
         , "pkgid"     $= pkgid
         , "revisions" $= zipWith3 (revisionToTemplate users)
-                                  (map snd revisions)
+                                  uploadInfos
                                   [numRevisions-1, numRevisions-2..]
                                   revchanges
         ]

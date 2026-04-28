@@ -176,6 +176,15 @@ pkgOriginalUploadUser = snd . pkgOriginalUploadInfo
 pkgLatestRevision :: PkgInfo -> (CabalFileText, UploadInfo)
 pkgLatestRevision = Vec.last . pkgMetadataRevisions
 
+pkgSpecificRevision :: PkgInfo -> Int -> Maybe (CabalFileText, UploadInfo)
+pkgSpecificRevision pkg revno = pkgMetadataRevisions pkg Vec.!? revno
+
+pkgAllRevisionsCabalFiles :: PkgInfo -> [CabalFileText]
+pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
+
+pkgAllRevisionsUploadInfos :: PkgInfo -> [UploadInfo]
+pkgAllRevisionsUploadInfos = fmap snd . Vec.toList . pkgMetadataRevisions
+
 pkgLatestCabalFileText :: PkgInfo -> CabalFileText
 pkgLatestCabalFileText = fst . pkgLatestRevision
 
@@ -190,6 +199,9 @@ pkgLatestUploadUser = snd . pkgLatestUploadInfo
 
 pkgNumRevisions :: PkgInfo -> Int
 pkgNumRevisions = Vec.length . pkgMetadataRevisions
+
+pkgMaxRevision :: PkgInfo -> Int
+pkgMaxRevision = subtract 1 . pkgNumRevisions
 
 -- | The latest tarball for a package (if any)
 --

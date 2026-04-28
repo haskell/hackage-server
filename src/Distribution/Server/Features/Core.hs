@@ -726,10 +726,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     serveCabalFileRevisionsList :: DynamicPath -> ServerPartE Response
     serveCabalFileRevisionsList dpath = do
-      pkginfo <- packageInPath dpath >>= lookupPackageId
+      revisions <- fmap pkgMetadataRevisions $ packageInPath dpath >>= lookupPackageId
       users   <- queryGetUserDb
-      let revisions = pkgMetadataRevisions pkginfo
-          revisionToObj rev (cabalFileText, (utime, uid)) =
+      let revisionToObj rev (cabalFileText, (utime, uid)) =
             let uname = userIdToName users uid
                 hash = sha256 (fromStrict $ cabalFileByteString cabalFileText)
             in
@@ -746,8 +745,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     serveCabalFileRevision dpath = do
       pkginfo <- packageInPath dpath >>= lookupPackageId
       let mrev      = lookup "revision" dpath >>= fromReqURI
-          revisions = pkgMetadataRevisions pkginfo
-      case mrev >>= \rev -> revisions Vec.!? rev of
+      case mrev >>= pkgSpecificRevision pkginfo of
         Just (fileRev, (utime, _uid)) -> return $ toResponse cabalfile
           where
             cabalfile = Resource.CabalFile (fromStrict $ cabalFileByteString fileRev) utime

@@ -19,7 +19,6 @@ import Distribution.Text (display)
 import Distribution.Server.Packages.Types
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import qualified Data.Vector as Vec
 import qualified Data.Map  as Map
 import qualified Data.Text as T
 import Data.ByteString.Lazy (ByteString)
@@ -233,7 +232,9 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarI
         [ ( prefixPkgURI ++ display (packageName pkg)
           , uploadtime)
         | pkg <- map head pkgss
-        , let (_, (uploadtime, _user)) = Vec.head (pkgMetadataRevisions pkg)
+        , let (uploadtime, _user) =
+                -- NOTE this used to be head but now is last
+                pkgLatestUploadInfo pkg
         ]
         Daily 1.0
 
