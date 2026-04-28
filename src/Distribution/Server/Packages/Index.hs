@@ -17,6 +17,7 @@ import Distribution.Server.Framework.MemSize
 
 import Distribution.Server.Packages.Types
          ( CabalFileText(..), PkgInfo(..)
+         , pkgSpecificRevision
          , pkgLatestCabalFileText, pkgLatestUploadInfo
          )
 import Distribution.Server.Packages.Metadata
@@ -100,7 +101,7 @@ writeIncremental pkgs =
     mkTarEntry (CabalFileEntry pkgid revno timestamp userid username) = do
         pkginfo   <- PackageIndex.lookupPackageId pkgs pkgid
         cabalfile <- fmap (cabalFileByteString . fst) $
-                     pkgMetadataRevisions pkginfo Vec.!? revno
+                     pkgSpecificRevision pkginfo revno
         tarPath   <- either (const Nothing) Just $
                      Tar.toTarPath False fileName
         let !tarEntry = addTimestampAndOwner timestamp userid username $

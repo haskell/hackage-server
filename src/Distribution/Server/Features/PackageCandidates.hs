@@ -41,6 +41,7 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.Version
 
+import Data.Maybe (maybeToList)
 import qualified Data.ByteString.Lazy     as BS (toStrict, fromStrict)
 import qualified Data.Text                as T
 import qualified Text.XHtml.Strict        as XHtml
@@ -283,12 +284,12 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         let lupUserName uid = (uid, fmap Users.userName (Users.lookupUserId uid users))
 
         let pvs = [ object [ Key.fromString "version"  .= (T.pack . display . packageVersion . candInfoId) p
-                           , Key.fromString "sha256"   .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
-                           , Key.fromString "time"     .= (fst . snd) tarball
-                           , Key.fromString "uploader" .= (lupUserName . snd . snd) tarball
+                           , Key.fromString "sha256"   .= (blobInfoHashSHA256 . pkgTarballGz) tarball
+                           , Key.fromString "time"     .= time
+                           , Key.fromString "uploader" .= lupUserName uploader
                            ]
                   | p <- pkgs
-                  , let tarball = Vec.last . pkgTarballRevisions . candPkgInfo $ p
+                  , (tarball, (time, uploader), _) <- maybeToList $ pkgLatestTarball $ candPkgInfo p
                   ]
 
         return . toResponse . toJSON $ pvs
@@ -312,10 +313,10 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           where
             pn = T.pack . display . pkgName . candInfoId . head $ pkgs
             pvs = [ object [ Key.fromString "version" .= (T.pack . display . packageVersion . candInfoId) p
-                           , Key.fromString "sha256"  .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
+                           , Key.fromString "sha256"  .= (blobInfoHashSHA256 . pkgTarballGz) tarball
                            ]
                   | p <- pkgs
-                  , let tarball = Vec.last . pkgTarballRevisions . candPkgInfo $ p
+                  , (tarball, _, _) <- maybeToList $ pkgLatestTarball $ candPkgInfo p
                   ]
 
     postCandidate :: ServerPartE Response

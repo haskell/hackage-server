@@ -119,12 +119,12 @@ doPackageRender users info = PackageRender
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
     , rendModules      = renderModules
-    , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
+    , rendHasTarball   = not . null $ pkgAllTarballs info
     , rendChangeLog    = Nothing -- populated later
     , rendReadme       = Nothing -- populated later
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info
                          in (utime, Users.lookupUserId uid users)
-    , rendUpdateInfo   = let maxrevision  = Vec.length (pkgMetadataRevisions info) - 1
+    , rendUpdateInfo   = let maxrevision  = pkgMaxRevision info
                              (utime, uid) = pkgLatestUploadInfo info
                              uinfo        = Users.lookupUserId uid users
                          in if maxrevision > 0

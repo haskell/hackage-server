@@ -82,7 +82,6 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
-import qualified Data.Vector as Vec
 
 
 -- A feature to manage notifications to users when package metadata, etc is updated.
@@ -582,9 +581,7 @@ userNotifyFeature UserFeature{..}
                     { notifyPackageId = pkgInfoId pkg
                     , notifyRevisions =
                         filter (\(t, _) -> earlier < t && t <= now)
-                          . map snd
-                          . Vec.toList
-                          $ pkgMetadataRevisions pkg
+                          $ pkgAllRevisionsUploadInfos pkg
                     }
               else do
                 guard notifyUpload

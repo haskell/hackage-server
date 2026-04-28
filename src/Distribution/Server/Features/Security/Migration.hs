@@ -116,7 +116,7 @@ migratePkgs ServerEnv{ serverBlobStore = store } updatePackage precomputed =
             updatePackage (pkgInfoId pkg) pkg'
             return stats
       where
-        tarballs = Vec.toList (pkgTarballRevisions pkg)
+        tarballs = pkgAllTarballs pkg
 
     migrateTarball :: PkgTarball -> IO (Migrated PkgTarball)
     migrateTarball pkgTarball@PkgTarball{} =

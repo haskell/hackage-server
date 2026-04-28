@@ -21,7 +21,6 @@ import           Data.Aeson                 ((.=))
 import qualified Data.Aeson.Key             as Key
 import qualified Data.Map.Strict      as Map
 import qualified Data.Text                  as T
-import qualified Data.Vector                as Vector
 
 import           Distribution.License                         (licenseToSPDX)
 import           Distribution.Package                         (PackageIdentifier(..),
@@ -39,7 +38,7 @@ import qualified Distribution.Server.Framework                as Framework
 import           Distribution.Server.Features.Core            (CoreFeature(..),
                                                                CoreResource(..))
 import qualified Distribution.Server.Features.PreferredVersions as Preferred
-import           Distribution.Server.Packages.Types           (CabalFileText(..), pkgMetadataRevisions)
+import           Distribution.Server.Packages.Types           (CabalFileText(..), pkgSpecificRevision, pkgLatestRevision, pkgMaxRevision, pkgNumRevisions)
 
 import Distribution.Utils.ShortText (fromShortText)
 import Data.Foldable (toList)
@@ -245,24 +244,23 @@ servePackageBasicDescription resource userFeature preferred dpath = do
       guardValidPackageId resource pkgid
       pkg <- lookupPackageId resource pkgid
 
-      let metadataRevs = fst <$> pkgMetadataRevisions pkg
-          uploadInfos  = snd <$> pkgMetadataRevisions pkg
-          nMetadata    = Vector.length metadataRevs
-          metadataInd  = fromMaybe (nMetadata - 1) metadataRev
-      descr <- getPackageDescr metadataInd nMetadata metadataRevs uploadInfos
+      (metadataInd, (cabalFile, uploadInfo)) <- do
+        case metadataRev of
+          Nothing ->
+            pure (pkgMaxRevision pkg, pkgLatestRevision pkg)
+          Just ix ->
+            case pkgSpecificRevision pkg ix of
+              Nothing ->
+                Framework.errNotFound "Revision not found"
+                  [Framework.MText
+                    $ "There are " <> show (pkgNumRevisions pkg) <> " metadata revisions. Index "
+                    <> show ix <> " is out of bounds."]
+              Just rev -> pure (ix, rev)
+
+      descr <- getPackageDescr cabalFile uploadInfo metadataInd
       return $ Framework.toResponse $ Aeson.toJSON descr
 
-    getPackageDescr metadataInd nMetadata metadataRevs uploadInfos = do
-      when (metadataInd < 0 || metadataInd >= nMetadata)
-        (Framework.errNotFound "Revision not found"
-         [Framework.MText
-           $ "There are " <> show nMetadata <> " metadata revisions. Index "
-           <> show metadataInd <> " is out of bounds."]
-        )
-
-      let cabalFile = metadataRevs Vector.! metadataInd
-          uploadedAt = fst $ uploadInfos Vector.! metadataInd
-          uploaderId = snd $ uploadInfos Vector.! metadataInd
+    getPackageDescr cabalFile (uploadedAt, uploaderId) metadataInd = do
       uploader <- userName <$> lookupUserInfo userFeature uploaderId
       let pkgDescr  = getBasicDescription uploadedAt cabalFile metadataInd
       case pkgDescr of
