@@ -218,7 +218,6 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
               $ map packageVersion pkgs
         versionType NormalVersion = "normal-version"
         versionType DeprecatedVersion = "deprecated-version"
-        versionType UnpreferredVersion = "unpreferred-version"
       return . toResponse . object
         $ map (\(i, vs) -> (versionType i, array $ map (string . display) vs))
           $ Map.toList classifiedVersions
@@ -463,8 +462,7 @@ string = String . Text.pack
 getVersionStatus :: PreferredInfo -> Version -> VersionStatus
 getVersionStatus info version
     | version `elem` deprecatedVersions info = DeprecatedVersion
-    | maybe True (withinRange version) (sumRange info) = NormalVersion
-    | otherwise = UnpreferredVersion
+    | otherwise = NormalVersion
 
 classifyVersions :: PreferredInfo -> [Version] -> [(Version, VersionStatus)]
 classifyVersions (PreferredInfo [] [] _) = map (flip (,) NormalVersion)
@@ -478,9 +476,8 @@ findBestVersion attempts to find the best version to display out of a set
 of versions. The quality of a given version is encoded in a pair (VersionStatus,
 Bool). If the version is a NormalVersion, then the boolean indicates whether if
 it the most recently uploaded preferred version (and all higher versions are
-either deprecated or unpreferred). Otherwise, if it  is a DeprecatedVersion or
-UnpreferredVersion, the boolean indicates that it is the maximum of all uploaded
-versions.
+either deprecated or unpreferred). Otherwise, if it  is a DeprecatedVersion,
+the boolean indicates that it is the maximum of all uploaded versions.
 
 The list of available versions is scanned from the back (most recent) to the
 front (first one uploaded). If a 'better' version is found than the current
@@ -491,20 +488,12 @@ finishes up. The exact ordering is defined as:
 available. This option may appear anywhere, although it is always seen before
 (NormalVersion, False). In this case, the algorithm finishes up.
 
-2. (UnpreferredVersion, True) means the latest available version of the package
-is not preferred, but the latest preferred version is not available. If this
-option appears anywhere, it will be the most recent version in the set,
-excluding deprecated versions.
-
-3. (NormalVersion, False) means neither the actual latest version nor the
+2. (NormalVersion, False) means neither the actual latest version nor the
 preferred latest version are available, but there is some preferred version
-that's available. It can only be scanned after (NormalVersion, True) and
-(UnpreferredVersion, True), so the algorithm finishes up in this case.
-4. (UnpreferredVersion, False) means no preferred versions are available, and
-only an older version is available. It is still possible to see a NormalVersion
-after this option, so the algorithm continues.
+that's available. It can only be scanned after (NormalVersion, True) so the
+algorithm finishes up in this case.
 
-5. (DeprecatedVersion, True) and (DeprecatedVersion, False) mean only a
+3. (DeprecatedVersion, True) and (DeprecatedVersion, False) mean only a
 deprecated version is available. This is not so great.
 
 This is a bit complex but I think it has the most intuitive result, and is
@@ -534,7 +523,6 @@ findBestVersion info allVersions versions =
         NormalVersion | v == maxAllVersion -> (v, (NormalVersion, True))
         NormalVersion -> oldSearch vs (v, (NormalVersion, False))
         DeprecatedVersion -> newSearch vs (v, (DeprecatedVersion, True))
-        UnpreferredVersion -> oldSearch vs (v, (UnpreferredVersion, True))
     newSearch [] opt = opt
 
     oldSearch (v:vs) opt = case infoMap Map.! v of
@@ -547,13 +535,10 @@ findBestVersion info allVersions versions =
     optionPrefs :: (VersionStatus, Bool) -> Int
     optionPrefs opt = case opt of
         (NormalVersion, True) -> 4
-        (UnpreferredVersion, True) -> 3
         (NormalVersion, False) -> 2
-        (UnpreferredVersion, False) -> 1
         _ -> 0
 
     classifyOpt opt = case opt of
         (NormalVersion, True) -> Just NormalVersion
-        (UnpreferredVersion, True) -> Just UnpreferredVersion
         (DeprecatedVersion, _) -> Just DeprecatedVersion
         _ -> Nothing

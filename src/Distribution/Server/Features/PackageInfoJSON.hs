@@ -109,7 +109,6 @@ instance Aeson.ToJSON PackageVersions where
       encodeStatus = \case
         Preferred.NormalVersion      -> "normal"
         Preferred.DeprecatedVersion  -> "deprecated"
-        Preferred.UnpreferredVersion -> "unpreferred"
 
 
 

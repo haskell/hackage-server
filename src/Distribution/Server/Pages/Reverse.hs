@@ -62,7 +62,6 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
             | (ReverseRender pkg status count'', n) <- zip renders [(1::Int)..] ]
 
         renderStatus (Just DeprecatedVersion) = [theclass "deprecated"]
-        renderStatus (Just UnpreferredVersion) = [theclass "unpreferred"]
         renderStatus _ = []
 
     renderCount ReverseCount{totalCount, directCount} =

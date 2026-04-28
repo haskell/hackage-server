@@ -327,7 +327,6 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
         status st = case st of
             NormalVersion -> [theclass "normal"]
             DeprecatedVersion  -> [theclass "deprecated"]
-            UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
 categoryField :: String -> Html

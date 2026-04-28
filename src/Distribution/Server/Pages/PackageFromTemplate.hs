@@ -374,7 +374,6 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
     status st = case st of
         NormalVersion -> []
         DeprecatedVersion  -> [theclass "deprecated"]
-        UnpreferredVersion -> [theclass "unpreferred"]
 
     infoHtml = case info of
       Nothing -> noHtml
