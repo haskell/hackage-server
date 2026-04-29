@@ -17,6 +17,7 @@ import Distribution.Server.Framework.MemSize
 
 import Distribution.Server.Packages.Types
          ( CabalFileText(..), PkgInfo(..)
+         , TarballRevIx, MetadataRevIx
          , pkgSpecificRevision
          , pkgLatestCabalFileText, pkgLatestUploadInfo
          )
@@ -57,7 +58,7 @@ data TarIndexEntry =
     -- can also be changed (this is used during mirroring, for instance).
     --
     -- The UTCTime and userName are used as file metadata in the tarball.
-    CabalFileEntry !PackageId !RevisionNo !UTCTime !UserId !UserName
+    CabalFileEntry !PackageId !MetadataRevIx !UTCTime !UserId !UserName
 
     -- | Package metadata
     --
@@ -69,15 +70,13 @@ data TarIndexEntry =
     -- Although we do not currently allow to change the upload time for package
     -- tarballs, but I'm not sure why not (TODO) and it's conceivable we may
     -- change this, so we record the original upload time.
-  | MetadataEntry !PackageId !RevisionNo !UTCTime
+  | MetadataEntry !PackageId !TarballRevIx !UTCTime
 
     -- | Additional entries that we add to the tarball
     --
     -- This is currently used for @preferred-versions@.
   | ExtraEntry !FilePath !LazyByteString !UTCTime
   deriving (Eq, Show)
-
-type RevisionNo = Int
 
 instance MemSize TarIndexEntry where
   memSize (CabalFileEntry a b c d e) = memSize5 a b c d e

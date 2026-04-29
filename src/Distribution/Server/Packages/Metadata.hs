@@ -24,8 +24,8 @@ import qualified Hackage.Security.TUF.FileMap as Sec.FileMap
 --
 -- Revisions numbers count from 0; we use the revision number as is for the
 -- TUF file version.
-computePkgMetadata :: PkgInfo   -- ^ Package
-                   -> Int       -- ^ Tarball revision
+computePkgMetadata :: PkgInfo       -- ^ Package
+                   -> TarballRevIx  -- ^ Tarball revision
                    -> (FilePath, BS.Lazy.ByteString)
 computePkgMetadata pkg revNo = (inIndexPkgMetadata pkgId, raw)
   where
@@ -35,9 +35,9 @@ computePkgMetadata pkg revNo = (inIndexPkgMetadata pkgId, raw)
     signed       = Sec.withSignatures' [] targets
     raw          = Sec.renderJSON_NoLayout signed
 
-pkgTarballTargets :: Int -> PackageIdentifier -> PkgTarball -> Sec.Targets
+pkgTarballTargets :: TarballRevIx -> PackageIdentifier -> PkgTarball -> Sec.Targets
 pkgTarballTargets revNo pkgId pkgTarball = Sec.Targets {
-      targetsVersion     = Sec.FileVersion (fromIntegral revNo)
+      targetsVersion     = Sec.FileVersion (fromIntegral $ getTarballRevIx revNo)
     , targetsExpires     = Sec.expiresNever
     , targetsTargets     = Sec.FileMap.fromList [
                                (inRepoPkgTarGz pkgId, secFileInfo pkgTarballGz)
