@@ -127,7 +127,7 @@ doPackageRender users info = PackageRender
     , rendUpdateInfo   = let maxrevision  = pkgMaxRevision info
                              (utime, uid) = pkgLatestUploadInfo info
                              uinfo        = Users.lookupUserId uid users
-                         in if maxrevision > MRI 0
+                         in if maxrevision > MetadataRevIx 0
                               then Just (maxrevision, utime, uinfo)
                               else Nothing
     , rendPkgUri       = pkgUri

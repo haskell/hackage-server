@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Distribution.Server.Features.Core.State (
     -- * DB state
@@ -104,7 +105,7 @@ addPackage2 pkgid cabalfile uploadinfo@(timestamp, uid) username mtarball = do
       Nothing -> do
         let !pkginfo = mkPackageInfo pkgid cabalfile uploadinfo mtarball
             pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = CabalFileEntry pkgid (MRI 0) timestamp uid username
+            !pkgentry   = CabalFileEntry pkgid (MetadataRevIx 0) timestamp uid username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return (Just pkginfo)
@@ -117,7 +118,7 @@ addPackage3 !pkginfo (timestamp,uid) username entries = do
       Just _  -> return False
       Nothing -> do
         let pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = CabalFileEntry (pkgInfoId pkginfo) (MRI 0) timestamp uid username
+            !pkgentry   = CabalFileEntry (pkgInfoId pkginfo) (MetadataRevIx 0) timestamp uid username
             updatelog'  = fmap (\ul -> foldr (\e s -> s Seq.|> e) ul (pkgentry:entries)) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return True
@@ -161,7 +162,7 @@ addPackageRevision2 pkgid cabalfile uploadinfo@(timestamp, uid) username = do
                                      `Vec.snoc` (cabalfile, uploadinfo)
             }
             pkgindex'   = PackageIndex.insert pkginfo' pkgindex
-            newrevision = MRI $ Vec.length (pkgMetadataRevisions pkginfo)
+            newrevision = MetadataRevIx $ Vec.length (pkgMetadataRevisions pkginfo)
             !pkgentry   = CabalFileEntry pkgid newrevision timestamp uid username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
@@ -173,7 +174,7 @@ addPackageRevision2 pkgid cabalfile uploadinfo@(timestamp, uid) username = do
               pkgTarballRevisions  = Vec.empty
             }
             pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = CabalFileEntry pkgid (MRI 0) timestamp uid username
+            !pkgentry   = CabalFileEntry pkgid (MetadataRevIx 0) timestamp uid username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return (Nothing, pkginfo)

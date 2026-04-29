@@ -162,7 +162,7 @@ instance Package PkgInfo where
   Utility
 -------------------------------------------------------------------------------}
 
-newtype MetadataRevIx = MRI { getMetadataRevIx :: Int }
+newtype MetadataRevIx = MetadataRevIx { getMetadataRevIx :: Int }
   deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON, Serialize)
 
 instance SafeCopy MetadataRevIx where
@@ -170,7 +170,7 @@ instance SafeCopy MetadataRevIx where
     putCopy = contain . Serialize.put
     errorTypeName _ = "MetadataRevIx"
 
-newtype TarballRevIx = TRI { getTarballRevIx :: Int }
+newtype TarballRevIx = TarballRevIx { getTarballRevIx :: Int }
   deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON, Serialize)
 
 instance SafeCopy TarballRevIx where
@@ -197,13 +197,13 @@ pkgLatestRevision :: PkgInfo -> (CabalFileText, UploadInfo)
 pkgLatestRevision = Vec.last . pkgMetadataRevisions
 
 pkgSpecificRevision :: PkgInfo -> MetadataRevIx -> Maybe (CabalFileText, UploadInfo)
-pkgSpecificRevision pkg (MRI revno) = pkgMetadataRevisions pkg Vec.!? revno
+pkgSpecificRevision pkg (MetadataRevIx revno) = pkgMetadataRevisions pkg Vec.!? revno
 
 pkgAllRevisionsCabalFiles :: PkgInfo -> [CabalFileText]
 pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
 
 pkgSpecificTarball :: PkgInfo -> TarballRevIx -> Maybe (PkgTarball, UploadInfo)
-pkgSpecificTarball pkg (TRI revno) = pkgTarballRevisions pkg Vec.!? revno
+pkgSpecificTarball pkg (TarballRevIx revno) = pkgTarballRevisions pkg Vec.!? revno
 
 pkgAllTarballs :: PkgInfo -> [(PkgTarball, UploadInfo)]
 pkgAllTarballs = Vec.toList . pkgTarballRevisions
@@ -227,7 +227,7 @@ pkgNumRevisions :: PkgInfo -> Int
 pkgNumRevisions = Vec.length . pkgMetadataRevisions
 
 pkgMaxRevision :: PkgInfo -> MetadataRevIx
-pkgMaxRevision = MRI . subtract 1 . pkgNumRevisions
+pkgMaxRevision = MetadataRevIx . subtract 1 . pkgNumRevisions
 
 -- | The latest tarball for a package (if any)
 --

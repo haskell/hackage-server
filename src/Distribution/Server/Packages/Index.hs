@@ -78,8 +78,6 @@ data TarIndexEntry =
   | ExtraEntry !FilePath !LazyByteString !UTCTime
   deriving (Eq, Show)
 
-type RevisionNo = Int
-
 instance MemSize TarIndexEntry where
   memSize (CabalFileEntry a b c d e) = memSize5 a b c d e
   memSize (MetadataEntry  a b c)   = memSize3 a b c
