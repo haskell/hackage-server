@@ -38,7 +38,7 @@ import qualified Distribution.Server.Framework                as Framework
 import           Distribution.Server.Features.Core            (CoreFeature(..),
                                                                CoreResource(..))
 import qualified Distribution.Server.Features.PreferredVersions as Preferred
-import           Distribution.Server.Packages.Types           (CabalFileText(..), pkgSpecificRevision, pkgLatestRevision, pkgMaxRevision, pkgNumRevisions)
+import           Distribution.Server.Packages.Types           (CabalFileText(..), MetadataRevIx(..), pkgSpecificRevision, pkgLatestRevision, pkgMaxRevision, pkgNumRevisions)
 
 import Distribution.Utils.ShortText (fromShortText)
 import Data.Foldable (toList)
@@ -55,7 +55,7 @@ data PackageBasicDescription = PackageBasicDescription
   , pbd_description       :: !T.Text
   , pbd_author            :: !T.Text
   , pbd_homepage          :: !T.Text
-  , pbd_metadata_revision :: !Int
+  , pbd_metadata_revision :: !MetadataRevIx
   , pbd_uploaded_at       :: !UTCTime
   } deriving (Eq, Show)
 
@@ -69,7 +69,7 @@ data PackageBasicDescriptionDTO = PackageBasicDescriptionDTO
   , description       :: !T.Text
   , author            :: !T.Text
   , homepage          :: !T.Text
-  , metadata_revision :: !Int
+  , metadata_revision :: !MetadataRevIx
   , uploaded_at       :: !UTCTime
   , uploader          :: !UserName
   } deriving (Eq, Show)
@@ -173,7 +173,7 @@ getBasicDescription
   :: UTCTime
     -- ^ Time of upload
   -> CabalFileText
-  -> Int
+  -> MetadataRevIx
      -- ^ Metadata revision. This will be added to the resulting
      --   @PackageBasicDescription@
   -> Either String PackageBasicDescription
@@ -225,7 +225,7 @@ servePackageBasicDescription
   -> Framework.ServerPartE Framework.Response
 servePackageBasicDescription resource userFeature preferred dpath = do
 
-  let metadataRev :: Maybe Int = lookup "revision" dpath >>= Framework.fromReqURI
+  let metadataRev :: Maybe MetadataRevIx = lookup "revision" dpath >>= Framework.fromReqURI
 
   pkgid@(PackageIdentifier name version) <- packageInPath resource dpath
   guardValidPackageName resource name
@@ -238,7 +238,7 @@ servePackageBasicDescription resource userFeature preferred dpath = do
 
     fetchDescr
       :: PackageIdentifier
-      -> Maybe Int
+      -> Maybe MetadataRevIx
       -> Framework.ServerPartE Framework.Response
     fetchDescr pkgid metadataRev = do
       guardValidPackageId resource pkgid

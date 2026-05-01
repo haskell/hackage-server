@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Distribution.Server.Features.Core.State (
     -- * DB state
@@ -33,6 +34,7 @@ import Distribution.Server.Users.Types (UserId, UserName(..), UserInfo(..))
 import Distribution.Server.Users.Users (Users, lookupUserId)
 import Distribution.Server.Framework.MemSize
 
+import Data.Coerce (Coercible, coerce)
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (Migrate(..), base, extension, deriveSafeCopy)
 import Control.Monad.Reader
@@ -103,7 +105,7 @@ addPackage2 pkgid cabalfile uploadinfo@(timestamp, uid) username mtarball = do
       Nothing -> do
         let !pkginfo = mkPackageInfo pkgid cabalfile uploadinfo mtarball
             pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = CabalFileEntry pkgid 0 timestamp uid username
+            !pkgentry   = CabalFileEntry pkgid (MetadataRevIx 0) timestamp uid username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return (Just pkginfo)
@@ -116,7 +118,7 @@ addPackage3 !pkginfo (timestamp,uid) username entries = do
       Just _  -> return False
       Nothing -> do
         let pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = CabalFileEntry (pkgInfoId pkginfo) 0 timestamp uid username
+            !pkgentry   = CabalFileEntry (pkgInfoId pkginfo) (MetadataRevIx 0) timestamp uid username
             updatelog'  = fmap (\ul -> foldr (\e s -> s Seq.|> e) ul (pkgentry:entries)) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return True
@@ -160,7 +162,7 @@ addPackageRevision2 pkgid cabalfile uploadinfo@(timestamp, uid) username = do
                                      `Vec.snoc` (cabalfile, uploadinfo)
             }
             pkgindex'   = PackageIndex.insert pkginfo' pkgindex
-            newrevision = Vec.length (pkgMetadataRevisions pkginfo)
+            newrevision = MetadataRevIx $ Vec.length (pkgMetadataRevisions pkginfo)
             !pkgentry   = CabalFileEntry pkgid newrevision timestamp uid username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
@@ -172,7 +174,7 @@ addPackageRevision2 pkgid cabalfile uploadinfo@(timestamp, uid) username = do
               pkgTarballRevisions  = Vec.empty
             }
             pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = CabalFileEntry pkgid 0 timestamp uid username
+            !pkgentry   = CabalFileEntry pkgid (MetadataRevIx 0) timestamp uid username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return (Nothing, pkginfo)
@@ -279,11 +281,11 @@ initialUpdateLog oldExtras users pkgs =
       where
         pkgId = pkgInfoId pkgInfo
 
-    entryCabal :: PackageId -> (Int, (a, UploadInfo)) -> TarIndexEntry
+    entryCabal :: PackageId -> (MetadataRevIx, (a, UploadInfo)) -> TarIndexEntry
     entryCabal pkgId (revNo, (_cabalFile, (timestamp, uid))) =
         CabalFileEntry pkgId revNo timestamp uid (uidToName uid)
 
-    entryTUF :: PackageId -> (Int, (a, UploadInfo)) -> TarIndexEntry
+    entryTUF :: PackageId -> (TarballRevIx, (a, UploadInfo)) -> TarIndexEntry
     entryTUF pkgId (revNo, (_tarball, (timestamp, _uid))) =
         MetadataEntry pkgId revNo timestamp
 
@@ -295,8 +297,8 @@ initialUpdateLog oldExtras users pkgs =
     entryTimestamp (MetadataEntry  _ _ timestamp    ) = timestamp
     entryTimestamp (ExtraEntry     _ _ timestamp    ) = timestamp
 
-    vecToList :: Vec.Vector a -> [(Int, a)]
-    vecToList = zip [0..] . Vec.toList
+    vecToList :: Coercible Int ix => Vec.Vector a -> [(ix, a)]
+    vecToList = coerce . zip [(0 :: Int)..] . Vec.toList
 
 ------------------------------------------------------------------------------
 

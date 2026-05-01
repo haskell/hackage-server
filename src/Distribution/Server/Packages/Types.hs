@@ -1,6 +1,8 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable,
              StandaloneDeriving, TemplateHaskell, TypeFamilies,
              RecordWildCards #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.Packages.Types
@@ -17,6 +19,7 @@ module Distribution.Server.Packages.Types where
 
 import Distribution.Server.Prelude
 
+import Distribution.Server.Framework (FromReqURI(..))
 import Distribution.Server.Users.Types (UserId(..))
 import Distribution.Server.Framework.BlobStorage (BlobId, BlobId_v0, BlobStorage)
 import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
@@ -34,6 +37,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Parsec
          ( parseGenericPackageDescription, runParseResult )
 
+import Data.Aeson (ToJSON)
 import Data.Serialize (Serialize)
 import Data.ByteString (StrictByteString)
 import Data.ByteString.Lazy (LazyByteString)
@@ -158,6 +162,22 @@ instance Package PkgInfo where
   Utility
 -------------------------------------------------------------------------------}
 
+newtype MetadataRevIx = MetadataRevIx { getMetadataRevIx :: Int }
+  deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON, Serialize)
+
+instance SafeCopy MetadataRevIx where
+    getCopy = contain Serialize.get
+    putCopy = contain . Serialize.put
+    errorTypeName _ = "MetadataRevIx"
+
+newtype TarballRevIx = TarballRevIx { getTarballRevIx :: Int }
+  deriving newtype (Eq, Ord, Show, MemSize, Read, FromReqURI, ToJSON, Serialize)
+
+instance SafeCopy TarballRevIx where
+    getCopy = contain Serialize.get
+    putCopy = contain . Serialize.put
+    errorTypeName _ = "TarballRevIx"
+
 cabalFileString :: CabalFileText -> String
 cabalFileString = unpackUTF8Strict . cabalFileByteString
 
@@ -176,14 +196,14 @@ pkgOriginalUploadUser = snd . pkgOriginalUploadInfo
 pkgLatestRevision :: PkgInfo -> (CabalFileText, UploadInfo)
 pkgLatestRevision = Vec.last . pkgMetadataRevisions
 
-pkgSpecificRevision :: PkgInfo -> Int -> Maybe (CabalFileText, UploadInfo)
-pkgSpecificRevision pkg revno = pkgMetadataRevisions pkg Vec.!? revno
+pkgSpecificRevision :: PkgInfo -> MetadataRevIx -> Maybe (CabalFileText, UploadInfo)
+pkgSpecificRevision pkg (MetadataRevIx revno) = pkgMetadataRevisions pkg Vec.!? revno
 
 pkgAllRevisionsCabalFiles :: PkgInfo -> [CabalFileText]
 pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
 
-pkgSpecificTarball :: PkgInfo -> Int -> Maybe (PkgTarball, UploadInfo)
-pkgSpecificTarball pkg revno = pkgTarballRevisions pkg Vec.!? revno
+pkgSpecificTarball :: PkgInfo -> TarballRevIx -> Maybe (PkgTarball, UploadInfo)
+pkgSpecificTarball pkg (TarballRevIx revno) = pkgTarballRevisions pkg Vec.!? revno
 
 pkgAllTarballs :: PkgInfo -> [(PkgTarball, UploadInfo)]
 pkgAllTarballs = Vec.toList . pkgTarballRevisions
@@ -206,8 +226,8 @@ pkgLatestUploadUser = snd . pkgLatestUploadInfo
 pkgNumRevisions :: PkgInfo -> Int
 pkgNumRevisions = Vec.length . pkgMetadataRevisions
 
-pkgMaxRevision :: PkgInfo -> Int
-pkgMaxRevision = subtract 1 . pkgNumRevisions
+pkgMaxRevision :: PkgInfo -> MetadataRevIx
+pkgMaxRevision = MetadataRevIx . subtract 1 . pkgNumRevisions
 
 -- | The latest tarball for a package (if any)
 --
@@ -360,3 +380,4 @@ instance Migrate PkgInfo where
       }
 
 deriveSafeCopy 4 'extension ''PkgInfo
+
