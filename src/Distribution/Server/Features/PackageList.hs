@@ -158,7 +158,7 @@ initListFeature _env = do
         modifyItem pkgname $ \x ->
             updateReferenceVersion prefsinfo allVersions $
               x
-                { itemLastUpload = fst (pkgOriginalUploadInfo pkg)
+                { itemLastUpload = pkgOriginalUploadTime pkg
                 }
         runHook_ itemUpdate (Set.singleton pkgname)
 
@@ -300,7 +300,7 @@ listFeature CoreFeature{..}
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
           , itemVotes      = votes
-          , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
+          , itemLastUpload = pkgOriginalUploadTime pkg
           , itemRevDepsCount = intRevDirectCount
           , itemHotness = votes + fromIntegral (cmFind pkgname downs) + fromIntegral intRevDirectCount * 2
           }

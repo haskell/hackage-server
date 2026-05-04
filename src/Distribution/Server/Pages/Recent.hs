@@ -240,7 +240,7 @@ releaseItem users hostURI pkgInfo =
   where
     uri   = hostURI { uriPath = packageURL pkgId }
     title = display (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
-    body  = fromShortText $ synopsis (packageDescription (pkgDesc pkgInfo))
+    body  = fromShortText $ synopsis $ packageDescription $ pkgDesc $ pkgLatestRevision pkgInfo
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body ++ "</p>"
     user = Users.userIdToName users userId
