@@ -255,6 +255,8 @@ library
     Distribution.Server.Packages.PackageIndex
     Distribution.Server.Packages.Types
     Distribution.Server.Packages.Unpack
+    Distribution.Server.Packages.Utils
+    Distribution.Server.Packages.Utils.Acid
     Distribution.Server.Packages.Render
     Distribution.Server.Packages.ChangeLog
     Distribution.Server.Packages.Readme

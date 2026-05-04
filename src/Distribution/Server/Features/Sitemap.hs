@@ -17,6 +17,7 @@ import Distribution.Server.Features.Tags
 import Distribution.Package
 import Distribution.Text (display)
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import qualified Data.Map  as Map
@@ -232,7 +233,7 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarI
         [ ( prefixPkgURI ++ display (packageName pkg)
           , uploadtime)
         | pkg <- map head pkgss
-        , let (uploadtime, _user) = pkgLatestUploadInfo pkg
+        , let uploadtime = pkgLatestUploadTime pkg
         ]
         Daily 1.0
 

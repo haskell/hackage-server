@@ -46,6 +46,7 @@ import qualified Data.Graph as Gr
 import           Distribution.Package
 import           Distribution.PackageDescription
 import           Distribution.Server.Packages.Types
+import           Distribution.Server.Packages.Utils.Acid
 import           Distribution.Server.Framework.MemSize
 import           Distribution.Server.Features.PreferredVersions (maybeBestVersion)
 import           Distribution.Server.Features.PreferredVersions.State

@@ -50,6 +50,7 @@ import qualified Distribution.Server.Packages.Index                 as Packages.
 import           Distribution.Server.Packages.PackageIndex          (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex          as PackageIndex
 import           Distribution.Server.Packages.Types
+import           Distribution.Server.Packages.Utils
 import           Distribution.Server.Users.Types                    (UserId,
                                                                      userName)
 import           Distribution.Server.Users.Users                    (lookupUserId,
@@ -88,7 +89,7 @@ data CoreFeature = CoreFeature {
     -- If a package was able to be newly added, runs a `PackageChangeAdd` hook
     -- when done and returns True.
     updateAddPackage         :: forall m. MonadIO m => PackageId ->
-                                CabalFileText -> UploadInfo ->
+                                CabalFileText -> OldUploadInfo ->
                                 Maybe PkgTarball -> m Bool,
     -- | Deletes a version of an existing package, deleting the package if it
     -- was the last version.
@@ -103,14 +104,14 @@ data CoreFeature = CoreFeature {
     -- Runs either a `PackageChangeAdd` or `PackageChangeInfo` hook, depending
     -- on whether a package with the given version already existed.
     updateAddPackageRevision :: forall m. MonadIO m => PackageId ->
-                                CabalFileText -> UploadInfo -> m (),
+                                CabalFileText -> OldUploadInfo -> m (),
     -- | Sets the source tarball for an existing package version. References to
     -- previous tarballs, if any, are kept around.
     --
     -- If this package was found, runs a `PackageChangeInfo` hook when done and
     -- returns True.
     updateAddPackageTarball  :: forall m. MonadIO m => PackageId ->
-                                PkgTarball -> UploadInfo -> m Bool,
+                                PkgTarball -> OldUploadInfo -> m Bool,
     -- | Sets the uploader of an existing package version.
     --
     -- If this package was found, runs a `PackageChangeInfo` hook when done and
@@ -210,7 +211,7 @@ isPackageIndexChange = Just
 isPackageAddVersion                :: Maybe PackageId,
 isPackageDeleteVersion             :: Maybe PackageId,
 isPackageChangeCabalFile           :: Maybe (PackageId, CabalFileText),
-isPackageChangeCabalFileUploadInfo :: Maybe (PackageId, UploadInfo),
+isPackageChangeCabalFileUploadInfo :: Maybe (PackageId, OldUploadInfo),
 isPackageChangeTarball             :: Maybe (PackageId, PkgTarball),
 isPackageIndexExtraChange          :: Maybe (String, LazyByteString, UTCTime)
 -}
@@ -517,7 +518,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- Update transactions
     --
     updateAddPackage :: MonadIO m => PackageId
-                     -> CabalFileText -> UploadInfo
+                     -> CabalFileText -> OldUploadInfo
                      -> Maybe PkgTarball -> m Bool
     updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
       usersdb <- queryGetUserDb
@@ -548,7 +549,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           runHook_ packageChangeHook (PackageChangeDelete pkginfo)
           return True
 
-    updateAddPackageRevision :: MonadIO m => PackageId -> CabalFileText -> UploadInfo -> m ()
+    updateAddPackageRevision :: MonadIO m => PackageId -> CabalFileText -> OldUploadInfo -> m ()
     updateAddPackageRevision pkgid cabalfile uploadinfo@(_, uid) = logTiming maxBound ("updateAddPackageRevision " ++ display pkgid) $ do
       usersdb <- queryGetUserDb
       let Just userInfo = lookupUserId uid usersdb
@@ -565,7 +566,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
         Just oldpkginfo ->
           runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedCabalFile oldpkginfo newpkginfo)
 
-    updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
+    updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> OldUploadInfo -> m Bool
     updateAddPackageTarball pkgid tarball uploadinfo = logTiming maxBound ("updateAddPackageTarball " ++ display pkgid) $ do
       mpkginfo <- updateState packagesState (Acid.AddPackageTarball pkgid tarball uploadinfo)
 
@@ -720,9 +721,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       pkginfo <- packageInPath dpath >>= lookupPackageId
       -- check that the cabal name matches the package
       guard (lookup "cabal" dpath == Just (display $ packageName pkginfo))
-      let (fileRev, (utime, _uid)) = pkgLatestRevision pkginfo
-          cabalfile = Resource.CabalFile (fromStrict $ cabalFileByteString fileRev) utime
-      return $ toResponse cabalfile
+      let rev = pkgLatestRevision pkginfo
+      return $ toResponse $ toCabalResource rev
 
     serveCabalFileRevisionsList :: DynamicPath -> ServerPartE Response
     serveCabalFileRevisionsList dpath = do
@@ -746,12 +746,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       pkginfo <- packageInPath dpath >>= lookupPackageId
       let mrev      = lookup "revision" dpath >>= fromReqURI
       case mrev >>= pkgSpecificRevision pkginfo of
-        Just (fileRev, (utime, _uid)) -> return $ toResponse cabalfile
-          where
-            cabalfile = Resource.CabalFile (fromStrict $ cabalFileByteString fileRev) utime
+        Just rev -> return $ toResponse $ toCabalResource rev
         Nothing -> errNotFound "Package revision not found"
                      [MText "Cannot parse revision, or revision out of range."]
-
 
     deauth :: DynamicPath -> ServerPartE Response
     deauth _ = do

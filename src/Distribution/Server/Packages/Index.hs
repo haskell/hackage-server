@@ -18,9 +18,8 @@ import Distribution.Server.Framework.MemSize
 import Distribution.Server.Packages.Types
          ( CabalFileText(..), PkgInfo(..)
          , TarballRevIx, MetadataRevIx
-         , pkgSpecificRevision
-         , pkgLatestCabalFileText, pkgLatestUploadInfo
          )
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Metadata
 import Distribution.Server.Users.Users
          ( Users, userIdToName )
@@ -41,7 +40,6 @@ import Data.SafeCopy (base, deriveSafeCopy)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Vector as Vec
 import Data.ByteString.Lazy (LazyByteString, fromStrict)
 import System.FilePath.Posix
 import Data.Maybe (mapMaybe)
@@ -99,7 +97,7 @@ writeIncremental pkgs =
 
     mkTarEntry (CabalFileEntry pkgid revno timestamp userid username) = do
         pkginfo   <- PackageIndex.lookupPackageId pkgs pkgid
-        cabalfile <- fmap (cabalFileByteString . fst) $
+        cabalfile <- fmap (cabalFileByteString . metaRevCabalFile) $
                      pkgSpecificRevision pkginfo revno
         tarPath   <- either (const Nothing) Just $
                      Tar.toTarPath False fileName
@@ -176,7 +174,7 @@ writeLegacy users =
   . extraEntries
   where
     setModTime pkgInfo entry =
-      let (utime, uuser) = pkgLatestUploadInfo pkgInfo in
+      let (UploadInfo utime uuser) = pkgLatestUploadInfo pkgInfo in
       entry {
         Tar.entryTime      = utcToUnixTime utime,
         Tar.entryOwnership = Tar.Ownership {

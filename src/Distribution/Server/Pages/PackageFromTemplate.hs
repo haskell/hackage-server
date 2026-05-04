@@ -17,6 +17,7 @@ import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Users.Types (UserInfo, userStatus, userName, isActiveAccount)
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
@@ -333,7 +334,7 @@ candidatesPageTemplate cands candidates candidatesCore=
       ])
   ,"list"   $= (unordList $ map showCands $ PackageIndex.allPackagesByName cands)
   ]
-  where showCands pkgs = case packageDescription <$> pkgDescMaybe (candPkgInfo $ last pkgs) of
+  where showCands pkgs = case packageDescription <$> pkgDescMaybe (pkgLatestRevision $ candPkgInfo $ last pkgs) of
           Nothing -> []
           Just desc ->
                 -- TODO: Duncan changed this to packageSynopsis but without an

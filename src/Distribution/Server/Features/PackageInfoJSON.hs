@@ -38,7 +38,8 @@ import qualified Distribution.Server.Framework                as Framework
 import           Distribution.Server.Features.Core            (CoreFeature(..),
                                                                CoreResource(..))
 import qualified Distribution.Server.Features.PreferredVersions as Preferred
-import           Distribution.Server.Packages.Types           (CabalFileText(..), MetadataRevIx(..), pkgSpecificRevision, pkgLatestRevision, pkgMaxRevision, pkgNumRevisions)
+import           Distribution.Server.Packages.Types           (CabalFileText(..), MetadataRevIx(..))
+import           Distribution.Server.Packages.Utils
 
 import Distribution.Utils.ShortText (fromShortText)
 import Data.Foldable (toList)
@@ -244,7 +245,7 @@ servePackageBasicDescription resource userFeature preferred dpath = do
       guardValidPackageId resource pkgid
       pkg <- lookupPackageId resource pkgid
 
-      (metadataInd, (cabalFile, uploadInfo)) <- do
+      (metadataInd, rev) <- do
         case metadataRev of
           Nothing ->
             pure (pkgMaxRevision pkg, pkgLatestRevision pkg)
@@ -256,11 +257,13 @@ servePackageBasicDescription resource userFeature preferred dpath = do
                     $ "There are " <> show (pkgNumRevisions pkg) <> " metadata revisions. Index "
                     <> show ix <> " is out of bounds."]
               Just rev -> pure (ix, rev)
+      let cabalFile = metaRevCabalFile rev
+          uploadInfo = metaRevUploadInfo rev
 
       descr <- getPackageDescr cabalFile uploadInfo metadataInd
       return $ Framework.toResponse $ Aeson.toJSON descr
 
-    getPackageDescr cabalFile (uploadedAt, uploaderId) metadataInd = do
+    getPackageDescr cabalFile (UploadInfo uploadedAt uploaderId) metadataInd = do
       uploader <- userName <$> lookupUserInfo userFeature uploaderId
       let pkgDescr  = getBasicDescription uploadedAt cabalFile metadataInd
       case pkgDescr of
