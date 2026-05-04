@@ -89,26 +89,23 @@ pkgLatestTarball pkginfo =
     tarballs = pkgTarballRevisions pkginfo
 
 -- | The information held in a parsed .cabal file (used by cabal-install)
-pkgDesc :: PkgInfo -> GenericPackageDescription
-pkgDesc pkgInfo =
-    case runParseResult $ parseGenericPackageDescription $
-         cabalFileByteString $ metaRevCabalFile $
-         pkgLatestRevision pkgInfo of
-      -- We only make PkgInfos with parsable pkgDatas, so if it
-      -- doesn't parse then something has gone wrong.
-      (_, Left (_,es)) -> error ("Internal error: " ++ show es)
-      (_, Right x)     -> x
+pkgDesc :: MetadataRevision -> GenericPackageDescription
+pkgDesc = either (error . mappend "Internal error: ") id . pkgDescImpl
 
 -- | The information held in a parsed .cabal file, with nicer failure
-pkgDescMaybe :: PkgInfo -> Maybe GenericPackageDescription
-pkgDescMaybe pkgInfo =
+pkgDescMaybe :: MetadataRevision -> Maybe GenericPackageDescription
+pkgDescMaybe = either (const Nothing) Just . pkgDescImpl
+
+
+-- | The information held in a parsed .cabal file, with nicer failure
+pkgDescImpl :: MetadataRevision -> Either String GenericPackageDescription
+pkgDescImpl rev =
     case runParseResult $ parseGenericPackageDescription $
-         cabalFileByteString $ metaRevCabalFile $
-         pkgLatestRevision pkgInfo of
+         cabalFileByteString $ metaRevCabalFile rev of
       -- We only make PkgInfos with parsable pkgDatas, so if it
       -- doesn't parse then something has gone wrong.
-      (_, Left (_, _es)) -> Nothing
-      (_, Right x)     -> Just x
+      (_, Left (_, es)) -> Left $ show es
+      (_, Right x)     -> Right x
 
 fromOldUploadInfo :: OldUploadInfo -> UploadInfo
 fromOldUploadInfo = uncurry UploadInfo
