@@ -18,7 +18,7 @@ import qualified Data.Vector as Vec
 
 data MetadataRevision = MetadataRevision
   { metaRevCabalFile :: CabalFileText
-  , metaRevInfo :: UploadInfo
+  , metaRevUploadInfo :: UploadInfo
   }
   deriving stock Show
 
@@ -32,7 +32,7 @@ pkgOriginalRevision :: PkgInfo -> MetadataRevision
 pkgOriginalRevision = fromOldMetadataRev . Vec.head . pkgMetadataRevisions
 
 pkgOriginalUploadInfo :: PkgInfo -> UploadInfo
-pkgOriginalUploadInfo = metaRevInfo . pkgOriginalRevision
+pkgOriginalUploadInfo = metaRevUploadInfo . pkgOriginalRevision
 
 pkgOriginalUploadTime :: PkgInfo -> UTCTime
 pkgOriginalUploadTime = uploadInfoTime . pkgOriginalUploadInfo
@@ -64,7 +64,7 @@ pkgLatestCabalFileText :: PkgInfo -> CabalFileText
 pkgLatestCabalFileText = metaRevCabalFile . pkgLatestRevision
 
 pkgLatestUploadInfo :: PkgInfo -> UploadInfo
-pkgLatestUploadInfo = metaRevInfo . pkgLatestRevision
+pkgLatestUploadInfo = metaRevUploadInfo . pkgLatestRevision
 
 pkgLatestUploadTime :: PkgInfo -> UTCTime
 pkgLatestUploadTime = uploadInfoTime . pkgLatestUploadInfo

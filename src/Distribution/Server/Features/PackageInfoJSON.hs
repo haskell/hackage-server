@@ -245,7 +245,7 @@ servePackageBasicDescription resource userFeature preferred dpath = do
       guardValidPackageId resource pkgid
       pkg <- lookupPackageId resource pkgid
 
-      (metadataInd, (MetadataRevision cabalFile uploadInfo)) <- do
+      (metadataInd, rev) <- do
         case metadataRev of
           Nothing ->
             pure (pkgMaxRevision pkg, pkgLatestRevision pkg)
@@ -257,6 +257,8 @@ servePackageBasicDescription resource userFeature preferred dpath = do
                     $ "There are " <> show (pkgNumRevisions pkg) <> " metadata revisions. Index "
                     <> show ix <> " is out of bounds."]
               Just rev -> pure (ix, rev)
+      let cabalFile = metaRevCabalFile rev
+          uploadInfo = metaRevUploadInfo rev
 
       descr <- getPackageDescr cabalFile uploadInfo metadataInd
       return $ Framework.toResponse $ Aeson.toJSON descr
