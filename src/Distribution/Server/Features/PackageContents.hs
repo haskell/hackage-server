@@ -138,7 +138,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
       case mChangeLog of
         Left _ -> do
           let message = [MText "Package ", MLink pkgName url, MText " has no changelog file in source distribution. "]
-          let home = homepage $ packageDescription $ pkgDesc pkg
+          let home = homepage $ packageDescription $ pkgDesc $ pkgLatestRevision pkg
           if ST.null home then
             errNotFound "Changelog not found" message
           else

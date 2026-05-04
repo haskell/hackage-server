@@ -122,11 +122,11 @@ doPackageRender users info = PackageRender
     , rendHasTarball   = not . null $ pkgAllTarballs info
     , rendChangeLog    = Nothing -- populated later
     , rendReadme       = Nothing -- populated later
-    , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info
+    , rendUploadInfo   = let UploadInfo utime uid = pkgOriginalUploadInfo info
                          in (utime, Users.lookupUserId uid users)
-    , rendUpdateInfo   = let maxrevision  = pkgMaxRevision info
-                             (utime, uid) = pkgLatestUploadInfo info
-                             uinfo        = Users.lookupUserId uid users
+    , rendUpdateInfo   = let maxrevision          = pkgMaxRevision info
+                             UploadInfo utime uid = pkgLatestUploadInfo info
+                             uinfo                = Users.lookupUserId uid users
                          in if maxrevision > MetadataRevIx 0
                               then Just (maxrevision, utime, uinfo)
                               else Nothing
@@ -135,7 +135,7 @@ doPackageRender users info = PackageRender
     , rendOther        = desc
     }
   where
-    genDesc  = pkgDesc info
+    genDesc  = pkgDesc $ pkgLatestRevision info
     flatDesc = flattenPackageDescription genDesc
     desc     = packageDescription genDesc
     pkgUri   = "/package/" ++ display (pkgInfoId info)

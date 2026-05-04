@@ -233,7 +233,7 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex cachedTarI
         [ ( prefixPkgURI ++ display (packageName pkg)
           , uploadtime)
         | pkg <- map head pkgss
-        , let (uploadtime, _user) = pkgLatestUploadInfo pkg
+        , let uploadtime = pkgLatestUploadTime pkg
         ]
         Daily 1.0
 

@@ -581,7 +581,7 @@ userNotifyFeature UserFeature{..}
                   NotifyNewRevision
                     { notifyPackageId = pkgInfoId pkg
                     , notifyRevisions =
-                        filter (\(t, _) -> earlier < t && t <= now)
+                        filter ((\t -> earlier < t && t <= now) . uploadInfoTime)
                           $ pkgAllRevisionsUploadInfos pkg
                     }
               else do
@@ -801,14 +801,15 @@ getNotificationEmails
     renderNotifyNewVersion pkg =
       EmailContentParagraph $
         "Package upload, " <> renderPkgLink (pkgInfoId pkg) <> ", by " <>
-        renderUserTime (pkgLatestUploadUser pkg) (pkgLatestUploadTime pkg)
+        renderUploadInfo (UploadInfo (pkgLatestUploadTime pkg) (pkgLatestUploadUser pkg))
 
+    renderNotifyNewRevision :: PackageIdentifier -> [UploadInfo] -> EmailContent
     renderNotifyNewRevision pkg revs =
       EmailContentParagraph ("Package metadata revision(s), " <> renderPkgLink pkg <> ":")
-      <> EmailContentList (map (uncurry $ flip renderUserTime) $ sortOn (Down . fst) revs)
+      <> EmailContentList (map renderUploadInfo $ sortOn (Down . uploadInfoTime) revs)
 
     renderNotifyMaintainerUpdate updateType userActor userSubject pkg reason time =
-      EmailContentParagraph ("Group modified by " <> renderUserTime userActor time <> ":")
+      EmailContentParagraph ("Group modified by " <> renderUploadInfo (UploadInfo time userActor) <> ":")
       <> EmailContentList
           [ case updateType of
               MaintainerAdded ->
@@ -875,7 +876,7 @@ getNotificationEmails
 
     renderTime = emailContentStr . formatTime defaultTimeLocale "%c"
 
-    renderUserTime u t = renderUser u <> " [" <> renderTime t <> "]"
+    renderUploadInfo (UploadInfo t u) = renderUser u <> " [" <> renderTime t <> "]"
 
 {----- Utilities -----}
 

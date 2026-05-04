@@ -143,7 +143,7 @@ makeRow users pkginfo =
     nbsp = XHtml.primHtmlChar "nbsp"
     user = Users.userIdToName users userId
 
-    (time, userId) = pkgOriginalUploadInfo pkginfo
+    UploadInfo time userId = pkgOriginalUploadInfo pkginfo
     pkgid = pkgInfoId pkginfo
 
 makeRevisionRow :: Users -> PkgInfo -> Html
@@ -159,7 +159,7 @@ makeRevisionRow users pkginfo =
     nbsp = XHtml.primHtmlChar "nbsp"
     user = Users.userIdToName users userId
 
-    (time, userId) = pkgLatestUploadInfo pkginfo
+    UploadInfo time userId = pkgLatestUploadInfo pkginfo
     pkgid = pkgInfoId pkginfo
     revno = "-r" ++ show (pkgNumRevisions pkginfo - 1)
     revlabel = [XHtml.toHtml (display pkgid), XHtml.toHtml revno]
@@ -202,7 +202,7 @@ recentFeed conf users hostURI now pkgs = RSS
     (start,end) = pageIndexRange conf
     desc = "Showing " ++ show start ++ " - " ++ show end ++ " most recent additions to Hackage, the Haskell package database."
     pkgList = paginate conf pkgs
-    updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
+    updated = maybe now pkgOriginalUploadTime (listToMaybe pkgList)
 
 recentRevisionsFeed :: PaginatedConfiguration -> Users -> URI -> UTCTime -> [PkgInfo] -> RSS
 recentRevisionsFeed conf users hostURI now pkgs = RSS
@@ -215,7 +215,7 @@ recentRevisionsFeed conf users hostURI now pkgs = RSS
     (start, end) = pageIndexRange conf
     desc = "Showing " ++ show start ++ " - " ++ show end ++ " most recent revisions to cabal metadata in Hackage, the Haskell package database."
     pkgList = paginate conf pkgs
-    updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
+    updated = maybe now pkgOriginalUploadTime (listToMaybe pkgList)
 
 channel :: UTCTime -> [RSS.ChannelElem]
 channel updated =
@@ -245,7 +245,7 @@ releaseItem users hostURI pkgInfo =
          ++ if null body then "" else "<p>" ++ body ++ "</p>"
     user = Users.userIdToName users userId
 
-    (time, userId) = pkgOriginalUploadInfo pkgInfo
+    UploadInfo time userId = pkgOriginalUploadInfo pkgInfo
     pkgId = pkgInfoId pkgInfo
 
 revisionItem :: Users -> URI -> PkgInfo -> [RSS.ItemElem]
@@ -266,5 +266,5 @@ revisionItem users hostURI pkgInfo =
     user = Users.userIdToName users userId
     revision = pkgNumRevisions pkgInfo - 1
 
-    (time, userId) = pkgLatestUploadInfo pkgInfo
+    UploadInfo time userId = pkgLatestUploadInfo pkgInfo
     pkgId = pkgInfoId pkgInfo

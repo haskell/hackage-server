@@ -264,7 +264,7 @@ listFeature CoreFeature{..}
         let pkgs = PackageIndex.lookupPackageName index pkgname
         case pkgs of
            [] -> modifyMemState itemCache (Map.delete pkgname)
-           _  -> modifyItem pkgname (updateDescriptionItem $ pkgDesc $ last pkgs)
+           _  -> modifyItem pkgname (updateDescriptionItem $ pkgDesc $ pkgLatestRevision $ last pkgs)
         runHook_ itemUpdate (Set.singleton pkgname)
 
     refreshDownloads = do
@@ -284,7 +284,7 @@ listFeature CoreFeature{..}
     constructItem :: PkgInfo -> IO (PackageName, PackageItem)
     constructItem pkg = do
         let pkgname = packageName pkg
-            desc = pkgDesc pkg
+            desc = pkgDesc $ pkgLatestRevision pkg
         intRevDirectCount <- revDirectCount pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname

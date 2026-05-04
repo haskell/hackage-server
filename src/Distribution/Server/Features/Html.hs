@@ -641,7 +641,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             pkgname = packageName realpkg
             docURL  = packageDocsContentUri docs realpkg
             execs   = rendExecNames render
-            pkgdesc = flattenPackageDescription $ pkgDesc pkg
+            pkgdesc = flattenPackageDescription $ pkgDesc $ pkgLatestRevision pkg
             maintainers = maintainersGroup pkgname
 
         prefInfo      <- queryGetPreferredInfo pkgname
@@ -836,10 +836,10 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
                                   revchanges
         ]
       where
-        revisionToTemplate :: Users.Users -> OldUploadInfo -> Int
+        revisionToTemplate :: Users.Users -> UploadInfo -> Int
                            -> (SHA256Digest, [Change])
                            -> TemplateVal
-        revisionToTemplate users (utime, uid) revision (sha256hash, changes) =
+        revisionToTemplate users (UploadInfo utime uid) revision (sha256hash, changes) =
           let uname = Users.userIdToName users uid
            in templateDict
                 [ templateVal "number" revision

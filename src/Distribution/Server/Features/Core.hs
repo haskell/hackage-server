@@ -721,9 +721,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       pkginfo <- packageInPath dpath >>= lookupPackageId
       -- check that the cabal name matches the package
       guard (lookup "cabal" dpath == Just (display $ packageName pkginfo))
-      let (fileRev, (utime, _uid)) = pkgLatestRevision pkginfo
-          cabalfile = Resource.CabalFile (fromStrict $ cabalFileByteString fileRev) utime
-      return $ toResponse cabalfile
+      let rev = pkgLatestRevision pkginfo
+      return $ toResponse $ toCabalResource rev
 
     serveCabalFileRevisionsList :: DynamicPath -> ServerPartE Response
     serveCabalFileRevisionsList dpath = do
@@ -747,12 +746,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       pkginfo <- packageInPath dpath >>= lookupPackageId
       let mrev      = lookup "revision" dpath >>= fromReqURI
       case mrev >>= pkgSpecificRevision pkginfo of
-        Just (fileRev, (utime, _uid)) -> return $ toResponse cabalfile
-          where
-            cabalfile = Resource.CabalFile (fromStrict $ cabalFileByteString fileRev) utime
+        Just rev -> return $ toResponse $ toCabalResource rev
         Nothing -> errNotFound "Package revision not found"
                      [MText "Cannot parse revision, or revision out of range."]
-
 
     deauth :: DynamicPath -> ServerPartE Response
     deauth _ = do

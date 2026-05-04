@@ -334,7 +334,7 @@ candidatesPageTemplate cands candidates candidatesCore=
       ])
   ,"list"   $= (unordList $ map showCands $ PackageIndex.allPackagesByName cands)
   ]
-  where showCands pkgs = case packageDescription <$> pkgDescMaybe (candPkgInfo $ last pkgs) of
+  where showCands pkgs = case packageDescription <$> pkgDescMaybe (pkgLatestRevision $ candPkgInfo $ last pkgs) of
           Nothing -> []
           Just desc ->
                 -- TODO: Duncan changed this to packageSynopsis but without an

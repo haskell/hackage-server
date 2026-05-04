@@ -10,6 +10,7 @@ import Distribution.Pretty
 
 import Distribution.Server.Features.Tags.Types
 import Distribution.Server.Framework
+import Distribution.Server.Packages.Utils (UploadInfo)
 import Distribution.Server.Packages.Types (OldUploadInfo, PkgInfo)
 import Distribution.Server.Users.Types (UserId)
 
@@ -62,7 +63,7 @@ data Notification
       }
   | NotifyNewRevision
       { notifyPackageId :: PackageId
-      , notifyRevisions :: [OldUploadInfo]
+      , notifyRevisions :: [UploadInfo]
       }
   | NotifyMaintainerUpdate
       { notifyMaintainerUpdateType :: NotifyMaintainerUpdateType

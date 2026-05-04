@@ -102,7 +102,7 @@ renderPackageFeed users hostURI now name pkgs = RSS title uri desc (channel upda
         desc = "New releases of package '" ++ unPackageName name ++ "' on Hackage."
         items = feedItems users uri <$> pkgs
         uri = hostURI { uriPath = "/package/" ++ display name }
-        updated = maybe now (fst . pkgOriginalUploadInfo . fst) (listToMaybe pkgs)
+        updated = maybe now (pkgOriginalUploadTime . fst) (listToMaybe pkgs)
 
 channel :: UTCTime -> [RSS.ChannelElem]
 channel updated =
@@ -132,8 +132,8 @@ feedItems users hostURI (pkgInfo, chlog) =
           , d "Maintainer" $ maintainer pd
           ] +++ XHtml.hr +++ chlog
         pkgName = display (pkgInfoId pkgInfo)
-        (time, uploaderId) = pkgOriginalUploadInfo pkgInfo
+        UploadInfo time uploaderId = pkgOriginalUploadInfo pkgInfo
         timestr = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" time
         uploader = display $ Users.userIdToName users uploaderId
-        pd = packageDescription (pkgDesc pkgInfo)
+        pd = packageDescription $ pkgDesc $ pkgLatestRevision pkgInfo
         d dt dd = XHtml.dterm (XHtml.toHtml dt) +++ XHtml.ddef (XHtml.toHtml dd)

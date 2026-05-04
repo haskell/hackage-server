@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+
 module Distribution.Server.Packages.Utils where
 
 import Distribution.Server.Packages.Types
@@ -8,7 +10,9 @@ import Distribution.PackageDescription
          ( GenericPackageDescription(..))
 import Distribution.PackageDescription.Parsec
          ( parseGenericPackageDescription, runParseResult )
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
+import Data.ByteString.Lazy (fromStrict)
 import Data.Time.Clock (UTCTime(..))
 import qualified Data.Vector as Vec
 
@@ -16,11 +20,13 @@ data MetadataRevision = MetadataRevision
   { metaRevCabalFile :: CabalFileText
   , metaRevInfo :: UploadInfo
   }
+  deriving stock Show
 
 data UploadInfo = UploadInfo
   { uploadInfoTime :: UTCTime
   , uploadInfoUser :: UserId
   }
+  deriving stock Show
 
 pkgOriginalRevision :: PkgInfo -> MetadataRevision
 pkgOriginalRevision = fromOldMetadataRev . Vec.head . pkgMetadataRevisions
@@ -48,8 +54,8 @@ pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
 pkgSpecificTarball :: PkgInfo -> TarballRevIx -> Maybe (PkgTarball, UploadInfo)
 pkgSpecificTarball pkg (TarballRevIx revno) = fmap (fmap fromOldUploadInfo) $ pkgTarballRevisions pkg Vec.!? revno
 
-pkgAllTarballs :: PkgInfo -> [(PkgTarball, UploadInfo)]
-pkgAllTarballs = fmap (fmap fromOldUploadInfo) . Vec.toList . pkgTarballRevisions
+pkgAllTarballs :: PkgInfo -> [(PkgTarball, OldUploadInfo)]
+pkgAllTarballs = Vec.toList . pkgTarballRevisions
 
 pkgAllRevisionsUploadInfos :: PkgInfo -> [UploadInfo]
 pkgAllRevisionsUploadInfos = fmap (fromOldUploadInfo . snd) . Vec.toList . pkgMetadataRevisions
@@ -79,12 +85,12 @@ pkgMaxRevision = MetadataRevIx . subtract 1 . pkgNumRevisions
 -- and revision number. The revision number will normally be 1, but may be
 -- higher if more tarballs were uploaded for this package (on the central
 -- Hackage server we disallow this).
-pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, UploadInfo, Int)
+pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, OldUploadInfo, Int)
 pkgLatestTarball pkginfo =
    if Vec.null tarballs
      then Nothing
-     else let (tarball, (when, who)) = Vec.last tarballs
-          in Just (tarball, UploadInfo when who, Vec.length tarballs - 1)
+     else let (tarball, oui) = Vec.last tarballs
+          in Just (tarball, oui, Vec.length tarballs - 1)
   where
     tarballs = pkgTarballRevisions pkginfo
 
@@ -106,6 +112,11 @@ pkgDescImpl rev =
       -- doesn't parse then something has gone wrong.
       (_, Left (_, es)) -> Left $ show es
       (_, Right x)     -> Right x
+
+
+toCabalResource :: MetadataRevision -> Resource.CabalFile
+toCabalResource (MetadataRevision fileRev ui) =
+  Resource.CabalFile (fromStrict $ cabalFileByteString fileRev) $ uploadInfoTime ui
 
 fromOldUploadInfo :: OldUploadInfo -> UploadInfo
 fromOldUploadInfo = uncurry UploadInfo

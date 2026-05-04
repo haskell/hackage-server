@@ -99,7 +99,7 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
 --      resourceGet = [("json", \_ -> suggestJson)]
 --    }
 
-    getSearchDoc = flattenPackageDescription . pkgDesc
+    getSearchDoc = flattenPackageDescription . pkgDesc . pkgLatestRevision
 
     postInit = do
       pkgindex     <- queryGetPackageIndex

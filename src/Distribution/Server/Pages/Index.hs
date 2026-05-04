@@ -29,6 +29,7 @@ packageIndex = formatPkgGroups
                  . map (mkPackageIndexInfo
                       . flattenPackageDescription
                       . pkgDesc
+                      . pkgLatestRevision
                       . maximumBy (comparing packageVersion))
                  . PackageIndex.allPackagesByName
 
