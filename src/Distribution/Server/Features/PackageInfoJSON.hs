@@ -38,7 +38,8 @@ import qualified Distribution.Server.Framework                as Framework
 import           Distribution.Server.Features.Core            (CoreFeature(..),
                                                                CoreResource(..))
 import qualified Distribution.Server.Features.PreferredVersions as Preferred
-import           Distribution.Server.Packages.Types           (CabalFileText(..), MetadataRevIx(..), pkgSpecificRevision, pkgLatestRevision, pkgMaxRevision, pkgNumRevisions)
+import           Distribution.Server.Packages.Types           (CabalFileText(..), MetadataRevIx(..))
+import           Distribution.Server.Packages.Utils           (pkgSpecificRevision, pkgLatestRevision, pkgMaxRevision, pkgNumRevisions)
 
 import Distribution.Utils.ShortText (fromShortText)
 import Data.Foldable (toList)

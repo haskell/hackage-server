@@ -14,6 +14,7 @@ import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Readme
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Render
 import Distribution.Server.Features.Users
 import Distribution.Server.Util.ServeTarball

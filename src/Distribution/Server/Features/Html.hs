@@ -42,6 +42,7 @@ import qualified Distribution.Server.Features.BuildReports.BuildReport as BR
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex

@@ -21,7 +21,6 @@ import Control.Arrow ((&&&), (***))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Vector as Vec
 import Data.List (intercalate)
 import Data.Time.Clock (UTCTime)
 import System.FilePath.Posix ((</>), (<.>))
@@ -47,6 +46,7 @@ import Distribution.Types.LibraryVisibility (LibraryVisibility(LibraryVisibility
 -- hackage-server
 import Distribution.Server.Framework.CacheControl (ETag)
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.ModuleForest
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types

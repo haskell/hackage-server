@@ -31,6 +31,7 @@ import Distribution.Server.Features.Security.Layout
 import Distribution.Server.Framework hiding (Length)
 import Distribution.Server.Framework.BlobStorage
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Util.ReadDigest
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 

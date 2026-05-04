@@ -32,10 +32,6 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
-import Distribution.PackageDescription
-         ( GenericPackageDescription(..))
-import Distribution.PackageDescription.Parsec
-         ( parseGenericPackageDescription, runParseResult )
 
 import Data.Aeson (ToJSON)
 import Data.Serialize (Serialize)
@@ -180,93 +176,6 @@ instance SafeCopy TarballRevIx where
 
 cabalFileString :: CabalFileText -> String
 cabalFileString = unpackUTF8Strict . cabalFileByteString
-
-pkgOriginalRevision :: PkgInfo -> (CabalFileText, UploadInfo)
-pkgOriginalRevision = Vec.head . pkgMetadataRevisions
-
-pkgOriginalUploadInfo :: PkgInfo -> UploadInfo
-pkgOriginalUploadInfo = snd . pkgOriginalRevision
-
-pkgOriginalUploadTime :: PkgInfo -> UTCTime
-pkgOriginalUploadTime = fst . pkgOriginalUploadInfo
-
-pkgOriginalUploadUser :: PkgInfo -> UserId
-pkgOriginalUploadUser = snd . pkgOriginalUploadInfo
-
-pkgLatestRevision :: PkgInfo -> (CabalFileText, UploadInfo)
-pkgLatestRevision = Vec.last . pkgMetadataRevisions
-
-pkgSpecificRevision :: PkgInfo -> MetadataRevIx -> Maybe (CabalFileText, UploadInfo)
-pkgSpecificRevision pkg (MetadataRevIx revno) = pkgMetadataRevisions pkg Vec.!? revno
-
-pkgAllRevisionsCabalFiles :: PkgInfo -> [CabalFileText]
-pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
-
-pkgSpecificTarball :: PkgInfo -> TarballRevIx -> Maybe (PkgTarball, UploadInfo)
-pkgSpecificTarball pkg (TarballRevIx revno) = pkgTarballRevisions pkg Vec.!? revno
-
-pkgAllTarballs :: PkgInfo -> [(PkgTarball, UploadInfo)]
-pkgAllTarballs = Vec.toList . pkgTarballRevisions
-
-pkgAllRevisionsUploadInfos :: PkgInfo -> [UploadInfo]
-pkgAllRevisionsUploadInfos = fmap snd . Vec.toList . pkgMetadataRevisions
-
-pkgLatestCabalFileText :: PkgInfo -> CabalFileText
-pkgLatestCabalFileText = fst . pkgLatestRevision
-
-pkgLatestUploadInfo :: PkgInfo -> UploadInfo
-pkgLatestUploadInfo = snd . pkgLatestRevision
-
-pkgLatestUploadTime :: PkgInfo -> UTCTime
-pkgLatestUploadTime = fst . pkgLatestUploadInfo
-
-pkgLatestUploadUser :: PkgInfo -> UserId
-pkgLatestUploadUser = snd . pkgLatestUploadInfo
-
-pkgNumRevisions :: PkgInfo -> Int
-pkgNumRevisions = Vec.length . pkgMetadataRevisions
-
-pkgMaxRevision :: PkgInfo -> MetadataRevIx
-pkgMaxRevision = MetadataRevIx . subtract 1 . pkgNumRevisions
-
--- | The latest tarball for a package (if any)
---
--- For packages with a @.cabal@ file but no tarball we return 'Nothing'.
--- For other package we return the latest tarball, corresponding upload info
--- and revision number. The revision number will normally be 1, but may be
--- higher if more tarballs were uploaded for this package (on the central
--- Hackage server we disallow this).
-pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, UploadInfo, Int)
-pkgLatestTarball pkginfo =
-   if Vec.null tarballs
-     then Nothing
-     else let (tarball, uploadInfo) = Vec.last tarballs
-          in Just (tarball, uploadInfo, Vec.length tarballs - 1)
-  where
-    tarballs = pkgTarballRevisions pkginfo
-
--- | The information held in a parsed .cabal file (used by cabal-install)
-pkgDesc :: PkgInfo -> GenericPackageDescription
-pkgDesc pkgInfo =
-    case runParseResult $ parseGenericPackageDescription $
-         cabalFileByteString $ fst $
-         pkgLatestRevision pkgInfo of
-      -- We only make PkgInfos with parsable pkgDatas, so if it
-      -- doesn't parse then something has gone wrong.
-      (_, Left (_,es)) -> error ("Internal error: " ++ show es)
-      (_, Right x)     -> x
-
--- | The information held in a parsed .cabal file, with nicer failure
-pkgDescMaybe :: PkgInfo -> Maybe GenericPackageDescription
-pkgDescMaybe pkgInfo =
-    case runParseResult $ parseGenericPackageDescription $
-         cabalFileByteString $ fst $
-         pkgLatestRevision pkgInfo of
-      -- We only make PkgInfos with parsable pkgDatas, so if it
-      -- doesn't parse then something has gone wrong.
-      (_, Left (_, _es)) -> Nothing
-      (_, Right x)     -> Just x
-
 
 blobInfoFromBS :: BlobId -> LazyByteString -> BlobInfo
 blobInfoFromBS blobId bs = BlobInfo {

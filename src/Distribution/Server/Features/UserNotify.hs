@@ -33,6 +33,7 @@ import Distribution.Server.Users.Types (UserId, UserInfo (..))
 import Distribution.Server.Users.UserIdSet as UserIdSet
 
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Framework

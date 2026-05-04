@@ -50,6 +50,7 @@ import qualified Distribution.Server.Packages.Index                 as Packages.
 import           Distribution.Server.Packages.PackageIndex          (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex          as PackageIndex
 import           Distribution.Server.Packages.Types
+import           Distribution.Server.Packages.Utils
 import           Distribution.Server.Users.Types                    (UserId,
                                                                      userName)
 import           Distribution.Server.Users.Users                    (lookupUserId,

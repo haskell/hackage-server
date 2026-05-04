@@ -14,7 +14,7 @@ import Distribution.Server.Features.Search.PkgSearch
 import qualified Distribution.Server.Features.Search.SearchEngine as SearchEngine
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
-import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 
 import Distribution.Package
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)

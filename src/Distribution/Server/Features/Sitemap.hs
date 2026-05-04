@@ -17,6 +17,7 @@ import Distribution.Server.Features.Tags
 import Distribution.Package
 import Distribution.Text (display)
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import qualified Data.Map  as Map

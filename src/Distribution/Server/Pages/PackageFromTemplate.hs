@@ -17,6 +17,7 @@ import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Users.Types (UserInfo, userStatus, userName, isActiveAccount)
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)

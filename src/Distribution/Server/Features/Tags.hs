@@ -22,6 +22,7 @@ import Distribution.Server.Features.Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Render (categorySplit)
 import Distribution.Utils.ShortText (fromShortText)
 

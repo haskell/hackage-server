@@ -8,6 +8,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Framework
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Util.Parse (unpackUTF8)

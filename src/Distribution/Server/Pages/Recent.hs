@@ -9,6 +9,7 @@ module Distribution.Server.Pages.Recent (
   ) where
 
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Pages.Template
@@ -58,7 +59,7 @@ recentPage conf users pkgs =
 
 
 pageSizeForm :: URL -> Html
-pageSizeForm base = 
+pageSizeForm base =
   let pageSizeLabel = XHtml.label ! [XHtml.thefor "pageSize"] << "Page Size: "
       pageSizeInput = XHtml.input ! [XHtml.thetype "number", XHtml.name "pageSize", XHtml.strAttr "min" "0"]
       submitButton = XHtml.button ! [XHtml.thetype "submit"] << "Submit"
@@ -66,20 +67,20 @@ pageSizeForm base =
   in theForm << (pageSizeLabel <> pageSizeInput <> submitButton)
 
 
-paginator :: PaginatedConfiguration -> URL -> Html 
-paginator pc@PaginatedConfiguration{currPage} baseUrl = 
-  let 
+paginator :: PaginatedConfiguration -> URL -> Html
+paginator pc@PaginatedConfiguration{currPage} baseUrl =
+  let
     info = XHtml.thediv << pagingInfo pc
 
-    next = XHtml.anchor ! [XHtml.href (fromMaybe "" (nextURL baseUrl pc)) | hasNext pc] << "Next" 
+    next = XHtml.anchor ! [XHtml.href (fromMaybe "" (nextURL baseUrl pc)) | hasNext pc] << "Next"
     prev = XHtml.anchor ! [XHtml.href (fromMaybe "" (prevURL baseUrl pc)) | hasPrev pc] << "Previous"
-      
+
 
     pagedURLS = zip [1..] (allPagedURLs baseUrl pc)
-    pagedLinks = (\(x,y) -> XHtml.anchor ! [XHtml.href y, 
+    pagedLinks = (\(x,y) -> XHtml.anchor ! [XHtml.href y,
       if currPage == x then XHtml.theclass "current" else noAttr ] << show x) <$> pagedURLS
 
-    wrapper = XHtml.thediv ! [XHtml.theclass "paginator"] << 
+    wrapper = XHtml.thediv ! [XHtml.theclass "paginator"] <<
       (prev <> reducePagedLinks pc pagedLinks <> next)
 
 
@@ -100,10 +101,10 @@ reducePagedLinks PaginatedConfiguration{currPage} xs
         fillLast x = insertAt (pred . length $ x) filler x
         keepFirstPages x = case splitAt (length x - 2) x of (hts, hts') -> take 5 hts ++ hts'
         keepLastPages x = case splitAt 2 x of (hts, hts') -> hts ++ takeLast 5 hts'
-        keepMiddlePages x = 
-          case splitAt currPage x of (hts, hts') -> take 2 hts ++ [last hts] ++ take 2 hts' 
+        keepMiddlePages x =
+          case splitAt currPage x of (hts, hts') -> take 2 hts ++ [last hts] ++ take 2 hts'
                                       ++ takeLast 2 hts'
-                                      
+
 insertAt :: Int -> a -> [a] -> [a]
 insertAt n a x = case splitAt n x of (hts, hts') -> hts ++ [a] ++ hts'
 
@@ -217,7 +218,7 @@ recentRevisionsFeed conf users hostURI now pkgs = RSS
     updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
 
 channel :: UTCTime -> [RSS.ChannelElem]
-channel updated = 
+channel updated =
   [ RSS.Language "en"
   , RSS.ManagingEditor email
   , RSS.WebMaster email
