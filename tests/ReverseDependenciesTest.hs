@@ -38,6 +38,7 @@ import Distribution.Server.Framework.Hook (newHook)
 import Distribution.Server.Framework.MemState (newMemStateWHNF)
 import Distribution.Server.Framework.ServerEnv (ServerEnv(..))
 import Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Types (CabalFileText(..), PkgInfo(..))
 import Distribution.Server.Framework.Templating
 import Distribution.Server.Users.Types
@@ -330,14 +331,13 @@ getNotificationEmailsTests =
                   }
             }
     , testGolden "Render NotifyNewRevision" "getNotificationEmails-NotifyNewRevision.golden" $ do
-        let mkRev rev = (CabalFileText "", (rev, userActor))
-            rev0 = (0 * Time.nominalDay) `Time.addUTCTime` timestamp
+        let rev0 = (0 * Time.nominalDay) `Time.addUTCTime` timestamp
             rev1 = (1 * Time.nominalDay) `Time.addUTCTime` timestamp
             rev2 = (2 * Time.nominalDay) `Time.addUTCTime` timestamp
         fmap renderMail . getNotificationEmailMocked userWatcher $
           NotifyNewRevision
             { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
-            , notifyRevisions = map (, userActor) [rev1, rev2]
+            , notifyRevisions = map (flip UploadInfo userActor) [rev1, rev2]
             }
     , testGolden "Render NotifyMaintainerUpdate-MaintainerAdded" "getNotificationEmails-NotifyMaintainerUpdate-MaintainerAdded.golden" $
         fmap renderMail . getNotificationEmailMocked userWatcher $
@@ -421,7 +421,7 @@ getNotificationEmailsTests =
           getNotificationEmailsMocked . map (userWatcher,) $
             [ NotifyNewRevision
                 { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
-                , notifyRevisions = [(timestamp, userActor)]
+                , notifyRevisions = [UploadInfo timestamp userActor]
                 }
             , NotifyDocsBuild
                 { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
@@ -544,12 +544,13 @@ getNotificationEmailsTests =
     genPackageId = PackageIdentifier <$> genPackageName <*> genVersion
     genCabalFileText = CabalFileText <$> Gen.utf8 (Range.linear 0 50000) Gen.unicode
     genNonExistentUserId = UserId <$> Gen.int (Range.linear (-1000) (-1))
-    genUploadInfo = (,) <$> genUTCTime <*> genNonExistentUserId
+    genOldUploadInfo = (,) <$> genUTCTime <*> genNonExistentUserId
+    genUploadInfo = fmap fromOldUploadInfo genOldUploadInfo
     genTag = Tag <$> Gen.string (Range.linear 1 10) Gen.unicode
     genPkgInfo =
       PkgInfo
         <$> genPackageId
-        <*> genVec (Range.linear 1 5) ((,) <$> genCabalFileText <*> genUploadInfo)
+        <*> genVec (Range.linear 1 5) ((,) <$> genCabalFileText <*> genOldUploadInfo)
         <*> pure Vector.empty -- ignoring pkgTarballRevisions for now
 
 genPacks :: PropertyT IO [Package TestPackage]
