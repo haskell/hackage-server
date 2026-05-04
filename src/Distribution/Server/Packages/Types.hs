@@ -63,7 +63,7 @@ data PkgInfo = PkgInfo {
     -- | The .cabal file text. This includes all revisions, indexed from the
     -- original vision (revision 0). This is always non-empty.
     --
-    pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, UploadInfo)),
+    pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, OldUploadInfo)),
 
     -- | The package .tar.gz file. This includes all revisions but is typically
     -- of length 1. It can be empty (to allow a multi-stage upload process, or
@@ -71,22 +71,22 @@ data PkgInfo = PkgInfo {
     -- of just the latest packages). The representation allows multiple versions
     -- but the normal policy is not to allow replacing the tarball.
     --
-    pkgTarballRevisions :: !(Vec.Vector (PkgTarball, UploadInfo))
+    pkgTarballRevisions :: !(Vec.Vector (PkgTarball, OldUploadInfo))
 
 } deriving (Eq, Show)
 
 data PkgInfo_v2 = PkgInfo_v2 {
     v2_pkgInfoId            :: !PackageIdentifier,
-    v2_pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, UploadInfo)),
-    v2_pkgTarballRevisions  :: !(Vec.Vector (PkgTarball, UploadInfo))
+    v2_pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, OldUploadInfo)),
+    v2_pkgTarballRevisions  :: !(Vec.Vector (PkgTarball, OldUploadInfo))
 }
 
 data PkgInfo_v1 = PkgInfo_v1 {
     v1_pkgInfoId     :: !PackageIdentifier,
     v1_pkgData       :: !CabalFileText,
-    v1_pkgTarball    :: ![(PkgTarball, UploadInfo)],
-    v1_pkgDataOld    :: ![(CabalFileText, UploadInfo)],
-    v1_pkgUploadData :: !UploadInfo
+    v1_pkgTarball    :: ![(PkgTarball, OldUploadInfo)],
+    v1_pkgDataOld    :: ![(CabalFileText, OldUploadInfo)],
+    v1_pkgUploadData :: !OldUploadInfo
 }
 
 data PkgInfo_v0 = PkgInfo_v0  !PackageIdentifier_v0 !CabalFileText
@@ -121,7 +121,7 @@ data PkgTarball_v1 = PkgTarball_v1 {
 
 data PkgTarball_v0 = PkgTarball_v0 !BlobId_v0 !BlobId_v0
 
-type UploadInfo = (UTCTime, UserId)
+type OldUploadInfo = (UTCTime, UserId)
 type UploadInfo_v0 = (UTCTime_v0, UserId_v0)
 
 newtype UTCTime_v0 = UTCTime_v0 UTCTime

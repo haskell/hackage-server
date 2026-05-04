@@ -10,7 +10,7 @@ import Distribution.Pretty
 
 import Distribution.Server.Features.Tags.Types
 import Distribution.Server.Framework
-import Distribution.Server.Packages.Types (UploadInfo, PkgInfo)
+import Distribution.Server.Packages.Types (OldUploadInfo, PkgInfo)
 import Distribution.Server.Users.Types (UserId)
 
 import Data.Aeson.TH (defaultOptions, deriveJSON)
@@ -62,7 +62,7 @@ data Notification
       }
   | NotifyNewRevision
       { notifyPackageId :: PackageId
-      , notifyRevisions :: [UploadInfo]
+      , notifyRevisions :: [OldUploadInfo]
       }
   | NotifyMaintainerUpdate
       { notifyMaintainerUpdateType :: NotifyMaintainerUpdateType

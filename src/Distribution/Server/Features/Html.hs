@@ -836,7 +836,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
                                   revchanges
         ]
       where
-        revisionToTemplate :: Users.Users -> UploadInfo -> Int
+        revisionToTemplate :: Users.Users -> OldUploadInfo -> Int
                            -> (SHA256Digest, [Change])
                            -> TemplateVal
         revisionToTemplate users (utime, uid) revision (sha256hash, changes) =
