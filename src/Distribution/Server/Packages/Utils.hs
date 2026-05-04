@@ -12,47 +12,59 @@ import Distribution.PackageDescription.Parsec
 import Data.Time.Clock (UTCTime(..))
 import qualified Data.Vector as Vec
 
-pkgOriginalRevision :: PkgInfo -> (CabalFileText, OldUploadInfo)
-pkgOriginalRevision = Vec.head . pkgMetadataRevisions
+data MetadataRevision = MetadataRevision
+  { metaRevCabalFile :: CabalFileText
+  , metaRevInfo :: UploadInfo
+  }
 
-pkgOriginalUploadInfo :: PkgInfo -> OldUploadInfo
-pkgOriginalUploadInfo = snd . pkgOriginalRevision
+data UploadInfo = UploadInfo
+  { uploadInfoTime :: UTCTime
+  , uploadInfoUser :: UserId
+  }
+
+pkgOriginalRevision :: PkgInfo -> MetadataRevision
+pkgOriginalRevision = fromOldMetadataRev . Vec.head . pkgMetadataRevisions
+
+pkgOriginalUploadInfo :: PkgInfo -> UploadInfo
+pkgOriginalUploadInfo = metaRevInfo . pkgOriginalRevision
 
 pkgOriginalUploadTime :: PkgInfo -> UTCTime
-pkgOriginalUploadTime = fst . pkgOriginalUploadInfo
+pkgOriginalUploadTime = uploadInfoTime . pkgOriginalUploadInfo
 
 pkgOriginalUploadUser :: PkgInfo -> UserId
-pkgOriginalUploadUser = snd . pkgOriginalUploadInfo
+pkgOriginalUploadUser = uploadInfoUser . pkgOriginalUploadInfo
 
-pkgLatestRevision :: PkgInfo -> (CabalFileText, OldUploadInfo)
-pkgLatestRevision = Vec.last . pkgMetadataRevisions
+pkgLatestRevision :: PkgInfo -> MetadataRevision
+pkgLatestRevision = fromOldMetadataRev . Vec.last . pkgMetadataRevisions
 
-pkgSpecificRevision :: PkgInfo -> MetadataRevIx -> Maybe (CabalFileText, OldUploadInfo)
-pkgSpecificRevision pkg (MetadataRevIx revno) = pkgMetadataRevisions pkg Vec.!? revno
+pkgSpecificRevision :: PkgInfo -> MetadataRevIx -> Maybe MetadataRevision
+pkgSpecificRevision pkg (MetadataRevIx revno)
+  = fmap fromOldMetadataRev
+  $ pkgMetadataRevisions pkg Vec.!? revno
 
 pkgAllRevisionsCabalFiles :: PkgInfo -> [CabalFileText]
 pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
 
-pkgSpecificTarball :: PkgInfo -> TarballRevIx -> Maybe (PkgTarball, OldUploadInfo)
-pkgSpecificTarball pkg (TarballRevIx revno) = pkgTarballRevisions pkg Vec.!? revno
+pkgSpecificTarball :: PkgInfo -> TarballRevIx -> Maybe (PkgTarball, UploadInfo)
+pkgSpecificTarball pkg (TarballRevIx revno) = fmap (fmap fromOldUploadInfo) $ pkgTarballRevisions pkg Vec.!? revno
 
-pkgAllTarballs :: PkgInfo -> [(PkgTarball, OldUploadInfo)]
-pkgAllTarballs = Vec.toList . pkgTarballRevisions
+pkgAllTarballs :: PkgInfo -> [(PkgTarball, UploadInfo)]
+pkgAllTarballs = fmap (fmap fromOldUploadInfo) . Vec.toList . pkgTarballRevisions
 
-pkgAllRevisionsUploadInfos :: PkgInfo -> [OldUploadInfo]
-pkgAllRevisionsUploadInfos = fmap snd . Vec.toList . pkgMetadataRevisions
+pkgAllRevisionsUploadInfos :: PkgInfo -> [UploadInfo]
+pkgAllRevisionsUploadInfos = fmap (fromOldUploadInfo . snd) . Vec.toList . pkgMetadataRevisions
 
 pkgLatestCabalFileText :: PkgInfo -> CabalFileText
-pkgLatestCabalFileText = fst . pkgLatestRevision
+pkgLatestCabalFileText = metaRevCabalFile . pkgLatestRevision
 
-pkgLatestUploadInfo :: PkgInfo -> OldUploadInfo
-pkgLatestUploadInfo = snd . pkgLatestRevision
+pkgLatestUploadInfo :: PkgInfo -> UploadInfo
+pkgLatestUploadInfo = metaRevInfo . pkgLatestRevision
 
 pkgLatestUploadTime :: PkgInfo -> UTCTime
-pkgLatestUploadTime = fst . pkgLatestUploadInfo
+pkgLatestUploadTime = uploadInfoTime . pkgLatestUploadInfo
 
 pkgLatestUploadUser :: PkgInfo -> UserId
-pkgLatestUploadUser = snd . pkgLatestUploadInfo
+pkgLatestUploadUser = uploadInfoUser . pkgLatestUploadInfo
 
 pkgNumRevisions :: PkgInfo -> Int
 pkgNumRevisions = Vec.length . pkgMetadataRevisions
@@ -67,12 +79,12 @@ pkgMaxRevision = MetadataRevIx . subtract 1 . pkgNumRevisions
 -- and revision number. The revision number will normally be 1, but may be
 -- higher if more tarballs were uploaded for this package (on the central
 -- Hackage server we disallow this).
-pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, OldUploadInfo, Int)
+pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, UploadInfo, Int)
 pkgLatestTarball pkginfo =
    if Vec.null tarballs
      then Nothing
-     else let (tarball, uploadInfo) = Vec.last tarballs
-          in Just (tarball, uploadInfo, Vec.length tarballs - 1)
+     else let (tarball, (when, who)) = Vec.last tarballs
+          in Just (tarball, UploadInfo when who, Vec.length tarballs - 1)
   where
     tarballs = pkgTarballRevisions pkginfo
 
@@ -80,7 +92,7 @@ pkgLatestTarball pkginfo =
 pkgDesc :: PkgInfo -> GenericPackageDescription
 pkgDesc pkgInfo =
     case runParseResult $ parseGenericPackageDescription $
-         cabalFileByteString $ fst $
+         cabalFileByteString $ metaRevCabalFile $
          pkgLatestRevision pkgInfo of
       -- We only make PkgInfos with parsable pkgDatas, so if it
       -- doesn't parse then something has gone wrong.
@@ -91,10 +103,15 @@ pkgDesc pkgInfo =
 pkgDescMaybe :: PkgInfo -> Maybe GenericPackageDescription
 pkgDescMaybe pkgInfo =
     case runParseResult $ parseGenericPackageDescription $
-         cabalFileByteString $ fst $
+         cabalFileByteString $ metaRevCabalFile $
          pkgLatestRevision pkgInfo of
       -- We only make PkgInfos with parsable pkgDatas, so if it
       -- doesn't parse then something has gone wrong.
       (_, Left (_, _es)) -> Nothing
       (_, Right x)     -> Just x
 
+fromOldUploadInfo :: OldUploadInfo -> UploadInfo
+fromOldUploadInfo = uncurry UploadInfo
+
+fromOldMetadataRev :: (CabalFileText, OldUploadInfo) -> MetadataRevision
+fromOldMetadataRev (cabal, oui) = MetadataRevision cabal $ fromOldUploadInfo oui
