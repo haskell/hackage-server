@@ -121,6 +121,9 @@ data PkgTarball_v1 = PkgTarball_v1 {
 
 data PkgTarball_v0 = PkgTarball_v0 !BlobId_v0 !BlobId_v0
 
+-- | This type is deprecated for
+-- 'Distribution.Server.Packages.Utils.UploadInfo', but remains here because it
+-- would be a breaking change in the acid-state serialization.
 type OldUploadInfo = (UTCTime, UserId)
 type UploadInfo_v0 = (UTCTime_v0, UserId_v0)
 
