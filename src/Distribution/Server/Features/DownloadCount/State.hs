@@ -200,12 +200,42 @@ instance MemSize InMemStats where
 deriveSafeCopy 0 'base ''InMemStats
 deriveSafeCopy 0 'base ''OnDiskPerPkg
 
-readOnDiskStats :: FilePath -> IO OnDiskStats
-readOnDiskStats stateDir = do
+-- | This processes all of the files. If you're only interested in a
+-- couple of them, use 'readOnDiskStatsLazily' instead, to avoid most
+-- of the IO.
+readOnDiskStatsEagerly :: FilePath -> IO OnDiskStats
+readOnDiskStatsEagerly = readOnDiskStatsHelper False
+
+-- | Compared to 'readOnDiskStatsEagerly', this defers opening and
+-- processing the files; each file will be opened and processed when
+-- the corresponding entry in the result map is forced.
+--
+-- It is therefore perhaps unwise to call this function and then
+-- quickly force every entry of the map. It's not easy to predict
+-- whether it will open many files before closing any of them; might
+-- depend on the behaviors of the threaded RTS\/the platform\/etc.
+--
+-- So if you're going to quickly force many of the packages' entries
+-- in the map, you could instead call 'readOnDiskStatsEagerly' to
+-- avoid any risk of exhausing file descriptions: every file will be
+-- closed before the next is opened.
+--
+-- But we haven't /actually demonstrated/ 'readOnDiskStatsLazily'
+-- risks exhausting file descriptors; we merely just suspect it
+-- might. See the FdExhaustion-DownloadCount-Hypothesis
+-- benchmark. Thus, for now, the rest of the codebase continues to use
+-- only 'readOnDiskStateLazily', since that's what it used before we
+-- started investigating.
+readOnDiskStatsLazily :: FilePath -> IO OnDiskStats
+readOnDiskStatsLazily = readOnDiskStatsHelper True
+
+-- | See 'readOnDiskStatsLazily' and 'readOnDiskStatsEagerly'.
+readOnDiskStatsHelper :: Bool -> FilePath -> IO OnDiskStats
+readOnDiskStatsHelper whetherToInterleaveIO stateDir = do
     createDirectoryIfMissing True stateDir
     pkgStrs <- getDirectoryContents stateDir
     OnDiskStats . NCM 0 . Map.fromList <$> sequence
-      [ do onDiskPerPkg <- unsafeInterleaveIO $
+      [ do onDiskPerPkg <- (if whetherToInterleaveIO then unsafeInterleaveIO else id) $
                              either (const cmEmpty) id
                                <$> readOnDiskPerPkg pkgFile
            return (pkgName, onDiskPerPkg)
