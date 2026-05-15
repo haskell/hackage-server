@@ -9,6 +9,7 @@ import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Data.List (sortOn)
 import Data.Ord (Down(Down))
@@ -82,7 +83,7 @@ recentPackagesFeature _
 
     getRecentPackages :: MonadIO m => m [PkgInfo]
     getRecentPackages = fst <$> readAsyncCache cacheRecent
-    
+
     getRecentRevisions :: MonadIO m => m [PkgInfo]
     getRecentRevisions = snd <$> readAsyncCache cacheRecent
 

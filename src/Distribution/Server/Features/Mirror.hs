@@ -15,6 +15,7 @@ import Distribution.Server.Features.Users
 
 import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Users.Backup
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.Users hiding (lookupUserName)

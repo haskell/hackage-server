@@ -13,6 +13,7 @@ import Distribution.Server.Framework.Templating
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Features.Upload
 
 import Distribution.Package
