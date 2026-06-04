@@ -339,7 +339,7 @@ checkPackageDescriptions checkXRevision
   changesOk "maintainer" fromShortText maintainerA maintainerB
   changesOk "author"     fromShortText authorA authorB
   changesOk "stability"  fromShortText stabilityA stabilityB
-  changesOk' Trivial "tested-with" (show . ppTestedWith) testedWithA testedWithB
+  changesOk "tested-with" (show . ppTestedWith) testedWithA testedWithB
   changesOk "homepage" fromShortText homepageA homepageB
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
