@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 module Distribution.Server (
@@ -11,7 +12,9 @@ module Distribution.Server (
     reloadDatafiles,
 
     -- * Server configuration
+    InfallibleListenOn(..),
     ListenOn(..),
+    acquireListenSocket,
     ServerConfig(..),
     defaultServerConfig,
     hasSavedState,
@@ -49,6 +52,8 @@ import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent
 import Network.URI (URI(..), URIAuth(URIAuth), nullURI)
 import Network.BSD (getHostName)
+import qualified Network.Socket as Socket
+import qualified System.Systemd.Daemon as Systemd
 import Data.List (foldl', nubBy)
 import Data.Int  (Int64)
 import Control.Arrow (second)
@@ -61,10 +66,30 @@ import qualified Hackage.Security.Util.Path as Sec
 import Paths_hackage_server (getDataDir)
 
 
-data ListenOn = ListenOn {
-  loPortNum :: Int,
-  loIP :: String
-} deriving (Show)
+-- | Ways of listening that always yield a socket, barring IO errors.
+--
+-- This is, for example, as opposed to socket activation, which
+-- legitimately comes up empty when @LISTEN_FDS@ is not set.
+data InfallibleListenOn
+  -- | Traditional "server listens on port case"
+  = FreshlyBoundSocket { loIP :: String, loPortNum :: Int }
+  -- | Useful for testing
+  | ExplicitSocket Socket.Socket
+  deriving (Show)
+
+data ListenOn
+  = ListenOnInfallible InfallibleListenOn
+  -- | Modern socket activation (just systemd style for now) case.
+  | ListenOnSocketActivation {
+    -- | What to do when we are not socket-activated at all. Only an
+    -- 'InfallibleListenOn' will do: a fallback that could itself come up
+    -- empty would leave us with nothing to fall back to.
+    --
+    -- 'Nothing' means socket activation is required, and we should fail
+    -- rather than bind a socket ourselves.
+    loFallback :: Maybe InfallibleListenOn
+  }
+  deriving (Show)
 
 data ServerConfig = ServerConfig {
   confVerbosity :: Verbosity,
@@ -103,9 +128,11 @@ defaultServerConfig = do
                     },
     confUserContentUri = nullURI, -- This is a required argument, so the default doesn't matter
     confRequiredBaseHostHeader = "", -- This is a required argument, so the default doesn't matter
-    confListenOn  = ListenOn {
-                        loPortNum = 8080,
-                        loIP = "127.0.0.1"
+    confListenOn  = ListenOnSocketActivation {
+                        loFallback = Just FreshlyBoundSocket {
+                            loIP = "127.0.0.1",
+                            loPortNum = 8080
+                        }
                     },
     confStateDir  = "state",
     confStaticDir = dataDir,
@@ -357,10 +384,44 @@ setUpTemp sconf secs = do
     return (TempServer tid)
   where listenOn = confListenOn sconf
 
+-- | Get the listening socket via systemd-style socket activation
+-- (per @sd_listen_fds(3)@).
+--
+-- 'Nothing' means we are not being socket-activated at all (@LISTEN_FDS@
+-- unset, or @LISTEN_PID@ is not us). This allows the caller to fallback as
+-- it sees fit.
+--
+-- Being socket-activated but not handed exactly one socket is an error:
+-- some servers support multiple listening ports, but Happstack only
+-- supports 1.
+socketActivationExactlyOne :: IO (Maybe Socket.Socket)
+socketActivationExactlyOne = mapM exactlyOne =<< Systemd.getActivatedSockets
+  where
+    exactlyOne = \case
+      [s]     -> return s
+      []      -> fail "LISTEN_FDS is 0: no sockets were passed to us"
+      (_:_:_) -> fail "expected exactly one socket from LISTEN_FDS"
+
+acquireSocket :: InfallibleListenOn -> IO Socket.Socket
+acquireSocket (FreshlyBoundSocket ip portNum) = bindIPv4 ip portNum
+acquireSocket (ExplicitSocket s)              = return s
+
+-- | Get the socket to listen on, binding one or taking it from socket
+-- activation as the 'ListenOn' dictates.
+acquireListenSocket :: ListenOn -> IO Socket.Socket
+acquireListenSocket = \case
+    ListenOnInfallible bs -> acquireSocket bs
+    ListenOnSocketActivation fallback -> socketActivationExactlyOne >>= \case
+      Just s  -> return s
+      -- Not socket-activated at all: fall back, if we are allowed to.
+      Nothing -> case fallback of
+        Just bs -> acquireSocket bs
+        Nothing -> fail "LISTEN_FDS is not set, but socket activation is required"
+
 runServer :: (ToMessage a) => ListenOn -> ServerPartT IO a -> IO ()
-runServer listenOn f
-    = do socket <- bindIPv4 (loIP listenOn) (loPortNum listenOn)
-         simpleHTTPWithSocket socket nullConf f
+runServer listenOn f = do
+    socket <- acquireListenSocket listenOn
+    simpleHTTPWithSocket socket nullConf f
 
 -- | Static 503 page, based on Happstack's 404 page.
 html503 :: String
