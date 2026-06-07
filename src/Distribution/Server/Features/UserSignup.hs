@@ -43,13 +43,15 @@ import Network.Mail.Mime
 import Network.URI (URI(..), URIAuth(..))
 import Graphics.Captcha
 import qualified Data.ByteString.Base64 as Base64
-import qualified Crypto.Hash.SHA256 as SHA256
 import Data.String
 import Data.Char
 import Text.Read (readMaybe)
 import Data.Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.Aeson.Key as Key
+
+import qualified Data.ByteArray as BA
+import qualified Crypto.Hash    as Hash
 
 
 -- | A feature to allow open account signup, and password reset,
@@ -270,7 +272,11 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
             ++ "has been used already, or that it has expired."]
 
     hashTimeAndCaptcha :: UTCTime -> String -> BS.ByteString
-    hashTimeAndCaptcha timestamp captcha = Base64.encode (SHA256.hash (fromString (show timestamp ++ map toUpper captcha)))
+    hashTimeAndCaptcha timestamp captcha =
+      go (show timestamp ++ map toUpper captcha)
+      where
+        go = Base64.encode . BA.convert
+             . Hash.hashWith Hash.SHA256 . BS.pack
 
     makeCaptchaHash :: IO (UTCTime, BS.ByteString, BS.ByteString)
     makeCaptchaHash = do

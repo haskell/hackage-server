@@ -28,8 +28,8 @@ import qualified Data.ByteString.Lazy                  as BS.Lazy
 import           Data.SafeCopy
 import qualified Data.Serialize                        as Ser
 
--- cryptohash
-import qualified Crypto.Hash.MD5                       as MD5
+import qualified Data.ByteArray                        as BA
+import qualified Crypto.Hash                           as Hash
 
 -- hackage
 import           Distribution.Server.Framework.MemSize
@@ -49,6 +49,9 @@ md5digestFromBS bs = case Ser.runGet (Ser.get :: Ser.Get MD5Digest) bs of
     Left  e -> error ("md5digestFromBS: " ++ e)
     Right d -> d
 
+fromCryptonDigest :: Hash.Digest Hash.MD5 -> MD5Digest
+fromCryptonDigest = md5digestFromBS . BA.convert
+
 -- | The 'Show' instance for 'MD5Digest' prints the underlying digest
 -- (without showing the newtype wrapper)
 --
@@ -65,7 +68,7 @@ instance ReadDigest MD5Digest where
 
 -- | Compute MD5 digest
 md5 :: BS.Lazy.ByteString -> MD5Digest
-md5 = md5digestFromBS . MD5.hashlazy
+md5 = fromCryptonDigest . Hash.hashlazy
 
 instance MemSize MD5Digest where
     memSize _ = 3
@@ -109,13 +112,13 @@ instance Ser.Serialize MD5Digest where
 -- will run in constant memory.
 --
 lazyMD5 :: BS.Lazy.ByteString -> ByteStringWithMd5
-lazyMD5 = go MD5.init . BS.Lazy.toChunks
+lazyMD5 = go Hash.hashInit . BS.Lazy.toChunks
   where
-    go :: MD5.Ctx -> [BS.ByteString] -> ByteStringWithMd5
+    go :: Hash.Context Hash.MD5 -> [BS.ByteString] -> ByteStringWithMd5
     go !md5ctx [] =
-      BsEndMd5 (md5digestFromBS (MD5.finalize md5ctx))
+      BsEndMd5 (fromCryptonDigest (Hash.hashFinalize md5ctx))
     go !md5ctx (block : blocks') =
-      BsChunk block (go (MD5.update md5ctx block) blocks')
+      BsChunk block (go (Hash.hashUpdate md5ctx block) blocks')
 
 -- | See 'lazyMD5'
 data ByteStringWithMd5 = BsChunk  !BS.ByteString ByteStringWithMd5
