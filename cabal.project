@@ -9,8 +9,8 @@ packages:
 -----------------------------------------------------------------------------
 -- Anti-constraints
 
--- make sure we don't accidentally pick up blacklisted packages
-constraints: foundation -none, cryptonite -none, cryptohash -none
+-- make sure we don't accidentally pick up forbidden packages
+constraints: foundation < 0, cryptonite < 0, cryptohash < 0
 
 -----------------------------------------------------------------------------
 -- Modded lib:Cabal
