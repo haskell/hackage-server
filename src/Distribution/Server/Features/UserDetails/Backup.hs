@@ -68,7 +68,9 @@ userDetailsToCSV backuptype (Acid.UserDetailsTable tbl)
         then T.unpack (accountContactEmail udetails)
         else "hidden-email@nowhere.org"
       , infoToAccountKind udetails
-      , T.unpack (accountAdminNotes udetails)
+      , if backuptype == FullBackup
+        then T.unpack (accountAdminNotes udetails)
+        else "<redacted>"
       ]
 
  where
@@ -87,4 +89,3 @@ userDetailsToCSV backuptype (Acid.UserDetailsTable tbl)
       Nothing                  -> ""
       Just AccountKindRealUser -> "real"
       Just AccountKindSpecial  -> "special"
-
