@@ -15,6 +15,10 @@ import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload(UploadFeature(..))
+import Distribution.Server.Features.Documentation (DocumentationFeature(..))
+import Distribution.Server.Features.TarIndexCache (TarIndexCacheFeature(..))
+import Distribution.Server.Features.PackageList.PackageRank
+
 import Distribution.Server.Users.Users (userIdToName)
 import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Users.Group(UserGroup(..), GroupDescription(..))
@@ -31,6 +35,7 @@ import Distribution.PackageDescription.Configuration
 import Distribution.Pretty (prettyShow)
 import Distribution.Types.Version (Version)
 import Distribution.Utils.ShortText (fromShortText)
+import Distribution.Simple.Utils (safeLast)
 
 import Control.Concurrent
 import qualified Data.List.NonEmpty as NE
@@ -40,7 +45,6 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time.Clock (UTCTime(..))
-
 
 data ListFeature = ListFeature {
     listFeatureInterface :: HackageFeature,
@@ -91,11 +95,13 @@ data PackageItem = PackageItem {
     -- Hotness = recent downloads + stars + 2 * no rev deps
     itemHotness :: !Float,
     -- Reference version (non-deprecated highest numbered version)
-    itemReferenceVersion :: !String
+    itemReferenceVersion :: !String,
+    -- heuristic way to sort packages
+    itemPackageRank :: !Float
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k l _m n o) = memSize11 a b c d e f g h i j (k, l, n, o)
+    memSize (PackageItem a b c d e f g h i j k l _m n o r) = memSize12 a b c d e f g h i j (k, l, n, o) r
 
 
 emptyPackageItem :: PackageName -> PackageItem
@@ -115,9 +121,9 @@ emptyPackageItem pkg =
       itemNumBenchmarks = 0,
       itemLastUpload = UTCTime (toEnum 0) 0,
       itemHotness = 0,
-      itemReferenceVersion = ""
+      itemReferenceVersion = "",
+      itemPackageRank = 0
   }
-
 
 initListFeature :: ServerEnv
                 -> IO (CoreFeature
@@ -128,6 +134,8 @@ initListFeature :: ServerEnv
                     -> VersionsFeature
                     -> UserFeature
                     -> UploadFeature
+                    -> DocumentationFeature
+                    -> TarIndexCacheFeature
                     -> IO ListFeature)
 initListFeature _env = do
     itemCache  <- newMemStateWHNF Map.empty
@@ -140,11 +148,12 @@ initListFeature _env = do
               tagsf@TagsFeature{..}
               versions@VersionsFeature{..}
               users@UserFeature{..}
-              uploads@UploadFeature{..} -> do
+              uploads@UploadFeature{..} 
+              documentation tar -> do
 
       let (feature, modifyItem, updateDesc) =
             listFeature core revs download votesf tagsf versions users uploads
-                        itemCache itemUpdate
+                        itemCache itemUpdate documentation tar _env
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
         updateDesc (packageName pkgid)
@@ -213,19 +222,23 @@ listFeature :: CoreFeature
             -> UploadFeature
             -> MemState (Map PackageName PackageItem)
             -> Hook (Set PackageName) ()
+            -> DocumentationFeature
+            -> TarIndexCacheFeature
+            -> ServerEnv
             -> (ListFeature,
                 PackageName -> (PackageItem -> PackageItem) -> IO (),
                 PackageName -> IO ())
 
 listFeature CoreFeature{..}
-            ReverseFeature{revDirectCount}
+            ReverseFeature{revDirectCount, revPackageStats}
             DownloadFeature{..}
             VotesFeature{..}
             TagsFeature{..}
-            VersionsFeature{..}
+            versions@VersionsFeature{..}
             UserFeature{..}
             UploadFeature{..}
             itemCache itemUpdate
+            documentation tar env
   = (ListFeature{..}, modifyItem, updateDesc)
   where
     listFeatureInterface = (emptyHackageFeature "list") {
@@ -256,7 +269,7 @@ listFeature CoreFeature{..}
                 let pkgs = PackageIndex.lookupPackageName index pkgname
                 case pkgs of
                     [] -> return () --this shouldn't happen
-                    _  -> modifyMemState itemCache . uncurry Map.insert =<< constructItem (last pkgs)
+                    _  -> modifyMemState itemCache . uncurry Map.insert =<< constructItem pkgs
 
     updateDesc pkgname = do
         index <- queryGetPackageIndex
@@ -277,14 +290,16 @@ listFeature CoreFeature{..}
     constructItemIndex :: IO (Map PackageName PackageItem)
     constructItemIndex = do
         index <- queryGetPackageIndex
-        items <- mapM (constructItem . last) $ PackageIndex.allPackagesByName index
+        items <- mapM constructItem $ PackageIndex.allPackagesByName index
         return $ Map.fromList items
 
-    constructItem :: PkgInfo -> IO (PackageName, PackageItem)
-    constructItem pkg = do
+    constructItem :: [PkgInfo] -> IO (PackageName, PackageItem)
+    constructItem pkgs = do
         let pkgname = packageName pkg
             desc = pkgDesc pkg
-        intRevDirectCount <- revDirectCount pkgname
+            pkg = last pkgs
+        -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
+        revCount@(ReverseCount intRevDirectCount _) <- revPackageStats pkgname
         users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
         downs <- recentPackageDownloads
@@ -292,6 +307,8 @@ listFeature CoreFeature{..}
         deprs <- queryGetDeprecatedFor pkgname
         maintainers <- queryUserGroup (maintainersGroup pkgname)
         prefsinfo <- queryGetPreferredInfo pkgname
+        packageR <- rankPackage versions (cmFind pkgname downs) (UserIdSet.size maintainers)
+                                documentation tar env pkgs (safeLast pkgs) revCount
 
         return $ (,) pkgname . updateReferenceVersion prefsinfo [pkgVersion (pkgInfoId pkg)] $ (updateDescriptionItem desc $ emptyPackageItem pkgname) {
             itemTags       = tags
@@ -302,6 +319,7 @@ listFeature CoreFeature{..}
           , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
           , itemRevDepsCount = intRevDirectCount
           , itemHotness = votes + fromIntegral (cmFind pkgname downs) + fromIntegral intRevDirectCount * 2
+          , itemPackageRank = packageR
           }
 
     ------------------------------

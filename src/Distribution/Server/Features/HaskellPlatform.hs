@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.HaskellPlatform (
-    PlatformFeature,
+    PlatformFeature(..),
     PlatformResource(..),
     initPlatformFeature,
   ) where
