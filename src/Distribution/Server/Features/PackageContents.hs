@@ -14,6 +14,7 @@ import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Readme
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Render
 import Distribution.Server.Features.Users
 import Distribution.Server.Util.ServeTarball
@@ -137,7 +138,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
       case mChangeLog of
         Left _ -> do
           let message = [MText "Package ", MLink pkgName url, MText " has no changelog file in source distribution. "]
-          let home = homepage $ packageDescription $ pkgDesc pkg
+          let home = homepage $ packageDescription $ pkgDesc $ pkgLatestRevision pkg
           if ST.null home then
             errNotFound "Changelog not found" message
           else

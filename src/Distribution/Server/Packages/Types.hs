@@ -32,10 +32,6 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
-import Distribution.PackageDescription
-         ( GenericPackageDescription(..))
-import Distribution.PackageDescription.Parsec
-         ( parseGenericPackageDescription, runParseResult )
 
 import Data.Aeson (ToJSON)
 import Data.Serialize (Serialize)
@@ -67,7 +63,7 @@ data PkgInfo = PkgInfo {
     -- | The .cabal file text. This includes all revisions, indexed from the
     -- original vision (revision 0). This is always non-empty.
     --
-    pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, UploadInfo)),
+    pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, OldUploadInfo)),
 
     -- | The package .tar.gz file. This includes all revisions but is typically
     -- of length 1. It can be empty (to allow a multi-stage upload process, or
@@ -75,22 +71,22 @@ data PkgInfo = PkgInfo {
     -- of just the latest packages). The representation allows multiple versions
     -- but the normal policy is not to allow replacing the tarball.
     --
-    pkgTarballRevisions :: !(Vec.Vector (PkgTarball, UploadInfo))
+    pkgTarballRevisions :: !(Vec.Vector (PkgTarball, OldUploadInfo))
 
 } deriving (Eq, Show)
 
 data PkgInfo_v2 = PkgInfo_v2 {
     v2_pkgInfoId            :: !PackageIdentifier,
-    v2_pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, UploadInfo)),
-    v2_pkgTarballRevisions  :: !(Vec.Vector (PkgTarball, UploadInfo))
+    v2_pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, OldUploadInfo)),
+    v2_pkgTarballRevisions  :: !(Vec.Vector (PkgTarball, OldUploadInfo))
 }
 
 data PkgInfo_v1 = PkgInfo_v1 {
     v1_pkgInfoId     :: !PackageIdentifier,
     v1_pkgData       :: !CabalFileText,
-    v1_pkgTarball    :: ![(PkgTarball, UploadInfo)],
-    v1_pkgDataOld    :: ![(CabalFileText, UploadInfo)],
-    v1_pkgUploadData :: !UploadInfo
+    v1_pkgTarball    :: ![(PkgTarball, OldUploadInfo)],
+    v1_pkgDataOld    :: ![(CabalFileText, OldUploadInfo)],
+    v1_pkgUploadData :: !OldUploadInfo
 }
 
 data PkgInfo_v0 = PkgInfo_v0  !PackageIdentifier_v0 !CabalFileText
@@ -125,7 +121,10 @@ data PkgTarball_v1 = PkgTarball_v1 {
 
 data PkgTarball_v0 = PkgTarball_v0 !BlobId_v0 !BlobId_v0
 
-type UploadInfo = (UTCTime, UserId)
+-- | This type is deprecated for
+-- 'Distribution.Server.Packages.Utils.UploadInfo', but remains here because it
+-- would be a breaking change in the acid-state serialization.
+type OldUploadInfo = (UTCTime, UserId)
 type UploadInfo_v0 = (UTCTime_v0, UserId_v0)
 
 newtype UTCTime_v0 = UTCTime_v0 UTCTime
@@ -180,93 +179,6 @@ instance SafeCopy TarballRevIx where
 
 cabalFileString :: CabalFileText -> String
 cabalFileString = unpackUTF8Strict . cabalFileByteString
-
-pkgOriginalRevision :: PkgInfo -> (CabalFileText, UploadInfo)
-pkgOriginalRevision = Vec.head . pkgMetadataRevisions
-
-pkgOriginalUploadInfo :: PkgInfo -> UploadInfo
-pkgOriginalUploadInfo = snd . pkgOriginalRevision
-
-pkgOriginalUploadTime :: PkgInfo -> UTCTime
-pkgOriginalUploadTime = fst . pkgOriginalUploadInfo
-
-pkgOriginalUploadUser :: PkgInfo -> UserId
-pkgOriginalUploadUser = snd . pkgOriginalUploadInfo
-
-pkgLatestRevision :: PkgInfo -> (CabalFileText, UploadInfo)
-pkgLatestRevision = Vec.last . pkgMetadataRevisions
-
-pkgSpecificRevision :: PkgInfo -> MetadataRevIx -> Maybe (CabalFileText, UploadInfo)
-pkgSpecificRevision pkg (MetadataRevIx revno) = pkgMetadataRevisions pkg Vec.!? revno
-
-pkgAllRevisionsCabalFiles :: PkgInfo -> [CabalFileText]
-pkgAllRevisionsCabalFiles = fmap fst . Vec.toList . pkgMetadataRevisions
-
-pkgSpecificTarball :: PkgInfo -> TarballRevIx -> Maybe (PkgTarball, UploadInfo)
-pkgSpecificTarball pkg (TarballRevIx revno) = pkgTarballRevisions pkg Vec.!? revno
-
-pkgAllTarballs :: PkgInfo -> [(PkgTarball, UploadInfo)]
-pkgAllTarballs = Vec.toList . pkgTarballRevisions
-
-pkgAllRevisionsUploadInfos :: PkgInfo -> [UploadInfo]
-pkgAllRevisionsUploadInfos = fmap snd . Vec.toList . pkgMetadataRevisions
-
-pkgLatestCabalFileText :: PkgInfo -> CabalFileText
-pkgLatestCabalFileText = fst . pkgLatestRevision
-
-pkgLatestUploadInfo :: PkgInfo -> UploadInfo
-pkgLatestUploadInfo = snd . pkgLatestRevision
-
-pkgLatestUploadTime :: PkgInfo -> UTCTime
-pkgLatestUploadTime = fst . pkgLatestUploadInfo
-
-pkgLatestUploadUser :: PkgInfo -> UserId
-pkgLatestUploadUser = snd . pkgLatestUploadInfo
-
-pkgNumRevisions :: PkgInfo -> Int
-pkgNumRevisions = Vec.length . pkgMetadataRevisions
-
-pkgMaxRevision :: PkgInfo -> MetadataRevIx
-pkgMaxRevision = MetadataRevIx . subtract 1 . pkgNumRevisions
-
--- | The latest tarball for a package (if any)
---
--- For packages with a @.cabal@ file but no tarball we return 'Nothing'.
--- For other package we return the latest tarball, corresponding upload info
--- and revision number. The revision number will normally be 1, but may be
--- higher if more tarballs were uploaded for this package (on the central
--- Hackage server we disallow this).
-pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, UploadInfo, Int)
-pkgLatestTarball pkginfo =
-   if Vec.null tarballs
-     then Nothing
-     else let (tarball, uploadInfo) = Vec.last tarballs
-          in Just (tarball, uploadInfo, Vec.length tarballs - 1)
-  where
-    tarballs = pkgTarballRevisions pkginfo
-
--- | The information held in a parsed .cabal file (used by cabal-install)
-pkgDesc :: PkgInfo -> GenericPackageDescription
-pkgDesc pkgInfo =
-    case runParseResult $ parseGenericPackageDescription $
-         cabalFileByteString $ fst $
-         pkgLatestRevision pkgInfo of
-      -- We only make PkgInfos with parsable pkgDatas, so if it
-      -- doesn't parse then something has gone wrong.
-      (_, Left (_,es)) -> error ("Internal error: " ++ show es)
-      (_, Right x)     -> x
-
--- | The information held in a parsed .cabal file, with nicer failure
-pkgDescMaybe :: PkgInfo -> Maybe GenericPackageDescription
-pkgDescMaybe pkgInfo =
-    case runParseResult $ parseGenericPackageDescription $
-         cabalFileByteString $ fst $
-         pkgLatestRevision pkgInfo of
-      -- We only make PkgInfos with parsable pkgDatas, so if it
-      -- doesn't parse then something has gone wrong.
-      (_, Left (_, _es)) -> Nothing
-      (_, Right x)     -> Just x
-
 
 blobInfoFromBS :: BlobId -> LazyByteString -> BlobInfo
 blobInfoFromBS blobId bs = BlobInfo {

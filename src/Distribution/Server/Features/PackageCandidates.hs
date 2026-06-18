@@ -20,6 +20,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.TarIndexCache
 
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Render
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Readme
@@ -384,9 +385,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveCandidateCabal dpath = do
       pkg <- packageInPath dpath >>= lookupCandidateId
       guard (lookup "cabal" dpath == Just (display $ packageName pkg))
-      let (fileRev, (utime, _uid)) = pkgLatestRevision (candPkgInfo pkg)
-          cabalfile = Resource.CabalFile (BS.fromStrict (cabalFileByteString fileRev)) utime
-      return $ toResponse cabalfile
+      return $ toResponse $ toCabalResource $ pkgLatestRevision $ candPkgInfo pkg
 
     uploadCandidate :: (PackageId -> Bool) -> ServerPartE CandPkgInfo
     uploadCandidate isRight = do
@@ -457,7 +456,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Nothing -> do
           -- run filters
           let pkgInfo = candPkgInfo candidate
-              uresult = UploadResult (pkgDesc pkgInfo)
+              uresult = UploadResult (pkgDesc $ pkgLatestRevision pkgInfo)
                                      (BS.fromStrict (cabalFileByteString (pkgLatestCabalFileText pkgInfo)))
                                      (candWarnings candidate)
           time <- liftIO getCurrentTime

@@ -22,6 +22,7 @@ import Distribution.Server.Features.Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Render (categorySplit)
 import Distribution.Utils.ShortText (fromShortText)
 
@@ -109,7 +110,7 @@ initTagsFeature ServerEnv{serverStateDir} = do
           Nothing      -> return ()
           Just pkginfo -> do
             let pkgname = packageName pkgid
-                itags = constructImmutableTags . pkgDesc $ pkginfo
+                itags = constructImmutableTags . pkgDesc . pkgLatestRevision $ pkginfo
             curtags <- queryState tagsState $ Acid.TagsForPackage pkgname
             aliases <- mapM (queryState tagAlias . Acid.GetTagAlias) (itags ++ Set.toList curtags)
             let newtags = Set.fromList aliases
@@ -305,7 +306,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
 constructTagIndex :: PackageIndex PkgInfo -> Acid.PackageTags
 constructTagIndex = foldl' addToTags Acid.emptyPackageTags . PackageIndex.allPackagesByName
   where addToTags pkgTags pkgList =
-            let info = pkgDesc $ last pkgList
+            let info = pkgDesc $ pkgLatestRevision $ last pkgList
                 pkgname = packageName info
                 categoryTags = Set.fromList . constructCategoryTags . packageDescription $ info
                 immutableTags = Set.fromList . constructImmutableTags $ info
@@ -315,7 +316,7 @@ constructTagIndex = foldl' addToTags Acid.emptyPackageTags . PackageIndex.allPac
 constructImmutableTagIndex :: PackageIndex PkgInfo -> Acid.PackageTags
 constructImmutableTagIndex = foldl' addToTags Acid.emptyPackageTags . PackageIndex.allPackagesByName
   where addToTags calcTags pkgList =
-            let info = pkgDesc $ last pkgList
+            let info = pkgDesc $ pkgLatestRevision $ last pkgList
                 !pn = packageName info
                 !tags = constructImmutableTags info
             in Acid.setTags pn (Set.fromList tags) calcTags

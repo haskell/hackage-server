@@ -42,6 +42,7 @@ import qualified Distribution.Server.Features.BuildReports.BuildReport as BR
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -640,7 +641,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             pkgname = packageName realpkg
             docURL  = packageDocsContentUri docs realpkg
             execs   = rendExecNames render
-            pkgdesc = flattenPackageDescription $ pkgDesc pkg
+            pkgdesc = flattenPackageDescription $ pkgDesc $ pkgLatestRevision pkg
             maintainers = maintainersGroup pkgname
 
         prefInfo      <- queryGetPreferredInfo pkgname
@@ -838,7 +839,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         revisionToTemplate :: Users.Users -> UploadInfo -> Int
                            -> (SHA256Digest, [Change])
                            -> TemplateVal
-        revisionToTemplate users (utime, uid) revision (sha256hash, changes) =
+        revisionToTemplate users (UploadInfo utime uid) revision (sha256hash, changes) =
           let uname = Users.userIdToName users uid
            in templateDict
                 [ templateVal "number" revision
