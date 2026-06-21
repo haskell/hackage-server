@@ -2015,7 +2015,7 @@ mkHtmlAnalyticsPixels HtmlUtilities{..} CoreFeature{..} UserFeature{..} UploadFe
         template <- getTemplate templates "analytics-pixels-page.html"
         return $ toResponse $ template
             [ "pkgname" $= pkgname,
-              "AnalyticsPixels" $= map analyticsPixelUrl (Set.toList analyticsPixels)
+              "analyticsPixels" $= map analyticsPixelUrl (Set.toList analyticsPixels)
             ]
 
     userPackagesAnalyticsPixelsHtml :: UserName -> ServerPartE Response
