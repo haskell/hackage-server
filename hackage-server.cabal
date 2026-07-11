@@ -309,6 +309,7 @@ library
     Distribution.Server.Features.Core
     Distribution.Server.Features.Core.Acid
     Distribution.Server.Features.Core.State
+    Distribution.Server.Features.Core.Store
     Distribution.Server.Features.Core.Backup
     Distribution.Server.Features.Security
     Distribution.Server.Features.Security.Backup
