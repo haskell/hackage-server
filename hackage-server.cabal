@@ -323,6 +323,7 @@ library
     Distribution.Server.Features.Mirror.Acid
     Distribution.Server.Features.Mirror.Store
     Distribution.Server.Features.TarIndexCache.Acid
+    Distribution.Server.Features.TarIndexCache.Store
     Distribution.Server.Features.Upload
     Distribution.Server.Features.Upload.State
     Distribution.Server.Features.Upload.Backup

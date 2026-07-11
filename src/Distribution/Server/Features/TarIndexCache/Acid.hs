@@ -1,12 +1,27 @@
 module Distribution.Server.Features.TarIndexCache.Acid
-  ( tarIndexCacheStateComponent
+  ( acidStore
   ) where
 
 import Distribution.Server.Prelude
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Features.TarIndexCache.Store
 import Distribution.Server.Features.TarIndexCache.State as Acid
+
+acidStore :: FilePath -> IO Backend
+acidStore stateDir = do
+  state <- tarIndexCacheStateComponent stateDir
+  let st = stateHandle state
+  pure Backend {
+      backendStore = Store {
+          getTarIndexCache     = query st Acid.GetTarIndexCache
+        , replaceTarIndexCache  = update st . Acid.ReplaceTarIndexCache
+        , findTarIndex          = query st . Acid.FindTarIndex
+        , setTarIndex           = \tar index -> update st (Acid.SetTarIndex tar index)
+        }
+    , backendState = [abstractAcidStateComponent' (\_ _ -> []) state]
+    }
 
 tarIndexCacheStateComponent :: FilePath -> IO (StateComponent AcidState Acid.TarIndexCache)
 tarIndexCacheStateComponent stateDir = do
