@@ -18,8 +18,6 @@ module Distribution.Server.Features.Core (
     -- * Misc other utils
     packageExists,
     packageIdExists,
-
-    packagesStateComponent,
   ) where
 
 -- stdlib
@@ -37,7 +35,7 @@ import qualified Data.Vector                                        as Vec
 -- hackage
 import           Distribution.Server.Prelude
 
-import           Distribution.Server.Features.Core.Backup
+import           Distribution.Server.Features.Core.Acid             (packagesStateComponent)
 import qualified Distribution.Server.Features.Core.State            as Acid
 import           Distribution.Server.Features.Security.Migration
 import           Distribution.Server.Features.Security.SHA256       (sha256)
@@ -358,21 +356,6 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
         prodAsyncCache indexTar "package change"
 
       return feature
-
-packagesStateComponent :: Verbosity -> Bool -> FilePath -> IO (StateComponent AcidState Acid.PackagesState)
-packagesStateComponent verbosity freshDB stateDir = do
-  let stateFile = stateDir </> "db" </> "PackagesState"
-  st <- logTiming verbosity "Loaded PackagesState" $
-          openLocalStateFrom stateFile (Acid.initialPackagesState freshDB)
-  return StateComponent {
-       stateDesc    = "Main package database"
-     , stateHandle  = st
-     , getState     = query st Acid.GetPackagesState
-     , putState     = update st . Acid.ReplacePackagesState
-     , backupState  = \_ -> indexToAllVersions
-     , restoreState = packagesBackup
-     , resetState   = packagesStateComponent verbosity True
-     }
 
 coreFeature :: ServerEnv
             -> UserFeature

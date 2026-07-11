@@ -307,6 +307,7 @@ library
     Distribution.Server.Features.Browse.Options
     Distribution.Server.Features.Browse.Parsers
     Distribution.Server.Features.Core
+    Distribution.Server.Features.Core.Acid
     Distribution.Server.Features.Core.State
     Distribution.Server.Features.Core.Backup
     Distribution.Server.Features.Security
