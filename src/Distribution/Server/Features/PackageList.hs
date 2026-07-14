@@ -153,7 +153,8 @@ initListFeature _env = do
         let pkgname = packageName . packageId $ pkg
         prefsinfo <- queryGetPreferredInfo pkgname
         index <- queryGetPackageIndex
-        let allVersions = packageVersion <$> PackageIndex.lookupPackageName index pkgname
+        let pkgs = PackageIndex.lookupPackageName index pkgname
+        let allVersions = packageVersion <$> pkgs
         modifyItem pkgname $ \x ->
             updateReferenceVersion prefsinfo allVersions $
               x
