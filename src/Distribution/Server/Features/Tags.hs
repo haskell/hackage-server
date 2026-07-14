@@ -201,7 +201,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
     initImmutableTags :: IO ()
     initImmutableTags = do
             index <- queryGetPackageIndex
-            let calcTags = Acid.tagPackages $ constructImmutableTagIndex index
+            let calcTags = Acid.tagPackages $ constructImmutableTagIndex ((fmap last . PackageIndex.allPackagesByName) index)
             aliases <- mapM (queryState tagsAlias . Acid.GetTagAlias) $ Map.keys calcTags
             let calcTags' = Map.toList . Map.fromListWith Set.union $ zip aliases (Map.elems calcTags)
             forM_ calcTags' $ uncurry setCalculatedTag
@@ -312,8 +312,8 @@ constructTagIndex = foldl' addToTags Acid.emptyPackageTags . PackageIndex.allPac
             in Acid.setTags pkgname (Set.union categoryTags immutableTags) pkgTags
 
 -- tags on startup
-constructImmutableTagIndex :: PackageIndex PkgInfo -> Acid.PackageTags
-constructImmutableTagIndex = foldl' addToTags Acid.emptyPackageTags . fmap last . PackageIndex.allPackagesByName
+constructImmutableTagIndex :: [PkgInfo] -> Acid.PackageTags
+constructImmutableTagIndex = foldl' addToTags Acid.emptyPackageTags
   where addToTags calcTags pkg =
             let info = pkgDesc pkg
                 !pn = packageName info
