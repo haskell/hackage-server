@@ -152,8 +152,7 @@ initListFeature _env = do
       registerHookJust packageChangeHook isPackageAdd $ \pkg -> do
         let pkgname = packageName . packageId $ pkg
         prefsinfo <- queryGetPreferredInfo pkgname
-        index <- queryGetPackageIndex
-        let pkgs = PackageIndex.lookupPackageName index pkgname
+        pkgs <- queryLookupPackageName pkgname
         let allVersions = packageVersion <$> pkgs
         modifyItem pkgname $ \x ->
             updateReferenceVersion prefsinfo allVersions $
@@ -197,8 +196,7 @@ initListFeature _env = do
           runHook_ itemUpdate (Set.singleton pkgname)
 
       registerHook updatePreferredHook $ \(pkgname, prefsinfo) -> do
-          index <- queryGetPackageIndex
-          let pkgs = PackageIndex.lookupPackageName index pkgname
+          pkgs <- queryLookupPackageName pkgname
           let allVersions = packageVersion <$> pkgs
           modifyItem pkgname $ updateReferenceVersion prefsinfo allVersions
 
@@ -254,15 +252,13 @@ listFeature CoreFeature{..}
         case hasItem of
             True  -> modifyMemState itemCache $ Map.adjust token pkgname
             False -> do
-                index <- queryGetPackageIndex
-                let pkgs = PackageIndex.lookupPackageName index pkgname
+                pkgs <- queryLookupPackageName pkgname
                 case pkgs of
                     [] -> return () --this shouldn't happen
                     _  -> modifyMemState itemCache . uncurry Map.insert =<< constructItem (last pkgs)
 
     updateDesc pkgname = do
-        index <- queryGetPackageIndex
-        let pkgs = PackageIndex.lookupPackageName index pkgname
+        pkgs <- queryLookupPackageName pkgname
         case pkgs of
            [] -> modifyMemState itemCache (Map.delete pkgname)
            _  -> modifyItem pkgname (updateDescriptionItem $ pkgDesc $ last pkgs)

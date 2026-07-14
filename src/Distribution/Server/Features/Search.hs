@@ -117,8 +117,7 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
     --TODO: update periodically for download count changes
     updatePackage :: PackageName -> IO ()
     updatePackage pkgname = do
-      index <- queryGetPackageIndex
-      let pkgs = PackageIndex.lookupPackageName index pkgname
+      pkgs <- queryLookupPackageName pkgname
       case reverse pkgs of
          []      -> modifyMemState searchEngineState
                       (SearchEngine.deleteDoc pkgname)
