@@ -77,6 +77,9 @@ data CoreFeature = CoreFeature {
     -- | Retrieves all versions of a package.
     queryLookupPackageName :: forall m. MonadIO m => PackageName -> m [PkgInfo],
 
+    -- | Retrieves a specific package version.
+    queryLookupPackageId :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo),
+
     -- | Retrieve the raw tarball info
     queryGetIndexTarballInfo :: forall m. MonadIO m => m IndexTarballInfo,
 
@@ -496,6 +499,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     queryLookupPackageName :: MonadIO m => PackageName -> m [PkgInfo]
     queryLookupPackageName = Store.lookupPackageName packagesStore
 
+    queryLookupPackageId :: MonadIO m => PackageId -> m (Maybe PkgInfo)
+    queryLookupPackageId = Store.lookupPackageId packagesStore
+
     queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
     queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball
 
@@ -635,8 +641,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       -- pkgs is sorted by version number and non-empty
       return (last pkgs)
     lookupPackageId pkgid = do
-      pkgsIndex <- queryGetPackageIndex
-      let mpkg = PackageIndex.lookupPackageId pkgsIndex pkgid
+      mpkg <- queryLookupPackageId pkgid
       case mpkg of
         Just pkg -> return pkg
         _ -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]

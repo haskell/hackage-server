@@ -25,6 +25,7 @@ data Backend = Backend {
 data Store = Store {
     getPackagesState       :: forall m. MonadIO m => m PackagesState
   , lookupPackageName      :: forall m. MonadIO m => PackageName -> m [PkgInfo]
+  , lookupPackageId        :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> m Bool
   , deletePackage          :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , addPackageRevision     :: forall m. MonadIO m => PackageId -> CabalFileText -> UploadInfo -> UserName -> m (Maybe PkgInfo, PkgInfo)

@@ -19,6 +19,9 @@ acidStore env verbosity freshDB stateDir = do
         , lookupPackageName      = \pkgname -> do
                                      packages <- queryState packagesState Acid.GetPackagesState
                                      pure (PackageIndex.lookupPackageName (Acid.packageIndex packages) pkgname)
+        , lookupPackageId        = \pkgid -> do
+                                     packages <- queryState packagesState Acid.GetPackagesState
+                                     pure (PackageIndex.lookupPackageId (Acid.packageIndex packages) pkgid)
         , addPackage             = \pkginfo uploadinfo username entries ->
                                      updateState packagesState (Acid.AddPackage3 pkginfo uploadinfo username entries)
         , deletePackage          = \pkgid ->
