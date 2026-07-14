@@ -74,6 +74,9 @@ data CoreFeature = CoreFeature {
     -- | Retrieves the entire main package index.
     queryGetPackageIndex :: forall m. MonadIO m => m (PackageIndex PkgInfo),
 
+    -- | Retrieves all versions of a package.
+    queryLookupPackageName :: forall m. MonadIO m => PackageName -> m [PkgInfo],
+
     -- | Retrieve the raw tarball info
     queryGetIndexTarballInfo :: forall m. MonadIO m => m IndexTarballInfo,
 
@@ -490,6 +493,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
     queryGetPackageIndex = Acid.packageIndex <$> Store.getPackagesState packagesStore
 
+    queryLookupPackageName :: MonadIO m => PackageName -> m [PkgInfo]
+    queryLookupPackageName = Store.lookupPackageName packagesStore
+
     queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
     queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball
 
@@ -618,8 +624,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     lookupPackageName :: PackageName -> ServerPartE [PkgInfo]
     lookupPackageName pkgname = do
-      pkgsIndex <- queryGetPackageIndex
-      let pkgs = PackageIndex.lookupPackageName pkgsIndex pkgname
+      pkgs <- queryLookupPackageName pkgname
       case pkgs of
         []   -> packageError [MText "No such package in package index"]
         pkgs -> return pkgs

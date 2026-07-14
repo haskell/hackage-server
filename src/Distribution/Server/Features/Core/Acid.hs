@@ -8,6 +8,7 @@ import Distribution.Server.Features.Core.Store
 import qualified Distribution.Server.Features.Core.State as Acid
 import Distribution.Server.Features.Security.Migration
 import Distribution.Server.Framework
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 acidStore :: ServerEnv -> Verbosity -> Bool -> FilePath -> IO Backend
 acidStore env verbosity freshDB stateDir = do
@@ -15,6 +16,9 @@ acidStore env verbosity freshDB stateDir = do
   pure Backend {
       backendStore = Store {
           getPackagesState       = queryState packagesState Acid.GetPackagesState
+        , lookupPackageName      = \pkgname -> do
+                                     packages <- queryState packagesState Acid.GetPackagesState
+                                     pure (PackageIndex.lookupPackageName (Acid.packageIndex packages) pkgname)
         , addPackage             = \pkginfo uploadinfo username entries ->
                                      updateState packagesState (Acid.AddPackage3 pkginfo uploadinfo username entries)
         , deletePackage          = \pkgid ->

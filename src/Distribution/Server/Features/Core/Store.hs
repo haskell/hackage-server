@@ -12,7 +12,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId, UserName)
 import Distribution.Server.Users.Users (Users)
 
-import Distribution.Package (PackageId)
+import Distribution.Package (PackageId, PackageName)
 
 import Control.Monad.Trans (MonadIO)
 import Data.Time.Clock (UTCTime)
@@ -24,6 +24,7 @@ data Backend = Backend {
 
 data Store = Store {
     getPackagesState       :: forall m. MonadIO m => m PackagesState
+  , lookupPackageName      :: forall m. MonadIO m => PackageName -> m [PkgInfo]
   , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> m Bool
   , deletePackage          :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , addPackageRevision     :: forall m. MonadIO m => PackageId -> CabalFileText -> UploadInfo -> UserName -> m (Maybe PkgInfo, PkgInfo)
