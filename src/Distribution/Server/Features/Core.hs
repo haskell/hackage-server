@@ -619,7 +619,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     lookupPackageName :: PackageName -> ServerPartE [PkgInfo]
     lookupPackageName pkgname = do
       pkgsIndex <- queryGetPackageIndex
-      case PackageIndex.lookupPackageName pkgsIndex pkgname of
+      let pkgs = PackageIndex.lookupPackageName pkgsIndex pkgname
+      case pkgs of
         []   -> packageError [MText "No such package in package index"]
         pkgs -> return pkgs
 
