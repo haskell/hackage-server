@@ -10,6 +10,8 @@ import Distribution.Server.Features.Security.Migration
 import Distribution.Server.Framework
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
+import qualified Data.List.NonEmpty as NE
+
 acidStore :: ServerEnv -> Verbosity -> Bool -> FilePath -> IO Backend
 acidStore env verbosity freshDB stateDir = do
   packagesState <- packagesStateComponent verbosity freshDB stateDir
@@ -22,6 +24,9 @@ acidStore env verbosity freshDB stateDir = do
         , lookupPackageId        = \pkgid -> do
                                      packages <- queryState packagesState Acid.GetPackagesState
                                      pure (PackageIndex.lookupPackageId (Acid.packageIndex packages) pkgid)
+        , latestPackages         = do
+                                     packages <- queryState packagesState Acid.GetPackagesState
+                                     pure (NE.last <$> PackageIndex.allPackagesByNameNE (Acid.packageIndex packages))
         , addPackage             = \pkginfo uploadinfo username entries ->
                                      updateState packagesState (Acid.AddPackage3 pkginfo uploadinfo username entries)
         , deletePackage          = \pkgid ->

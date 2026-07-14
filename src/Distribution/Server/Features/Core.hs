@@ -80,6 +80,9 @@ data CoreFeature = CoreFeature {
     -- | Retrieves a specific package version.
     queryLookupPackageId :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo),
 
+    -- | Retrieves the latest version of every package.
+    queryLatestPackages :: forall m. MonadIO m => m [PkgInfo],
+
     -- | Retrieve the raw tarball info
     queryGetIndexTarballInfo :: forall m. MonadIO m => m IndexTarballInfo,
 
@@ -501,6 +504,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     queryLookupPackageId :: MonadIO m => PackageId -> m (Maybe PkgInfo)
     queryLookupPackageId = Store.lookupPackageId packagesStore
+
+    queryLatestPackages :: MonadIO m => m [PkgInfo]
+    queryLatestPackages = Store.latestPackages packagesStore
 
     queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
     queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball

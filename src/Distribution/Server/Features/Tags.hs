@@ -154,7 +154,7 @@ tagsFeature :: CoreFeature
             -> MemState (Map PackageName (Set Tag, Set Tag))
             -> TagsFeature
 
-tagsFeature CoreFeature{ queryGetPackageIndex }
+tagsFeature CoreFeature{ queryGetPackageIndex, queryLatestPackages }
             UploadFeature{ maintainersGroup, trusteesGroup }
             UserFeature{ guardAuthorised' }
             tagsState
@@ -200,8 +200,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
 
     initImmutableTags :: IO ()
     initImmutableTags = do
-            index <- queryGetPackageIndex
-            let latestPackages = (fmap last . PackageIndex.allPackagesByName) index
+            latestPackages <- queryLatestPackages
             let calcTags = Acid.tagPackages $ constructImmutableTagIndex latestPackages
             aliases <- mapM (queryState tagsAlias . Acid.GetTagAlias) $ Map.keys calcTags
             let calcTags' = Map.toList . Map.fromListWith Set.union $ zip aliases (Map.elems calcTags)

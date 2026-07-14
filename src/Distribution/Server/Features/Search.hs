@@ -12,7 +12,6 @@ import Distribution.Server.Features.PackageList
 
 import Distribution.Server.Features.Search.PkgSearch
 import qualified Distribution.Server.Features.Search.SearchEngine as SearchEngine
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Packages.Types
 
@@ -102,12 +101,11 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
     getSearchDoc = flattenPackageDescription . pkgDesc
 
     postInit = do
-      pkgindex     <- queryGetPackageIndex
+      latestPackages <- queryLatestPackages
       pkgdownloads <- getDownloadCounts
       let pkgs = [ (getSearchDoc pkgLatestVer, pkgdownloads pkgname)
-                 | pkgVers <- PackageIndex.allPackagesByName pkgindex
-                 , let pkgLatestVer = last pkgVers
-                 , let pkgname      = packageName pkgLatestVer ]
+                 | pkgLatestVer <- latestPackages
+                 , let pkgname = packageName pkgLatestVer ]
           se = SearchEngine.insertDocs pkgs initialPkgSearchEngine
       writeMemState searchEngineState se
 

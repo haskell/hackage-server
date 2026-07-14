@@ -19,7 +19,6 @@ import Distribution.Server.Users.Users (userIdToName)
 import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Users.Group(UserGroup(..), GroupDescription(..))
 import Distribution.Server.Features.PreferredVersions
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Util.CountingMap (cmFind)
 
 import Distribution.Server.Packages.Types
@@ -274,8 +273,8 @@ listFeature CoreFeature{..}
 
     constructItemIndex :: IO (Map PackageName PackageItem)
     constructItemIndex = do
-        index <- queryGetPackageIndex
-        items <- mapM (constructItem . last) $ PackageIndex.allPackagesByName index
+        latestPackages <- queryLatestPackages
+        items <- mapM constructItem latestPackages
         return $ Map.fromList items
 
     constructItem :: PkgInfo -> IO (PackageName, PackageItem)
