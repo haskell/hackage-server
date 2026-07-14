@@ -636,7 +636,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       return (last pkgs)
     lookupPackageId pkgid = do
       pkgsIndex <- queryGetPackageIndex
-      case PackageIndex.lookupPackageId pkgsIndex pkgid of
+      let mpkg = PackageIndex.lookupPackageId pkgsIndex pkgid
+      case mpkg of
         Just pkg -> return pkg
         _ -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
 
