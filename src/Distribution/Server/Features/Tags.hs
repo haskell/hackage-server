@@ -313,9 +313,9 @@ constructTagIndex = foldl' addToTags Acid.emptyPackageTags . PackageIndex.allPac
 
 -- tags on startup
 constructImmutableTagIndex :: PackageIndex PkgInfo -> Acid.PackageTags
-constructImmutableTagIndex = foldl' addToTags Acid.emptyPackageTags . PackageIndex.allPackagesByName
-  where addToTags calcTags pkgList =
-            let info = pkgDesc $ last pkgList
+constructImmutableTagIndex = foldl' addToTags Acid.emptyPackageTags . fmap last . PackageIndex.allPackagesByName
+  where addToTags calcTags pkg =
+            let info = pkgDesc pkg
                 !pn = packageName info
                 !tags = constructImmutableTags info
             in Acid.setTags pn (Set.fromList tags) calcTags
