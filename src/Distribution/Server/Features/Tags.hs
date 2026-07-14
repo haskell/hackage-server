@@ -201,7 +201,8 @@ tagsFeature CoreFeature{ queryGetPackageIndex }
     initImmutableTags :: IO ()
     initImmutableTags = do
             index <- queryGetPackageIndex
-            let calcTags = Acid.tagPackages $ constructImmutableTagIndex ((fmap last . PackageIndex.allPackagesByName) index)
+            let latestPackages = (fmap last . PackageIndex.allPackagesByName) index
+            let calcTags = Acid.tagPackages $ constructImmutableTagIndex latestPackages
             aliases <- mapM (queryState tagsAlias . Acid.GetTagAlias) $ Map.keys calcTags
             let calcTags' = Map.toList . Map.fromListWith Set.union $ zip aliases (Map.elems calcTags)
             forM_ calcTags' $ uncurry setCalculatedTag
