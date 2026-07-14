@@ -107,7 +107,7 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
       let pkgs = [ (getSearchDoc pkgLatestVer, pkgdownloads pkgname)
                  | pkgVers <- PackageIndex.allPackagesByName pkgindex
                  , let pkgLatestVer = last pkgVers
-                       pkgname      = packageName pkgLatestVer ]
+                 , let pkgname      = packageName pkgLatestVer ]
           se = SearchEngine.insertDocs pkgs initialPkgSearchEngine
       writeMemState searchEngineState se
 
