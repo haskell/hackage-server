@@ -198,7 +198,8 @@ initListFeature _env = do
 
       registerHook updatePreferredHook $ \(pkgname, prefsinfo) -> do
           index <- queryGetPackageIndex
-          let allVersions = packageVersion <$> PackageIndex.lookupPackageName index pkgname
+          let pkgs = PackageIndex.lookupPackageName index pkgname
+          let allVersions = packageVersion <$> pkgs
           modifyItem pkgname $ updateReferenceVersion prefsinfo allVersions
 
       return feature
