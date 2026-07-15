@@ -242,12 +242,12 @@ tagsFeature CoreFeature{ queryGetPackageIndex, queryLatestPackages }
             Just (Tag orig) -> do
                 index <- queryGetPackageIndex
                 void $ updateState tagsAlias $ Acid.AddTagAlias (Tag orig) deprTag
-                void $ constructMergedTagIndex (Tag orig) deprTag index
+                void $ constructMergedTagIndex (Tag orig) deprTag (PackageIndex.allPackageNames index)
             _ -> errBadRequest "Tag not recognised" [MText "Couldn't parse tag. It should be a single tag."]
 
     -- tags on merging
-    constructMergedTagIndex :: forall m. (Functor m, MonadIO m) => Tag -> Tag -> PackageIndex PkgInfo -> m Acid.PackageTags
-    constructMergedTagIndex orig depr = foldM addToTags Acid.emptyPackageTags . PackageIndex.allPackageNames
+    constructMergedTagIndex :: forall m. (Functor m, MonadIO m) => Tag -> Tag -> [PackageName] -> m Acid.PackageTags
+    constructMergedTagIndex orig depr = foldM addToTags Acid.emptyPackageTags
       where addToTags calcTags pn = do
                 pkgTags <- queryTagsForPackage pn
                 if Set.member depr pkgTags
