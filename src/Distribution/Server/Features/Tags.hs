@@ -154,7 +154,7 @@ tagsFeature :: CoreFeature
             -> MemState (Map PackageName (Set Tag, Set Tag))
             -> TagsFeature
 
-tagsFeature CoreFeature{ queryGetPackageIndex, queryLatestPackages }
+tagsFeature CoreFeature{ queryLatestPackages }
             UploadFeature{ maintainersGroup, trusteesGroup }
             UserFeature{ guardAuthorised' }
             tagsState
@@ -240,8 +240,8 @@ tagsFeature CoreFeature{ queryGetPackageIndex, queryLatestPackages }
     mergeTags targetTag deprTag =
         case simpleParse =<< targetTag of
             Just (Tag orig) -> do
-                index <- queryGetPackageIndex
-                let pkgNames = PackageIndex.allPackageNames index
+                latestPkgs <- queryLatestPackages
+                let pkgNames = packageName <$> latestPkgs
                 void $ updateState tagsAlias $ Acid.AddTagAlias (Tag orig) deprTag
                 void $ constructMergedTagIndex (Tag orig) deprTag pkgNames
             _ -> errBadRequest "Tag not recognised" [MText "Couldn't parse tag. It should be a single tag."]
