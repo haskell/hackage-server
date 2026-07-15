@@ -241,8 +241,9 @@ tagsFeature CoreFeature{ queryGetPackageIndex, queryLatestPackages }
         case simpleParse =<< targetTag of
             Just (Tag orig) -> do
                 index <- queryGetPackageIndex
+                let pkgNames = PackageIndex.allPackageNames index
                 void $ updateState tagsAlias $ Acid.AddTagAlias (Tag orig) deprTag
-                void $ constructMergedTagIndex (Tag orig) deprTag (PackageIndex.allPackageNames index)
+                void $ constructMergedTagIndex (Tag orig) deprTag pkgNames
             _ -> errBadRequest "Tag not recognised" [MText "Couldn't parse tag. It should be a single tag."]
 
     -- tags on merging
