@@ -65,6 +65,7 @@ sort isSearch sortColumn sortDirection =
             LastUpload -> comparing itemLastUpload
             ReferenceVersion -> comparing itemReferenceVersion
             Maintainers -> comparing itemMaintainer
+            PackageRank -> comparing itemPackageRank
        in sortBy (maybeReverse comparer)
   where
     maybeReverse =
