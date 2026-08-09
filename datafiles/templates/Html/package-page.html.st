@@ -21,7 +21,6 @@
     <meta name="robots" contents="noindex">
   $endif$
   <link rel="canonical" href="$sbaseurl$/package/$package.name$" />
-  <script src="/static/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
   <base href="$baseurl$/package/$package.name$-$package.version$/" />
 </head>
