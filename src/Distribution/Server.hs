@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NumericUnderscores #-}
 module Distribution.Server (
     -- * Server control
     Server(..),
@@ -75,6 +76,8 @@ data ServerConfig = ServerConfig {
   confStaticDir :: FilePath,
   confTmpDir    :: FilePath,
   confCacheDelay:: Int,
+  -- | Period before which downloads are flushed to disk
+  confDownloadFlush :: Int,
   confLiveTemplates :: Bool
 } deriving (Show)
 
@@ -108,6 +111,7 @@ defaultServerConfig = do
     confStaticDir = dataDir,
     confTmpDir    = "state" </> "tmp",
     confCacheDelay= 0,
+    confDownloadFlush = 60,
     confLiveTemplates = False
   }
 
@@ -128,7 +132,7 @@ hasSavedState = doesDirectoryExist . confDbStateDir
 mkServerEnv :: ServerConfig -> IO ServerEnv
 mkServerEnv config@(ServerConfig verbosity hostURI userContentURI requiredBaseHostHeader _
                                     stateDir _ tmpDir
-                                    cacheDelay liveTemplates) = do
+                                    cacheDelay flushDownloadPeriod liveTemplates) = do
     createDirectoryIfMissing False stateDir
     let blobStoreDir  = confBlobStoreDir   config
         staticDir     = confStaticFilesDir config
@@ -149,7 +153,8 @@ mkServerEnv config@(ServerConfig verbosity hostURI userContentURI requiredBaseHo
             serverBlobStore     = store,
             serverCron          = cron,
             serverTmpDir        = tmpDir,
-            serverCacheDelay    = cacheDelay * 1000000, --microseconds
+            serverCacheDelay    = cacheDelay * 1_000_000, --microseconds
+            serverFlushDownloadsPeriod = flushDownloadPeriod * 1_000_000,--microseconds
             serverBaseURI       = hostURI,
             serverUserContentBaseURI = userContentURI,
             serverRequiredBaseHostHeader = requiredBaseHostHeader,

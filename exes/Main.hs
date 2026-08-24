@@ -206,6 +206,9 @@ data RunFlags = RunFlags {
     flagRunTemp            :: Flag Bool,
     flagRunCacheDelay      :: Flag String,
     flagRunLiveTemplates   :: Flag Bool,
+    -- | The period before which to flush download counts to
+    -- disk, in seconds
+    flagRunFlushDownloads  :: Flag Int,
     -- Online backup flags
     flagRunBackupOutputDir :: Flag FilePath,
     flagRunBackupLinkBlobs :: Flag Bool,
@@ -226,6 +229,7 @@ defaultRunFlags = RunFlags {
     flagRunTemp            = Flag False,
     flagRunCacheDelay      = NoFlag,
     flagRunLiveTemplates   = Flag False,
+    flagRunFlushDownloads  = Flag 60,
     flagRunBackupOutputDir = Flag "backups",
     flagRunBackupLinkBlobs = Flag False,
     flagRunBackupScrubbed  = Flag False
@@ -311,6 +315,10 @@ runCommand =
           "Do not cache templates, for quicker feedback during development."
           flagRunLiveTemplates (\v flags -> flags { flagRunLiveTemplates = v })
           (noArg (Flag True))
+      , option [] ["flush-downloads-period"]
+          "Period on which download counts are flushed to disk, in seconds."
+          flagRunFlushDownloads (\v flags -> flags {flagRunFlushDownloads = v})
+          (noArg (Flag 60))
       ]
 
 runAction :: RunFlags -> IO ()
