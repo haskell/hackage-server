@@ -47,6 +47,9 @@ data HackageFeature = HackageFeature {
   , featureErrHandlers :: [(String, ServerErrorResponse)]
 
   , featurePostInit    :: IO ()
+    -- | Run when the server is shutting down, before the feature's state
+    -- components are closed. Must not throw.
+  , featurePreShutdown :: IO ()
   , featureReloadFiles :: IO ()
 
   , featureState       :: [AbstractStateComponent]
@@ -69,6 +72,7 @@ emptyHackageFeature name = HackageFeature {
     featureErrHandlers= [],
 
     featurePostInit  = return (),
+    featurePreShutdown = return (),
     featureReloadFiles = return (),
 
     featureState     = error $ "'featureState' not defined for feature '" ++ name ++ "'",

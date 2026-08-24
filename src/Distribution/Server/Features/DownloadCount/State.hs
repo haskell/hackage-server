@@ -6,7 +6,7 @@ module Distribution.Server.Features.DownloadCount.State where
 import Data.Time.Calendar (Day(..))
 import Data.Foldable (forM_)
 import Control.Arrow (first)
-import Control.Monad (liftM)
+import Control.Monad (liftM, unless)
 import Data.List (foldl', groupBy)
 import Data.Function (on)
 import Control.Monad.Reader (ask, asks)
@@ -168,9 +168,15 @@ accumTotalDownloads pkgName (OnDiskPerPkg perPkg) =
   Pure updates/queries
 ------------------------------------------------------------------------------}
 
-updateHistory :: InMemStats -> OnDiskStats -> OnDiskStats
+-- | Fold a day's downloads into the historical statistics.
+--
+-- The name of packages whose statistics changed is also returned, 
+-- so that only those need writing out.
+updateHistory :: InMemStats -> OnDiskStats -> (OnDiskStats, [PackageName])
 updateHistory (InMemStats day perPkg) (OnDiskStats (NCM _ m)) =
-    OnDiskStats (NCM 0 (Map.unionWith cmUnion m updatesMap))
+    ( OnDiskStats (NCM 0 (Map.unionWith cmUnion m updatesMap))
+    , Map.keys updatesMap
+    )
   where
     updatesMap :: Map.Map PackageName OnDiskPerPkg
     updatesMap = Map.fromList
@@ -220,11 +226,16 @@ readOnDiskPerPkg pkgFile =
       evaluate =<< (runGetLazy safeGet <$> BSL.hGetContents h)
 
 writeOnDiskStats :: FilePath -> OnDiskStats -> IO ()
-writeOnDiskStats stateDir (OnDiskStats (NCM _ onDisk)) = do
+writeOnDiskStats stateDir stats@(OnDiskStats (NCM _ onDisk)) =
+    writeOnDiskStatsFor stateDir (Map.keys onDisk) stats
+
+-- | Write out the statistics for the given packages only.
+writeOnDiskStatsFor :: FilePath -> [PackageName] -> OnDiskStats -> IO ()
+writeOnDiskStatsFor stateDir pkgNames (OnDiskStats (NCM _ onDisk)) = do
    createDirectoryIfMissing True stateDir
-   forM_ (Map.toList onDisk) $ \(pkgName, perPkg) -> do
-     let pkgFile = stateDir </> display pkgName
-     writeFileAtomic pkgFile $ runPutLazy (safePut perPkg)
+   forM_ pkgNames $ \pkgName ->
+     forM_ (Map.lookup pkgName onDisk) $ \perPkg ->
+       writeFileAtomic (stateDir </> display pkgName) $ runPutLazy (safePut perPkg)
 
 {------------------------------------------------------------------------------
   The append-only all-time log
@@ -251,13 +262,27 @@ replaceInMemStats = put
 recordedToday :: Query InMemStats Day
 recordedToday = asks inMemToday
 
+-- | Record a single download.
+--
+-- Superseded by 'registerDownloads', which coalesces many downloads into a
+-- single event. This is retained only so that existing acid-state event logs
+-- (which may contain 'RegisterDownload' events) can still be replayed.
+--
+-- This should be dropped at some point
 registerDownload :: PackageId -> Update InMemStats ()
-registerDownload pkgId = do
+registerDownload pkgId = registerDownloads [(pkgId, 1)]
+
+-- | Record a batch of downloads: @(package, number of downloads)@ pairs.
+registerDownloads :: [(PackageId, Int)] -> Update InMemStats ()
+registerDownloads pkgs = unless (null pkgs) $ do
   InMemStats day counts <- get
-  put $ InMemStats day (cmInsert pkgId 1 counts)
+  put $! InMemStats day (foldl' insert counts pkgs)
+  where
+    insert counts (pkgId, n) = cmInsert pkgId n counts
 
 makeAcidic ''InMemStats [ 'getInMemStats
                         , 'replaceInMemStats
                         , 'recordedToday
                         , 'registerDownload
+                        , 'registerDownloads
                         ]

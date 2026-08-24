@@ -17,7 +17,7 @@ acidStore stateDir = do
           Store.recordedToday = queryState inMemState State.RecordedToday
         , Store.getInMemStats = queryState inMemState State.GetInMemStats
         , Store.replaceInMemStats = \stats -> updateState inMemState (State.ReplaceInMemStats stats)
-        , Store.registerDownload = \pkgid -> updateState inMemState (State.RegisterDownload pkgid)
+        , Store.registerDownloads = \pkgs -> updateState inMemState (State.RegisterDownloads pkgs)
         , Store.checkpointInMemStats = liftIO (createCheckpoint (stateHandle inMemState))
         }
     , Store.backendState = [abstractAcidStateComponent inMemState]
