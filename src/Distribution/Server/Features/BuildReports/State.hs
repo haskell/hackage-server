@@ -51,10 +51,11 @@ getBuildReports = ask
 replaceBuildReports :: BuildReports -> Update BuildReports ()
 replaceBuildReports = State.put
 
-addRptLogCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe BuildCovg, Maybe TestReportLog) -> Update BuildReports BuildReportId
-addRptLogCovg pkgid (bRpt, blog, bcovg, testReportLog) = do
+-- | Superseded by 'addRptAllLogsCovg'.
+addRptLogCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe BuildCovg) -> Update BuildReports BuildReportId
+addRptLogCovg pkgid (bRpt, blog, bcovg) = do
     buildReports <- State.get
-    let (reports, reportId) = BuildReports.addRptLogTestCovg pkgid (bRpt, blog, Nothing, bcovg, testReportLog) buildReports
+    let (reports, reportId) = BuildReports.addRptLogTestCovg pkgid (bRpt, blog, Nothing, bcovg, Nothing) buildReports
     State.put reports
     return reportId
 
@@ -80,8 +81,16 @@ lookupFailCount pkgid = asks (BuildReports.lookupFailCount pkgid)
 lookupLatestReport :: PackageId -> Query BuildReports (Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog))
 lookupLatestReport pkgid = asks (BuildReports.lookupLatestReport pkgid)
 
-addRptLogTestCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog) -> Update BuildReports BuildReportId
-addRptLogTestCovg pkgid (bRpt, blog, btest, bcovg, testReportLog) = do
+-- | Superseded by 'addRptAllLogsCovg'.
+addRptLogTestCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg) -> Update BuildReports BuildReportId
+addRptLogTestCovg pkgid (bRpt, blog, btest, bcovg) = do
+    buildReports <- State.get
+    let (reports, reportId) = BuildReports.addRptLogTestCovg pkgid (bRpt, blog, btest, bcovg, Nothing) buildReports
+    State.put reports
+    return reportId
+
+addRptAllLogsCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog) -> Update BuildReports BuildReportId
+addRptAllLogsCovg pkgid (bRpt, blog, btest, bcovg, testReportLog) = do
     buildReports <- State.get
     let (reports, reportId) = BuildReports.addRptLogTestCovg pkgid (bRpt, blog, btest, bcovg, testReportLog) buildReports
     State.put reports
@@ -118,6 +127,7 @@ makeAcidic ''BuildReports ['addReport
                           ,'lookupFailCount
                           ,'lookupLatestReport
                           ,'addRptLogTestCovg
+                          ,'addRptAllLogsCovg
                           ,'setTestLog
                           ,'lookupRunTests
                           ,'setRunTests

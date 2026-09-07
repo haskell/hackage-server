@@ -433,7 +433,7 @@ buildReportsFeature name
               testBlob  <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) testBody
               testReportBlob <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) testReportBody
               reportId  <- updateState reportsState $
-                                  Acid.AddRptLogTestCovg pkgid (report', (fmap BuildLog logBlob), (fmap TestLog testBlob), (fmap BuildReport.parseCovg covgBody), (fmap TestReportLog testReportBlob))
+                                  Acid.AddRptAllLogsCovg pkgid (report', (fmap BuildLog logBlob), (fmap TestLog testBlob), (fmap BuildReport.parseCovg covgBody), (fmap TestReportLog testReportBlob))
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
