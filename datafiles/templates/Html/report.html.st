@@ -113,6 +113,7 @@ $endif$
 <h3>Test report log</h3>
 
 $if(testReport)$
+<p style="font-size: small">[<a href="/package/$pkgid$/reports/$report.0$/testReport">view raw</a>]</p>
 <pre>
 $testReport$</pre>
 $else$

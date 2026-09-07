@@ -63,6 +63,7 @@ data ReportsResource = ReportsResource {
     reportsPage :: Resource,
     reportsLog  :: Resource,
     reportsTest :: Resource,
+    reportsTestReport :: Resource,
     reportsReset:: Resource,
     reportsTestsEnabled :: Resource,
     reportsListUri :: String -> PackageId -> String,
@@ -125,6 +126,7 @@ buildReportsFeature name
             , reportsPage
             , reportsLog
             , reportsTest
+            , reportsTestReport
             , reportsReset
             , reportsTestsEnabled
             ]
@@ -179,6 +181,11 @@ buildReportsFeature name
               , resourceGet    = [ ("txt", serveTestLog) ]
               , resourceDelete = [ ("",    deleteTestLog )]
               , resourcePut    = [ ("",    putTestLog) ]
+              }
+          , reportsTestReport = (extendResourcePath "/reports/:id/testReport" corePackagePage) {
+                resourceDesc   = [ (GET, "Get the test report log associated with a build report")
+                                 ]
+              , resourceGet    = [ ("txt", serveTestReportLog) ]
               }
           , reportsListUri = \format pkgid -> renderResource (reportsList reportsResource) [display pkgid, format]
           , reportsPageUri = \format pkgid repid -> renderResource (reportsPage reportsResource) [display pkgid, display repid, format]
@@ -279,6 +286,15 @@ buildReportsFeature name
         Just logId -> do
           cacheControlWithoutETag [Public, maxAgeDays 30]
           toResponse <$> queryTestLog logId
+
+    serveTestReportLog :: DynamicPath -> ServerPartE Response
+    serveTestReportLog dpath = do
+      (repid, _, _, _, _, mtestReport) <- packageReport dpath
+      case mtestReport of
+        Nothing -> errNotFound "Test report log not found" [MText $ "Test report log for report " ++ display repid ++ " not found"]
+        Just logId -> do
+          cacheControlWithoutETag [Public, maxAgeDays 30]
+          toResponse <$> queryTestReportLog logId
 
 
     -- result: auth error, not-found error, parse error, or redirect
