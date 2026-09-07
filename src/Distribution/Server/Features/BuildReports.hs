@@ -174,9 +174,9 @@ buildReportsFeature name
               , resourcePut    = [ ("",    putBuildLog) ]
               }
           , reportsTest = (extendResourcePath "/reports/:id/test" corePackagePage) {
-                resourceDesc   = [ (GET, "Get the test log associated with a build report")
-                                 , (DELETE, "Delete a test log")
-                                 , (PUT, "Upload a test log for a build report")
+                resourceDesc   = [ (GET, "Get the test build log associated with a build report")
+                                 , (DELETE, "Delete a test build log")
+                                 , (PUT, "Upload a test build log for a build report")
                                  ]
               , resourceGet    = [ ("txt", serveTestLog) ]
               , resourceDelete = [ ("",    deleteTestLog )]
@@ -282,7 +282,7 @@ buildReportsFeature name
     serveTestLog dpath = do
       (repid, _, _, mtest, _, _) <- packageReport dpath
       case mtest of
-        Nothing -> errNotFound "Test log not found" [MText $ "Test log for report " ++ display repid ++ " not found"]
+        Nothing -> errNotFound "Test build log not found" [MText $ "Test build log for report " ++ display repid ++ " not found"]
         Just logId -> do
           cacheControlWithoutETag [Public, maxAgeDays 30]
           toResponse <$> queryTestLog logId

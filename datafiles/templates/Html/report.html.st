@@ -100,14 +100,14 @@ $else$
 <p>No log was submitted for this report.</p>
 $endif$
 
-<h3>Test log</h3>
+<h3>Test build log</h3>
 
 $if(test)$
 <p style="font-size: small">[<a href="/package/$pkgid$/reports/$report.0$/test">view raw</a>]</p>
 <pre>
 $test$</pre>
 $else$
-<p>No test log was submitted for this report.</p>
+<p>No test build log was submitted for this report.</p>
 $endif$
 
 <h3>Test report log</h3>
