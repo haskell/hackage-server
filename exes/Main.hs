@@ -5,6 +5,7 @@
 
 module Main where
 
+import Distribution.ReadE (ReadE (ReadE))
 import qualified Distribution.Server as Server
 import Distribution.Server (ListenOn(..), ServerConfig(..), Server)
 import Distribution.Server.Framework.Feature
@@ -58,6 +59,7 @@ import Control.Arrow
 import qualified Data.ByteString.Lazy as BS
 import qualified Distribution.Server.Util.GZip as GZip
 import qualified Text.Parsec as Parse
+import Text.Read (readMaybe)
 
 import Paths_hackage_server as Paths (version)
 
@@ -318,8 +320,13 @@ runCommand =
       , option [] ["flush-downloads-period"]
           "Period on which download counts are flushed to disk, in seconds."
           flagRunFlushDownloads (\v flags -> flags {flagRunFlushDownloads = v})
-          (noArg (Flag 60))
+          (optArg "SECONDS" parseFlushDownloadPeriod ("60", Flag 60) (\(Flag n) -> [Just (show n)]))
       ]
+      where
+        parseFlushDownloadPeriod :: ReadE (Flag Int)
+        parseFlushDownloadPeriod  = ReadE $ \s -> case readMaybe s of
+          Nothing -> Left "Could not parse flush download period"
+          Just seconds -> Right (Flag seconds)
 
 runAction :: RunFlags -> IO ()
 runAction opts = do
@@ -338,6 +345,7 @@ runAction opts = do
                        loPortNum = port,
                        loIP      = ip
                     }
+        flushDownloadPeriod = fromFlagOrDefault (confDownloadFlush defaults) $ flagRunFlushDownloads opts
         config    = defaults {
                         confHostUri    = hosturi,
                         confUserContentUri = usercontenturi,
@@ -348,7 +356,8 @@ runAction opts = do
                         confTmpDir     = tmpDir,
                         confCacheDelay = cacheDelay,
                         confLiveTemplates = liveTemplates,
-                        confVerbosity  = verbosity
+                        confVerbosity  = verbosity,
+                        confDownloadFlush = flushDownloadPeriod
                     }
         outputDir = fromFlag (flagRunBackupOutputDir opts)
         linkBlobs = fromFlag (flagRunBackupLinkBlobs opts)
