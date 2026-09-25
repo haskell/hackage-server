@@ -8,6 +8,7 @@ module Distribution.Server.Features.UserSignup.Acid where
 import Distribution.Server.Features.UserSignup.Types
 import Distribution.Server.Features.UserSignup.State
 import Distribution.Server.Features.UserSignup.Backup
+import qualified Distribution.Server.Features.UserSignup.Store as Store
 
 import Distribution.Server.Framework hiding (Method)
 import Distribution.Server.Framework.BackupDump
@@ -20,6 +21,22 @@ import Control.Monad.State (get, put, modify)
 import Data.Acid.Compat
 
 import Data.Time
+
+acidStore :: FilePath -> IO Store.Backend
+acidStore stateDir = do
+  signupResetState <- signupResetStateComponent stateDir
+  pure Store.Backend {
+      Store.backendStore = Store.Store {
+          Store.getSignupResetInfos =
+                queryState signupResetState GetSignupResetTable
+            >>= \(SignupResetTable tbl) -> return (Map.elems tbl)
+        , Store.lookupSignupResetInfo = \nonce -> queryState signupResetState (LookupSignupResetInfo nonce)
+        , Store.addSignupResetInfo = \nonce info -> updateState signupResetState (AddSignupResetInfo nonce info)
+        , Store.deleteSignupResetInfo = \nonce -> updateState signupResetState (DeleteSignupResetInfo nonce)
+        , Store.deleteExpiredResetInfos = \expiry -> updateState signupResetState (DeleteAllExpired expiry)
+        }
+    , Store.backendState = [abstractAcidStateComponent signupResetState]
+    }
 
 signupResetStateComponent :: FilePath -> IO (StateComponent AcidState SignupResetTable)
 signupResetStateComponent stateDir = do
