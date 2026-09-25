@@ -401,6 +401,7 @@ library
       Distribution.Server.Features.Votes.Store
       Distribution.Server.Features.Votes.Types
       Distribution.Server.Features.Vouch
+      Distribution.Server.Features.Vouch.Acid
       Distribution.Server.Features.Vouch.State
       Distribution.Server.Features.Vouch.Types
       Distribution.Server.Features.RecentPackages

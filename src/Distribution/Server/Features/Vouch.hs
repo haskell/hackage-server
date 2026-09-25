@@ -4,6 +4,7 @@
 module Distribution.Server.Features.Vouch (VouchFeature(..), initVouchFeature, judgeVouch) where
 
 import qualified Distribution.Server.Features.Vouch.State as Acid
+import Distribution.Server.Features.Vouch.Acid (vouchStateComponent)
 import Distribution.Server.Features.Vouch.Types
 import Control.Monad (when, join)
 import Control.Monad.Except (runExceptT, throwError)
@@ -14,38 +15,18 @@ import Data.Time (UTCTime(..), addUTCTime, getCurrentTime, nominalDay, secondsTo
 import Data.Time.Format.ISO8601 (formatShow, iso8601Format)
 import Text.XHtml.Strict (prettyHtmlFragment, stringToHtml, li)
 
-import Distribution.Server.Framework ((</>), AcidState, DynamicPath, HackageFeature, IsHackageFeature, IsHackageFeature(..))
-import Distribution.Server.Framework (MessageSpan(MText), Method(..), Response, ServerEnv(..), ServerPartE, StateComponent(..))
+import Distribution.Server.Framework ((</>), DynamicPath, HackageFeature, IsHackageFeature, IsHackageFeature(..))
+import Distribution.Server.Framework (MessageSpan(MText), Method(..), Response, ServerEnv(..), ServerPartE)
 import Distribution.Server.Framework (abstractAcidStateComponent, emptyHackageFeature, errBadRequest)
 import Distribution.Server.Framework (featureDesc, featureReloadFiles, featureResources, featureState)
-import Distribution.Server.Framework (liftIO, openLocalStateFrom, query, queryState, resourceAt, resourceDesc, resourceGet)
-import Distribution.Server.Framework (resourcePost, toResponse, update, updateState)
-import Distribution.Server.Framework.BackupRestore (RestoreBackup(..))
+import Distribution.Server.Framework (liftIO, queryState, resourceAt, resourceDesc, resourceGet)
+import Distribution.Server.Framework (resourcePost, toResponse, updateState)
 import Distribution.Server.Framework.Templating (($=), TemplateAttr, getTemplate, loadTemplates, reloadTemplates, templateUnescaped)
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types (UserId(..), UserInfo, UserName(..), userName)
 import Distribution.Server.Features.Upload(UploadFeature(..))
 import Distribution.Server.Features.Users (UserFeature(..))
 import Distribution.Simple.Utils (toUTF8LBS)
-
-vouchStateComponent :: FilePath -> IO (StateComponent AcidState Acid.VouchData)
-vouchStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "Vouch") (Acid.VouchData mempty mempty)
-  let initialVouchData = Acid.VouchData mempty mempty
-      restore =
-        RestoreBackup
-          { restoreEntry = error "Unexpected backup entry"
-          , restoreFinalize = return initialVouchData
-          }
-  pure StateComponent
-    { stateDesc = "Keeps track of vouches"
-    , stateHandle = st
-    , getState = query st Acid.GetVouchesData
-    , putState = update st . Acid.ReplaceVouchesData
-    , backupState = \_ _ -> []
-    , restoreState = restore
-    , resetState = vouchStateComponent
-    }
 
 data VouchFeature =
   VouchFeature
