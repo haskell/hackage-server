@@ -12,6 +12,7 @@ module Distribution.Server.Features.UserSignup (
   ) where
 
 import qualified Distribution.Server.Features.UserSignup.Acid as Acid
+import qualified Distribution.Server.Features.UserSignup.State as State
 import Distribution.Server.Features.UserSignup.Backup
 import Distribution.Server.Features.UserSignup.Types
 
@@ -94,9 +95,9 @@ instance IsHackageFeature UserSignupFeature where
 -- State components
 --
 
-signupResetStateComponent :: FilePath -> IO (StateComponent AcidState Acid.SignupResetTable)
+signupResetStateComponent :: FilePath -> IO (StateComponent AcidState State.SignupResetTable)
 signupResetStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserSignupReset") Acid.emptySignupResetTable
+  st <- openLocalStateFrom (stateDir </> "db" </> "UserSignupReset") State.emptySignupResetTable
   return StateComponent {
       stateDesc    = "State to keep track of outstanding requests for user signup and password resets"
     , stateHandle  = st
@@ -143,7 +144,7 @@ userSignupFeature :: ServerEnv
                   -> UserFeature
                   -> UserDetailsFeature
                   -> UploadFeature
-                  -> StateComponent AcidState Acid.SignupResetTable
+                  -> StateComponent AcidState State.SignupResetTable
                   -> Templates
                   -> UserSignupFeature
 userSignupFeature ServerEnv{serverBaseURI, serverCron}
@@ -213,7 +214,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
     queryAllSignupResetInfo :: MonadIO m => m [SignupResetInfo]
     queryAllSignupResetInfo =
           queryState signupResetState Acid.GetSignupResetTable
-      >>= \(Acid.SignupResetTable tbl) -> return (Map.elems tbl)
+      >>= \(State.SignupResetTable tbl) -> return (Map.elems tbl)
 
     querySignupInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     querySignupInfo nonce =

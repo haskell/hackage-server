@@ -1,35 +1,23 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Distribution.Server.Features.UserSignup.Acid where
 
 import Distribution.Server.Features.UserSignup.Types
+import Distribution.Server.Features.UserSignup.State
 
 import Distribution.Server.Framework hiding (Method)
 
 import Distribution.Server.Util.Nonce
 
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put, modify)
 import Data.Acid.Compat
-import Data.SafeCopy
 
 import Data.Time
-
--------------------------
--- Types of stored data
---
-
-newtype SignupResetTable = SignupResetTable (Map Nonce SignupResetInfo)
-  deriving (Eq, Show, MemSize)
-
-emptySignupResetTable :: SignupResetTable
-emptySignupResetTable = SignupResetTable Map.empty
-
-$(deriveSafeCopy 0 'base ''SignupResetTable)
 
 ------------------------------
 -- State queries and updates
