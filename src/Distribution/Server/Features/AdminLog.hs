@@ -4,13 +4,12 @@
 
 module Distribution.Server.Features.AdminLog where
 
-import qualified Distribution.Server.Features.AdminLog.Acid as Acid
-import Distribution.Server.Features.AdminLog.Backup
+import Distribution.Server.Features.AdminLog.Acid (adminLogStateComponent)
+import qualified Distribution.Server.Features.AdminLog.State as Acid
 import Distribution.Server.Features.AdminLog.Types
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.Group
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Pages.AdminLog
 import Distribution.Server.Features.Users
@@ -87,18 +86,3 @@ adminLogFeature UserFeature{..} adminLogState
     nameIt AdminGroup           = "Administrators"
     nameIt TrusteeGroup         = "Trustees"
     nameIt (OtherGroup s)       = unpackUTF8 s
-
-adminLogStateComponent :: FilePath -> IO (StateComponent AcidState Acid.AdminLog)
-adminLogStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "AdminLog") Acid.initialAdminLog
-  return StateComponent {
-      stateDesc    = "AdminLog"
-    , stateHandle  = st
-    , getState     = query st Acid.GetAdminLog
-    , putState     = update st . Acid.ReplaceAdminLog
-    , backupState  = \_ (Acid.AdminLog xs) ->
-                      [BackupByteString ["adminLog.txt"] . backupLogEntries $ xs]
-    , restoreState = restoreAdminLogBackup
-    , resetState   = adminLogStateComponent
-    }
-
