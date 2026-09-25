@@ -11,6 +11,7 @@ import Distribution.PackageDescription.Configuration
                                 ( flattenPackageDescription )
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 import Distribution.Simple.Utils (comparing, equating)
 import Distribution.ModuleName (toFilePath)
 import Distribution.Text (display)
@@ -28,6 +29,7 @@ packageIndex = formatPkgGroups
                  . map (mkPackageIndexInfo
                       . flattenPackageDescription
                       . pkgDesc
+                      . pkgLatestRevision
                       . maximumBy (comparing packageVersion))
                  . PackageIndex.allPackagesByName
 

@@ -21,6 +21,7 @@ import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Framework
 import Distribution.Server.Packages.Index
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 
 -- Hackage security
 import Hackage.Security.Util.Some

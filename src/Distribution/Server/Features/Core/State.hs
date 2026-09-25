@@ -29,6 +29,7 @@ import Distribution.Package
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils.Acid
 import Distribution.Server.Packages.Index
 import Distribution.Server.Users.Types (UserId, UserName(..), UserInfo(..))
 import Distribution.Server.Users.Users (Users, lookupUserId)
@@ -88,14 +89,14 @@ initialPackagesState freshDB = PackagesState {
   }
 
 -- old v0 transaction
-addPackage :: PackageId -> CabalFileText -> UploadInfo
+addPackage :: PackageId -> CabalFileText -> OldUploadInfo
            -> Maybe PkgTarball
            -> Update PackagesState (Maybe PkgInfo)
 addPackage pkgid cabalfile uploadinfo mtarball =
     addPackage2 pkgid cabalfile uploadinfo (UserName "") mtarball
 
 -- v1  transaction (adds username)
-addPackage2 :: PackageId -> CabalFileText -> UploadInfo -> UserName
+addPackage2 :: PackageId -> CabalFileText -> OldUploadInfo -> UserName
             -> Maybe PkgTarball
             -> Update PackagesState (Maybe PkgInfo)
 addPackage2 pkgid cabalfile uploadinfo@(timestamp, uid) username mtarball = do
@@ -111,7 +112,7 @@ addPackage2 pkgid cabalfile uploadinfo@(timestamp, uid) username mtarball = do
         return (Just pkginfo)
 
 -- current transaction (takes tar index entries as well)
-addPackage3 :: PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> Update PackagesState Bool
+addPackage3 :: PkgInfo -> OldUploadInfo -> UserName -> [TarIndexEntry] -> Update PackagesState Bool
 addPackage3 !pkginfo (timestamp,uid) username entries = do
     PackagesState pkgindex updatelog <- State.get
     case PackageIndex.lookupPackageId pkgindex (pkgInfoId pkginfo) of
@@ -123,7 +124,7 @@ addPackage3 !pkginfo (timestamp,uid) username entries = do
         State.put $! PackagesState pkgindex' updatelog'
         return True
 
-mkPackageInfo :: PackageIdentifier -> CabalFileText -> UploadInfo -> Maybe PkgTarball -> PkgInfo
+mkPackageInfo :: PackageIdentifier -> CabalFileText -> OldUploadInfo -> Maybe PkgTarball -> PkgInfo
 mkPackageInfo pkgid cabalfile uploadinfo mtarball =
             PkgInfo {
               pkgInfoId            = pkgid,
@@ -146,12 +147,12 @@ deletePackage pkgid = do
         State.put $! PackagesState pkgindex' updatelog
         return (Just pkginfo)
 
-addPackageRevision :: PackageId -> CabalFileText -> UploadInfo
+addPackageRevision :: PackageId -> CabalFileText -> OldUploadInfo
                    -> Update PackagesState (Maybe PkgInfo, PkgInfo)
 addPackageRevision pkgid cabalfile uploadinfo =
     addPackageRevision2 pkgid cabalfile uploadinfo (UserName "")
 
-addPackageRevision2 :: PackageId -> CabalFileText -> UploadInfo -> UserName
+addPackageRevision2 :: PackageId -> CabalFileText -> OldUploadInfo -> UserName
                     -> Update PackagesState (Maybe PkgInfo, PkgInfo)
 addPackageRevision2 pkgid cabalfile uploadinfo@(timestamp, uid) username = do
     PackagesState pkgindex updatelog <- State.get
@@ -179,7 +180,7 @@ addPackageRevision2 pkgid cabalfile uploadinfo@(timestamp, uid) username = do
         State.put $! PackagesState pkgindex' updatelog'
         return (Nothing, pkginfo)
 
-addPackageTarball :: PackageId -> PkgTarball -> UploadInfo
+addPackageTarball :: PackageId -> PkgTarball -> OldUploadInfo
                   -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
 addPackageTarball pkgid tarball uploadinfo =
     alterPackage pkgid $ \pkginfo ->
@@ -281,11 +282,11 @@ initialUpdateLog oldExtras users pkgs =
       where
         pkgId = pkgInfoId pkgInfo
 
-    entryCabal :: PackageId -> (MetadataRevIx, (a, UploadInfo)) -> TarIndexEntry
+    entryCabal :: PackageId -> (MetadataRevIx, (a, OldUploadInfo)) -> TarIndexEntry
     entryCabal pkgId (revNo, (_cabalFile, (timestamp, uid))) =
         CabalFileEntry pkgId revNo timestamp uid (uidToName uid)
 
-    entryTUF :: PackageId -> (TarballRevIx, (a, UploadInfo)) -> TarIndexEntry
+    entryTUF :: PackageId -> (TarballRevIx, (a, OldUploadInfo)) -> TarIndexEntry
     entryTUF pkgId (revNo, (_tarball, (timestamp, _uid))) =
         MetadataEntry pkgId revNo timestamp
 

@@ -5,13 +5,13 @@ module Distribution.Server.Packages.Metadata (
   ) where
 
 -- Standard libraries
-import qualified Data.Vector          as Vec
 import qualified Data.ByteString.Lazy as BS.Lazy
 
 -- Hackage
 import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Features.Security.Layout
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Utils
 
 -- Cabal
 import Distribution.Package
