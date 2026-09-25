@@ -10,7 +10,8 @@ module Distribution.Server.Features.Documentation (
 import Distribution.Server.Features.Security.SHA256       (sha256)
 import Distribution.Server.Framework
 
-import qualified Distribution.Server.Features.Documentation.State as Acid
+import qualified Distribution.Server.Features.Documentation.State as State
+import Distribution.Server.Features.Documentation.Acid (documentationStateComponent)
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
@@ -18,7 +19,6 @@ import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.BuildReports
 import Distribution.Version (Version, nullVersion)
 
-import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -110,39 +110,6 @@ initDocumentationFeature name
                                          documentationChangeHook
       return feature
 
-documentationStateComponent :: String -> FilePath -> IO (StateComponent AcidState Acid.Documentation)
-documentationStateComponent name stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> name) Acid.initialDocumentation
-  return StateComponent {
-      stateDesc    = "Package documentation"
-    , stateHandle  = st
-    , getState     = query st Acid.GetDocumentation
-    , putState     = update st . Acid.ReplaceDocumentation
-    , backupState  = \_ -> dumpBackup
-    , restoreState = updateDocumentation (Acid.Documentation Map.empty)
-    , resetState   = documentationStateComponent name
-    }
-  where
-    dumpBackup doc =
-        let exportFunc (pkgid, blob) = BackupBlob [display pkgid, "documentation.tar"] blob
-        in map exportFunc . Map.toList $ Acid.documentation doc
-
-    updateDocumentation :: Acid.Documentation -> RestoreBackup Acid.Documentation
-    updateDocumentation docs = RestoreBackup {
-        restoreEntry = \entry ->
-          case entry of
-            BackupBlob [str, "documentation.tar"] blobId | Just pkgId <- simpleParse str -> do
-              docs' <- importDocumentation pkgId blobId docs
-              return (updateDocumentation docs')
-            _ ->
-              return (updateDocumentation docs)
-      , restoreFinalize = return docs
-      }
-
-    importDocumentation :: PackageId -> BlobId -> Acid.Documentation -> Restore Acid.Documentation
-    importDocumentation pkgId blobId (Acid.Documentation docs) =
-      return (Acid.Documentation (Map.insert pkgId blobId docs))
-
 documentationFeature :: String
                      -> ServerEnv
                      -> CoreResource
@@ -152,7 +119,7 @@ documentationFeature :: String
                      -> ReportsFeature
                      -> UserFeature
                      -> VersionsFeature
-                     -> StateComponent AcidState Acid.Documentation
+                     -> StateComponent AcidState State.Documentation
                      -> Hook PackageId ()
                      -> DocumentationFeature
 documentationFeature name
@@ -186,14 +153,14 @@ documentationFeature name
       }
 
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool
-    queryHasDocumentation pkgid = queryState documentationState (Acid.HasDocumentation pkgid)
+    queryHasDocumentation pkgid = queryState documentationState (State.HasDocumentation pkgid)
 
     queryDocumentation :: MonadIO m => PackageIdentifier -> m (Maybe BlobId)
-    queryDocumentation pkgid = queryState documentationState (Acid.LookupDocumentation pkgid)
+    queryDocumentation pkgid = queryState documentationState (State.LookupDocumentation pkgid)
 
     queryDocumentationIndex :: MonadIO m => m (Map.Map PackageId BlobId)
     queryDocumentationIndex =
-      liftM Acid.documentation (queryState documentationState Acid.GetDocumentation)
+      liftM State.documentation (queryState documentationState State.GetDocumentation)
 
     documentationResource = fix $ \r -> DocumentationResource {
         packageDocsContent = (extendResourcePath "/docs/.." corePackagePage) {
@@ -368,7 +335,7 @@ documentationFeature name
       case mres of
         Left  err -> errBadRequest "Invalid documentation tarball" [MText err]
         Right ((), blobid) -> do
-          updateState documentationState $ Acid.InsertDocumentation pkgid blobid
+          updateState documentationState $ State.InsertDocumentation pkgid blobid
           runHook_ documentationChangeHook pkgid
           noContent (toResponse ())
 
@@ -401,7 +368,7 @@ documentationFeature name
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-      updateState documentationState $ Acid.RemoveDocumentation pkgid
+      updateState documentationState $ State.RemoveDocumentation pkgid
       runHook_ documentationChangeHook pkgid
       noContent (toResponse ())
 
@@ -465,7 +432,7 @@ documentationFeature name
                 tempRedirect latestPkgPath (toResponse "")
               Nothing -> errNotFoundH "Not Found" [MText "There is no documentation for this package."]
         False -> do
-          mdocs <- queryState documentationState $ Acid.LookupDocumentation pkgid
+          mdocs <- queryState documentationState $ State.LookupDocumentation pkgid
           case mdocs of
             Nothing ->
               errNotFoundH "Not Found"
