@@ -19,8 +19,8 @@ module Distribution.Server.Features.PreferredVersions (
 
 import Distribution.Server.Framework
 
+import Distribution.Server.Features.PreferredVersions.Acid (preferredStateComponent)
 import Distribution.Server.Features.PreferredVersions.State
-import Distribution.Server.Features.PreferredVersions.Backup
 import Distribution.Server.Features.PreferredVersions.Types
 
 import Distribution.Server.Features.Core
@@ -117,20 +117,6 @@ initVersionsFeature env@ServerEnv{serverStateDir} = do
                                     preferredState deprecatedHook
                                     updatePreferredHook
       return feature
-
-preferredStateComponent :: Bool -> FilePath -> IO (StateComponent AcidState PreferredVersions)
-preferredStateComponent freshDB stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "PreferredVersions")
-                           (initialPreferredVersions freshDB)
-  return StateComponent {
-      stateDesc    = "Preferred package versions"
-    , stateHandle  = st
-    , getState     = query st GetPreferredVersions
-    , putState     = update st . ReplacePreferredVersions
-    , resetState   = preferredStateComponent True
-    , backupState  = \_ -> backupPreferredVersions
-    , restoreState = restorePreferredVersions
-    }
 
 versionsFeature :: ServerEnv
                 -> CoreFeature
