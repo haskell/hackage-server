@@ -322,6 +322,7 @@ library
     Distribution.Server.Features.Security.ResponseContentTypes
     Distribution.Server.Features.Security.SHA256
     Distribution.Server.Features.Security.State
+    Distribution.Server.Features.Security.Store
     Distribution.Server.Features.Mirror
     Distribution.Server.Features.Mirror.Acid
     Distribution.Server.Features.Mirror.Store

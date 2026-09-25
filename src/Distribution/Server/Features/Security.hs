@@ -16,6 +16,7 @@ import Distribution.Server.Features.Core
 import qualified Distribution.Server.Features.Security.Acid as Acid
 import Distribution.Server.Features.Security.Layout
 import Distribution.Server.Features.Security.ResponseContentTypes
+import qualified Distribution.Server.Features.Security.Store as Store
 import Distribution.Server.Features.Security.State
 import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Framework
@@ -36,12 +37,13 @@ instance IsHackageFeature SecurityFeature where
 
 initSecurityFeature :: ServerEnv -> IO (CoreFeature -> IO SecurityFeature)
 initSecurityFeature env = do
-    securityState <- Acid.securityStateComponent env (serverStateDir env)
+    securityBackend <- Acid.acidStore env (serverStateDir env)
     return $ \coreFeature -> do
+       let securityStore = Store.backendStore securityBackend
 
        -- Update the security state whenever the main package index changes
        registerHook (indexUpdatedHook coreFeature) $ \_ ->
-         updateIndexFileInfo coreFeature securityState
+         updateIndexFileInfo coreFeature securityStore
 
        -- Add package metadata whenever a package is added/changed
        --
@@ -78,7 +80,7 @@ initSecurityFeature env = do
          loginfo maxBound (mconcat ["TUF preIndexUpdateHook invoked (", msg, ", n = ", show (length ents), ")"])
          return ents
 
-       return $ securityFeature env securityState
+       return $ securityFeature env securityBackend
   where
     indexEntriesFor :: PkgInfo -> [TarIndexEntry]
     indexEntriesFor pkgInfo =
@@ -98,17 +100,17 @@ initSecurityFeature env = do
 -- Note that even once we have author signing, per-package targets.json file
 -- do not get their own resource, but are instead recorded in the tarball.
 securityFeature :: ServerEnv
-                -> StateComponent AcidState SecurityState
+                -> Store.Backend
                 -> SecurityFeature
-securityFeature env securityState =
+securityFeature env Store.Backend{backendStore = securityStore, backendState = securityStateComponents} =
     SecurityFeature{..}
   where
     securityFeatureInterface = (emptyHackageFeature "security") {
         featureDesc        = "TUF Security"
-      , featureState       = [abstractAcidStateComponent securityState]
-      , featureReloadFiles = updateRootMirrorsAndKeys env securityState
-      , featurePostInit    = updateRootMirrorsAndKeys env securityState
-                          >> setupResignCronJob env securityState
+      , featureState       = securityStateComponents
+      , featureReloadFiles = updateRootMirrorsAndKeys env securityStore
+      , featurePostInit    = updateRootMirrorsAndKeys env securityStore
+                          >> setupResignCronJob env securityStore
       , featureResources   = [
             resourceTimestamp
           , resourceSnapshot
@@ -139,7 +141,7 @@ securityFeature env securityState =
                    -> DynamicPath
                    -> ServerPartE Response
     serveFromState file _ = do
-      msfiles <- queryState securityState GetSecurityFiles
+      msfiles <- Store.getSecurityFiles securityStore
       case msfiles of
         Nothing -> errNotFound "Security files not available"
                      [MText $ "The repository is not currently using TUF "
@@ -157,30 +159,27 @@ securityFeature env securityState =
           return $ toResponse tufFile
 
 updateIndexFileInfo :: CoreFeature
-                    -> StateComponent AcidState SecurityState
+                    -> Store.Store
                     -> IO ()
-updateIndexFileInfo coreFeature securityState = do
+updateIndexFileInfo coreFeature securityStore = do
     IndexTarballInfo{..}  <- queryGetIndexTarballInfo coreFeature
     let !tarGzFileInfo = fileInfo indexTarballIncremGz
         !tarFileInfo   = fileInfo indexTarballIncremUn
     now <- getCurrentTime
-    updateState securityState (SetTarGzFileInfo tarGzFileInfo tarFileInfo now)
+    Store.setTarGzFileInfo securityStore tarGzFileInfo tarFileInfo now
 
 updateRootMirrorsAndKeys :: ServerEnv
-                         -> StateComponent AcidState SecurityState
+                         -> Store.Store
                          -> IO ()
-updateRootMirrorsAndKeys env securityState = do
+updateRootMirrorsAndKeys env securityStore = do
     mbRootMirrorsAndKeys <- loadRootMirrorsAndKeys env
-    st <- queryState securityState GetSecurityState
+    st <- Store.getSecurityState securityStore
     case mbRootMirrorsAndKeys of
       Just (root, mirrors, snapshotKey, timestampKey)
         | anyChange st root mirrors snapshotKey timestampKey
         -> do loginfo (serverVerbosity env) "Security files changed, updating"
               now <- getCurrentTime
-              updateState securityState (SetRootMirrorsAndKeys
-                                           root mirrors
-                                           snapshotKey timestampKey
-                                           now)
+              Store.setRootMirrorsAndKeys securityStore root mirrors snapshotKey timestampKey now
       _ -> loginfo (serverVerbosity env) "Security files unchanged"
   where
     anyChange SecurityState{ securityStateFiles = Nothing } _ _ _ _ = True
@@ -210,16 +209,16 @@ loadRootMirrorsAndKeys env = do
         return (Just (root, mirrors, snapshotKey, timestampKey))
 
 setupResignCronJob :: ServerEnv
-                   -> StateComponent AcidState SecurityState
+                   -> Store.Store
                    -> IO ()
-setupResignCronJob env securityState =
+setupResignCronJob env securityStore =
     addCronJob (serverCron env) CronJob {
         cronJobName      = "Resign TUF data"
       , cronJobFrequency = DailyJobFrequency
       , cronJobOneShot   = False
       , cronJobAction    = do
           now <- getCurrentTime
-          updateState securityState (ResignSnapshotAndTimestamp maxAge now)
+          Store.resignSnapshotAndTimestamp securityStore maxAge now
       }
   where
     maxAge = 60 * 60 * 23 -- Don't resign if unchanged and younger than ~1 day
