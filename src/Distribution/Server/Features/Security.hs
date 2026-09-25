@@ -13,7 +13,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 
 -- Hackage
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.Security.Backup
+import qualified Distribution.Server.Features.Security.Acid as Acid
 import Distribution.Server.Features.Security.Layout
 import Distribution.Server.Features.Security.ResponseContentTypes
 import Distribution.Server.Features.Security.State
@@ -36,7 +36,7 @@ instance IsHackageFeature SecurityFeature where
 
 initSecurityFeature :: ServerEnv -> IO (CoreFeature -> IO SecurityFeature)
 initSecurityFeature env = do
-    securityState <- securityStateComponent env (serverStateDir env)
+    securityState <- Acid.securityStateComponent env (serverStateDir env)
     return $ \coreFeature -> do
 
        -- Update the security state whenever the main package index changes
@@ -155,23 +155,6 @@ securityFeature env securityState =
           cacheControl [Public, NoTransform, maxAgeMinutes 1] eTag
           enableRange
           return $ toResponse tufFile
-
-securityStateComponent :: ServerEnv
-                       -> FilePath
-                       -> IO (StateComponent AcidState SecurityState)
-securityStateComponent env stateDir = do
-    let stateFile = stateDir </> "db" </> "TUF"
-    st <- logTiming (serverVerbosity env) "Loaded SecurityState" $
-            openLocalStateFrom stateFile initialSecurityState
-    return StateComponent {
-        stateDesc    = "TUF specific state"
-      , stateHandle  = st
-      , getState     = query st GetSecurityState
-      , putState     = update st . ReplaceSecurityState
-      , resetState   = securityStateComponent env
-      , backupState  = \_ -> securityBackup
-      , restoreState = securityRestore
-      }
 
 updateIndexFileInfo :: CoreFeature
                     -> StateComponent AcidState SecurityState

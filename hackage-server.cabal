@@ -310,9 +310,10 @@ library
     Distribution.Server.Features.Core.Acid
     Distribution.Server.Features.Core.State
     Distribution.Server.Features.Core.Store
-    Distribution.Server.Features.Core.Backup
-    Distribution.Server.Features.Security
-    Distribution.Server.Features.Security.Backup
+      Distribution.Server.Features.Core.Backup
+      Distribution.Server.Features.Security
+      Distribution.Server.Features.Security.Acid
+      Distribution.Server.Features.Security.Backup
     Distribution.Server.Features.Security.FileInfo
     Distribution.Server.Features.Security.Layout
     Distribution.Server.Features.Security.MD5
