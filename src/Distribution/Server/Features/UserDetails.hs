@@ -9,6 +9,7 @@ module Distribution.Server.Features.UserDetails (
   ) where
 
 import qualified Distribution.Server.Features.UserDetails.Acid as Acid
+import qualified Distribution.Server.Features.UserDetails.State as State
 import Distribution.Server.Features.UserDetails.Backup
 import Distribution.Server.Features.UserDetails.Types
 import Distribution.Server.Framework
@@ -45,9 +46,9 @@ instance IsHackageFeature UserDetailsFeature where
 -- State components
 --
 
-userDetailsStateComponent :: FilePath -> IO (StateComponent AcidState Acid.UserDetailsTable)
+userDetailsStateComponent :: FilePath -> IO (StateComponent AcidState State.UserDetailsTable)
 userDetailsStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") Acid.emptyUserDetailsTable
+  st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") State.emptyUserDetailsTable
   return StateComponent {
       stateDesc    = "Extra details associated with user accounts, email addresses etc"
     , stateHandle  = st
@@ -85,7 +86,7 @@ initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTempl
 
 
 userDetailsFeature :: Templates
-                   -> StateComponent AcidState Acid.UserDetailsTable
+                   -> StateComponent AcidState State.UserDetailsTable
                    -> UserFeature
                    -> CoreFeature
                    -> UploadFeature
