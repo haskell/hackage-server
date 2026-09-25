@@ -423,6 +423,7 @@ library
       Distribution.Server.Features.Tags
       Distribution.Server.Features.Tags.Acid
       Distribution.Server.Features.Tags.Backup
+      Distribution.Server.Features.Tags.Store
       Distribution.Server.Features.Tags.State
       Distribution.Server.Features.Tags.Types
       Distribution.Server.Features.AnalyticsPixels

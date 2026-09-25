@@ -34,6 +34,9 @@ data PackageTags = PackageTags {
 
 data TagAlias = TagAlias (Map Tag (Set Tag)) deriving (Eq, Show)
 
+instance MemSize TagAlias where
+    memSize (TagAlias aliases) = memSize1 aliases
+
 addTagAlias :: Tag -> Tag -> Update TagAlias ()
 addTagAlias tag alias = do
         TagAlias  m <- get
@@ -216,4 +219,3 @@ $(makeAcidic ''PackageTags ['tagsForPackage
                          ,'lookupReviewTags
                          ,'clearReviewTags
                          ])
-

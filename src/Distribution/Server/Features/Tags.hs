@@ -13,6 +13,7 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.Tags.Types
 import qualified Distribution.Server.Features.Tags.Acid as Acid
+import qualified Distribution.Server.Features.Tags.Store as Store
 import qualified Distribution.Server.Features.Tags.State as State
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
@@ -94,14 +95,14 @@ initTagsFeature :: ServerEnv
                     -> UserFeature
                     -> IO TagsFeature)
 initTagsFeature ServerEnv{serverStateDir} = do
-    tagsState <- Acid.tagsStateComponent serverStateDir
-    tagAlias <- Acid.tagsAliasComponent serverStateDir
+    tagsBackend <- Acid.acidStore serverStateDir
+    let tagsStore = Store.backendStore tagsBackend
     specials  <- newMemStateWHNF State.emptyPackageTags
     updateTag <- newHook
     tagProposalLog <- newMemStateWHNF Map.empty
 
     return $ \core@CoreFeature{..} upload user -> do
-      let feature = tagsFeature core upload user tagsState tagAlias specials updateTag tagProposalLog
+      let feature = tagsFeature core upload user tagsBackend specials updateTag tagProposalLog
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
@@ -109,10 +110,10 @@ initTagsFeature ServerEnv{serverStateDir} = do
           Just pkginfo -> do
             let pkgname = packageName pkgid
                 itags = constructImmutableTags . pkgDesc $ pkginfo
-            curtags <- queryState tagsState $ State.TagsForPackage pkgname
-            aliases <- mapM (queryState tagAlias . State.GetTagAlias) (itags ++ Set.toList curtags)
+            curtags <- Store.getTagsForPackage tagsStore pkgname
+            aliases <- mapM (Store.getTagAlias tagsStore) (itags ++ Set.toList curtags)
             let newtags = Set.fromList aliases
-            updateState tagsState . State.SetPackageTags pkgname $ newtags
+            Store.setPackageTags tagsStore pkgname newtags
             runHook_ updateTag (Set.singleton pkgname, newtags)
 
       return feature
@@ -120,8 +121,7 @@ initTagsFeature ServerEnv{serverStateDir} = do
 tagsFeature :: CoreFeature
             -> UploadFeature
             -> UserFeature
-            -> StateComponent AcidState State.PackageTags
-            -> StateComponent AcidState State.TagAlias
+            -> Store.Backend
             -> MemState State.PackageTags
             -> Hook (Set PackageName, Set Tag) ()
             -> MemState (Map PackageName (Set Tag, Set Tag))
@@ -130,8 +130,7 @@ tagsFeature :: CoreFeature
 tagsFeature CoreFeature{ queryLatestPackages }
             UploadFeature{ maintainersGroup, trusteesGroup }
             UserFeature{ guardAuthorised' }
-            tagsState
-            tagsAlias
+            Store.Backend{backendStore = tagsStore, backendState}
             calculatedTags
             tagsUpdated
             tagProposalLog
@@ -162,7 +161,7 @@ tagsFeature CoreFeature{ queryLatestPackages }
             , packageTagsListing
             ]
       , featurePostInit = initImmutableTags
-      , featureState    = [abstractAcidStateComponent tagsState]
+      , featureState    = backendState
       , featureCaches   = [
             CacheComponent {
               cacheDesc       = "calculated tags",
@@ -175,38 +174,38 @@ tagsFeature CoreFeature{ queryLatestPackages }
     initImmutableTags = do
             latestPackages <- queryLatestPackages
             let calcTags = State.tagPackages $ constructImmutableTagIndex latestPackages
-            aliases <- mapM (queryState tagsAlias . State.GetTagAlias) $ Map.keys calcTags
+            aliases <- mapM (Store.getTagAlias tagsStore) $ Map.keys calcTags
             let calcTags' = Map.toList . Map.fromListWith Set.union $ zip aliases (Map.elems calcTags)
             forM_ calcTags' $ uncurry setCalculatedTag
 
     queryGetTagList :: MonadIO m => m [(Tag, Set PackageName)]
-    queryGetTagList = queryState tagsState State.GetTagList
+    queryGetTagList = Store.getTagList tagsStore
 
     queryTagsForPackage :: MonadIO m => PackageName -> m (Set Tag)
-    queryTagsForPackage pkgname = queryState tagsState (State.TagsForPackage pkgname)
+    queryTagsForPackage = Store.getTagsForPackage tagsStore
 
     queryAliasForTag :: MonadIO m => Tag -> m Tag
-    queryAliasForTag tag = queryState tagsAlias (State.GetTagAlias tag)
+    queryAliasForTag = Store.getTagAlias tagsStore
 
     queryReviewTagsForPackage :: MonadIO m => PackageName -> m (Set Tag,Set Tag)
-    queryReviewTagsForPackage pkgname = queryState tagsState (State.LookupReviewTags pkgname)
+    queryReviewTagsForPackage = Store.getReviewTagsForPackage tagsStore
 
     setCalculatedTag :: Tag -> Set PackageName -> IO ()
     setCalculatedTag tag pkgs = do
       modifyMemState calculatedTags (State.setTag tag pkgs)
-      void $ updateState tagsState $ State.SetTagPackages tag pkgs
+      Store.setTagPackages tagsStore tag pkgs
       runHook_ tagsUpdated (pkgs, Set.singleton tag)
 
     withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPartE a) -> ServerPartE a
     withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
         Nothing -> mzero
         Just tag -> do
-            pkgs <- queryState tagsState $ State.PackagesForTag tag
+            pkgs <- Store.getPackagesForTag tagsStore tag
             func tag pkgs
 
     collectTags :: MonadIO m => Set PackageName -> m (Map PackageName (Set Tag))
     collectTags pkgs = do
-        pkgMap <- liftM State.packageTags $ queryState tagsState State.GetPackageTags
+        pkgMap <- liftM State.packageTags $ Store.getPackageTags tagsStore
         return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
 
     mergeTags :: Maybe String -> Tag -> ServerPartE ()
@@ -215,7 +214,7 @@ tagsFeature CoreFeature{ queryLatestPackages }
             Just (Tag orig) -> do
                 latestPkgs <- queryLatestPackages
                 let pkgNames = packageName <$> latestPkgs
-                void $ updateState tagsAlias $ State.AddTagAlias (Tag orig) deprTag
+                Store.addTagAlias tagsStore (Tag orig) deprTag
                 void $ constructMergedTagIndex (Tag orig) deprTag pkgNames
             _ -> errBadRequest "Tag not recognised" [MText "Couldn't parse tag. It should be a single tag."]
 
@@ -227,7 +226,7 @@ tagsFeature CoreFeature{ queryLatestPackages }
                 if Set.member depr pkgTags
                     then do
                         let newTags = Set.delete depr (Set.insert orig pkgTags)
-                        void $ updateState tagsState $ State.SetPackageTags pn newTags
+                        Store.setPackageTags tagsStore pn newTags
                         runHook_ tagsUpdated (Set.singleton pn, newTags)
                         return $ State.setTags pn newTags calcTags
                     else return $ State.setTags pn pkgTags calcTags
@@ -243,7 +242,7 @@ tagsFeature CoreFeature{ queryLatestPackages }
                         if trustainer
                             then do
                                 calcTags <- queryTagsForPackage pkgname
-                                aliases <- mapM (queryState tagsAlias . State.GetTagAlias) add
+                                aliases <- mapM (Store.getTagAlias tagsStore) add
                                 revTags <- queryReviewTagsForPackage pkgname
                                 let tagSet = (addTags `Set.union` calcTags) `Set.difference` delTags
                                     addTags = Set.fromList aliases
@@ -257,18 +256,18 @@ tagsFeature CoreFeature{ queryLatestPackages }
                                     addRev = Set.difference (fst revTags) (Set.fromList add `Set.union` Set.fromList radd')
                                     delRev = Set.difference (snd revTags) (Set.fromList del `Set.union` Set.fromList rdel')
                                     modifyTags (a, d) = (a `Set.intersection` addRev, d `Set.intersection` delRev)
-                                updateState tagsState $ State.SetPackageTags pkgname tagSet
-                                updateState tagsState $ State.InsertReviewTags' pkgname addRev delRev
+                                Store.setPackageTags tagsStore pkgname tagSet
+                                Store.replaceReviewTags tagsStore pkgname addRev delRev
                                 modifyMemState tagProposalLog (Map.adjust modifyTags pkgname)
                                 runHook_ tagsUpdated (Set.singleton pkgname, tagSet)
                                 return ()
                             else if user
                                 then do
-                                    aliases <- mapM (queryState tagsAlias . State.GetTagAlias) add
+                                    aliases <- mapM (Store.getTagAlias tagsStore) add
                                     calcTags <- queryTagsForPackage pkgname
                                     let addTags = Set.fromList aliases `Set.difference` calcTags
                                         delTags = Set.fromList del `Set.intersection` calcTags
-                                    updateState tagsState $ State.InsertReviewTags pkgname addTags delTags
+                                    Store.insertReviewTags tagsStore pkgname addTags delTags
                                     modifyMemState tagProposalLog (Map.insertWith (<>) pkgname (addTags, delTags))
                                     return ()
                                 else errBadRequest "Authorization Error" [MText "You need to be logged in to propose tags"]
