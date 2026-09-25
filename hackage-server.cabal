@@ -364,6 +364,7 @@ library
       Distribution.Server.Features.PackageFeed
       Distribution.Server.Features.PackageList
       Distribution.Server.Features.Distro
+      Distribution.Server.Features.Distro.Acid
       Distribution.Server.Features.Distro.Distributions
       Distribution.Server.Features.Distro.Backup
       Distribution.Server.Features.Distro.State
