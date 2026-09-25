@@ -368,6 +368,7 @@ library
       Distribution.Server.Features.Distro.Distributions
       Distribution.Server.Features.Distro.Backup
       Distribution.Server.Features.Distro.State
+      Distribution.Server.Features.Distro.Store
       Distribution.Server.Features.Distro.Types
       Distribution.Server.Features.Documentation
       Distribution.Server.Features.Documentation.Acid
