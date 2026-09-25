@@ -417,6 +417,7 @@ library
       Distribution.Server.Features.PreferredVersions.State
       Distribution.Server.Features.PreferredVersions.Types
       Distribution.Server.Features.PreferredVersions.Backup
+      Distribution.Server.Features.PreferredVersions.Store
       Distribution.Server.Features.ReverseDependencies
       Distribution.Server.Features.ReverseDependencies.State
       Distribution.Server.Features.Tags
