@@ -13,12 +13,10 @@ module Distribution.Server.Features.UserSignup (
 
 import qualified Distribution.Server.Features.UserSignup.Acid as Acid
 import qualified Distribution.Server.Features.UserSignup.State as State
-import Distribution.Server.Features.UserSignup.Backup
 import Distribution.Server.Features.UserSignup.Types
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
-import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
@@ -91,26 +89,6 @@ instance IsHackageFeature UserSignupFeature where
 --      set new password
 --
 
----------------------
--- State components
---
-
-signupResetStateComponent :: FilePath -> IO (StateComponent AcidState State.SignupResetTable)
-signupResetStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserSignupReset") State.emptySignupResetTable
-  return StateComponent {
-      stateDesc    = "State to keep track of outstanding requests for user signup and password resets"
-    , stateHandle  = st
-    , getState     = query st Acid.GetSignupResetTable
-    , putState     = update st . Acid.ReplaceSignupResetTable
-    , backupState  = \backuptype tbl ->
-        [csvToBackup ["signups.csv"] (signupInfoToCSV backuptype tbl)
-        ,csvToBackup ["resets.csv"]  (resetInfoToCSV backuptype tbl)]
-    , restoreState = signupResetBackup
-    , resetState   = signupResetStateComponent
-    }
-
-
 ----------------------------------------
 -- Feature definition & initialisation
 --
@@ -123,7 +101,7 @@ initUserSignupFeature :: ServerEnv
 initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
     -- Canonical state
-    signupResetState <- signupResetStateComponent serverStateDir
+    signupResetState <- Acid.signupResetStateComponent serverStateDir
 
     -- Page templates
     templates <- loadTemplates serverTemplatesMode

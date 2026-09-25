@@ -7,8 +7,10 @@ module Distribution.Server.Features.UserSignup.Acid where
 
 import Distribution.Server.Features.UserSignup.Types
 import Distribution.Server.Features.UserSignup.State
+import Distribution.Server.Features.UserSignup.Backup
 
 import Distribution.Server.Framework hiding (Method)
+import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Util.Nonce
 
@@ -18,6 +20,21 @@ import Control.Monad.State (get, put, modify)
 import Data.Acid.Compat
 
 import Data.Time
+
+signupResetStateComponent :: FilePath -> IO (StateComponent AcidState SignupResetTable)
+signupResetStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "UserSignupReset") emptySignupResetTable
+  return StateComponent {
+      stateDesc    = "State to keep track of outstanding requests for user signup and password resets"
+    , stateHandle  = st
+    , getState     = query st GetSignupResetTable
+    , putState     = update st . ReplaceSignupResetTable
+    , backupState  = \backuptype tbl ->
+        [csvToBackup ["signups.csv"] (signupInfoToCSV backuptype tbl)
+        ,csvToBackup ["resets.csv"]  (resetInfoToCSV backuptype tbl)]
+    , restoreState = signupResetBackup
+    , resetState   = signupResetStateComponent
+    }
 
 ------------------------------
 -- State queries and updates
