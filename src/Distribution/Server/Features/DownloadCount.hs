@@ -33,7 +33,8 @@ import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Features.DownloadCount.State
 import Distribution.Server.Features.DownloadCount.Backup
-import Distribution.Server.Features.DownloadCount.Acid (inMemStateComponent)
+import Distribution.Server.Features.DownloadCount.Acid (acidStore)
+import qualified Distribution.Server.Features.DownloadCount.Store as Store
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
@@ -75,7 +76,7 @@ data PackageDownloads = PackageDownloads {
 initDownloadFeature :: ServerEnv
                     -> IO (CoreFeature -> UserFeature -> IO DownloadFeature)
 initDownloadFeature serverEnv@ServerEnv{serverStateDir} = do
-    inMemState     <- inMemStateComponent  serverStateDir
+    inMemBackend   <- acidStore serverStateDir
     let onDiskState = onDiskStateComponent serverStateDir
     (recentDownloads,
      totalDownloads) <- computeRecentAndTotalDownloads =<< getState onDiskState
@@ -84,7 +85,7 @@ initDownloadFeature serverEnv@ServerEnv{serverStateDir} = do
     downChan       <- newChan
 
     return $ \core users -> do
-      let feature = downloadFeature core users serverEnv inMemState
+      let feature = downloadFeature core users serverEnv inMemBackend
                       onDiskState totalsCache recentCache downChan
 
       registerHook (packageDownloadHook core) (writeChan downChan)
@@ -108,7 +109,7 @@ onDiskStateComponent stateDir = StateComponent {
 downloadFeature :: CoreFeature
                 -> UserFeature
                 -> ServerEnv
-                -> StateComponent AcidState   InMemStats
+                -> Store.Backend
                 -> StateComponent OnDiskState OnDiskStats
                 -> MemState TotalDownloads
                 -> MemState RecentDownloads
@@ -118,19 +119,21 @@ downloadFeature :: CoreFeature
 downloadFeature CoreFeature{}
                 UserFeature{..}
                 ServerEnv{serverStateDir}
-                inMemState
+                inMemBackend
                 onDiskState
                 totalDownloadsCache
                 recentDownloadsCache
                 downloadStream
   = DownloadFeature{..}
   where
+    inMemStore = Store.backendStore inMemBackend
+
     downloadFeatureInterface = (emptyHackageFeature "download") {
         featureResources = [ topDownloads downloadResource
                            , downloadCSV
                            ]
       , featurePostInit  = void $ forkIO registerDownloads
-      , featureState     = backendState
+      , featureState     = Store.backendState inMemBackend
                         ++ [abstractOnDiskStateComponent onDiskState]
       , featureCaches    = [
             CacheComponent {
@@ -153,15 +156,15 @@ downloadFeature CoreFeature{}
     registerDownloads = forever $ do
         pkg    <- readChan downloadStream
         today  <- getToday
-        today' <- query (stateHandle inMemState) RecordedToday
+        today' <- Store.recordedToday inMemStore
 
         --TODO: do this asyncronously rather than blocking this request
         when (today /= today') $ do
           -- For the first download each day we reset the in-memory stats and..
-          inMemStats <- getState inMemState
-          putState inMemState $ initInMemStats today
+          inMemStats <- Store.getInMemStats inMemStore
+          Store.replaceInMemStats inMemStore $ initInMemStats today
           -- we can discard the large eventlog by writing a small checkpoint
-          createCheckpoint (stateHandle inMemState)
+          Store.checkpointInMemStats inMemStore
 
           -- Write yesterday's downloads to the log
           appendToLog (dcPath serverStateDir) inMemStats
@@ -177,10 +180,9 @@ downloadFeature CoreFeature{}
           writeMemState totalDownloadsCache totalDownloads
 
 
-        updateState inMemState $ RegisterDownload pkg
+        Store.registerDownload inMemStore pkg
 
 
-    backendState = [abstractAcidStateComponent inMemState]
 
     downloadResource = DownloadResource {
       topDownloads = (resourceAt "/packages/top.:format")

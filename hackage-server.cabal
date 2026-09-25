@@ -375,6 +375,7 @@ library
       Distribution.Server.Features.DownloadCount
       Distribution.Server.Features.DownloadCount.Acid
       Distribution.Server.Features.DownloadCount.State
+      Distribution.Server.Features.DownloadCount.Store
       Distribution.Server.Features.DownloadCount.Backup
       Distribution.Server.Features.EditCabalFiles
       Distribution.Server.Features.Html
