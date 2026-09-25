@@ -33,6 +33,7 @@ import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Features.DownloadCount.State
 import Distribution.Server.Features.DownloadCount.Backup
+import Distribution.Server.Features.DownloadCount.Acid (inMemStateComponent)
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
@@ -88,20 +89,6 @@ initDownloadFeature serverEnv@ServerEnv{serverStateDir} = do
 
       registerHook (packageDownloadHook core) (writeChan downChan)
       return feature
-
-inMemStateComponent :: FilePath -> IO (StateComponent AcidState InMemStats)
-inMemStateComponent stateDir = do
-  initSt <- initInMemStats <$> getToday
-  st <- openLocalStateFrom (dcPath stateDir </> "inmem") initSt
-  return StateComponent {
-      stateDesc    = "Today's download counts"
-    , stateHandle  = st
-    , getState     = query st GetInMemStats
-    , putState     = update st . ReplaceInMemStats
-    , backupState  = \_ -> inMemBackup
-    , restoreState = inMemRestore
-    , resetState   = inMemStateComponent
-    }
 
 onDiskStateComponent :: FilePath -> StateComponent OnDiskState OnDiskStats
 onDiskStateComponent stateDir = StateComponent {
