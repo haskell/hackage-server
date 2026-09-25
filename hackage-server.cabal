@@ -371,6 +371,7 @@ library
       Distribution.Server.Features.Documentation
       Distribution.Server.Features.Documentation.Acid
       Distribution.Server.Features.Documentation.State
+      Distribution.Server.Features.Documentation.Store
       Distribution.Server.Features.DownloadCount
       Distribution.Server.Features.DownloadCount.State
       Distribution.Server.Features.DownloadCount.Backup

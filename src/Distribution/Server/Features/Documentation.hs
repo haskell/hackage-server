@@ -10,8 +10,8 @@ module Distribution.Server.Features.Documentation (
 import Distribution.Server.Features.Security.SHA256       (sha256)
 import Distribution.Server.Framework
 
-import qualified Distribution.Server.Features.Documentation.State as State
-import Distribution.Server.Features.Documentation.Acid (documentationStateComponent)
+import Distribution.Server.Features.Documentation.Acid (acidStore)
+import qualified Distribution.Server.Features.Documentation.Store as Store
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
@@ -98,7 +98,7 @@ initDocumentationFeature :: String
 initDocumentationFeature name
                          env@ServerEnv{serverStateDir} = do
     -- Canonical state
-    documentationState <- documentationStateComponent name serverStateDir
+    documentationBackend <- acidStore name serverStateDir
 
     -- Hooks
     documentationChangeHook <- newHook
@@ -106,7 +106,7 @@ initDocumentationFeature name
     return $ \core getPackages upload tarIndexCache reportsCore user version -> do
       let feature = documentationFeature name env
                                          core getPackages upload tarIndexCache reportsCore user version
-                                         documentationState
+                                         documentationBackend
                                          documentationChangeHook
       return feature
 
@@ -119,7 +119,7 @@ documentationFeature :: String
                      -> ReportsFeature
                      -> UserFeature
                      -> VersionsFeature
-                     -> StateComponent AcidState State.Documentation
+                     -> Store.Backend
                      -> Hook PackageId ()
                      -> DocumentationFeature
 documentationFeature name
@@ -137,10 +137,12 @@ documentationFeature name
                      ReportsFeature{..}
                      UserFeature{ guardAuthorised_ }
                      VersionsFeature{queryGetPreferredInfo}
-                     documentationState
+                     documentationBackend
                      documentationChangeHook
   = DocumentationFeature{..}
   where
+    documentationStore = Store.backendStore documentationBackend
+
     documentationFeatureInterface = (emptyHackageFeature name) {
         featureDesc = "Maintain and display documentation"
       , featureResources =
@@ -149,18 +151,18 @@ documentationFeature name
             , packageDocsWhole
             , packageDocsStats
             ]
-      , featureState = [abstractAcidStateComponent documentationState]
+      , featureState = Store.backendState documentationBackend
       }
 
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool
-    queryHasDocumentation pkgid = queryState documentationState (State.HasDocumentation pkgid)
+    queryHasDocumentation pkgid = Store.hasDocumentation documentationStore pkgid
 
     queryDocumentation :: MonadIO m => PackageIdentifier -> m (Maybe BlobId)
-    queryDocumentation pkgid = queryState documentationState (State.LookupDocumentation pkgid)
+    queryDocumentation pkgid = Store.lookupDocumentation documentationStore pkgid
 
     queryDocumentationIndex :: MonadIO m => m (Map.Map PackageId BlobId)
     queryDocumentationIndex =
-      liftM State.documentation (queryState documentationState State.GetDocumentation)
+      Store.getDocumentationIndex documentationStore
 
     documentationResource = fix $ \r -> DocumentationResource {
         packageDocsContent = (extendResourcePath "/docs/.." corePackagePage) {
@@ -335,7 +337,7 @@ documentationFeature name
       case mres of
         Left  err -> errBadRequest "Invalid documentation tarball" [MText err]
         Right ((), blobid) -> do
-          updateState documentationState $ State.InsertDocumentation pkgid blobid
+          Store.insertDocumentation documentationStore pkgid blobid
           runHook_ documentationChangeHook pkgid
           noContent (toResponse ())
 
@@ -368,7 +370,7 @@ documentationFeature name
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-      updateState documentationState $ State.RemoveDocumentation pkgid
+      Store.removeDocumentation documentationStore pkgid
       runHook_ documentationChangeHook pkgid
       noContent (toResponse ())
 
@@ -432,7 +434,7 @@ documentationFeature name
                 tempRedirect latestPkgPath (toResponse "")
               Nothing -> errNotFoundH "Not Found" [MText "There is no documentation for this package."]
         False -> do
-          mdocs <- queryState documentationState $ State.LookupDocumentation pkgid
+          mdocs <- Store.lookupDocumentation documentationStore pkgid
           case mdocs of
             Nothing ->
               errNotFoundH "Not Found"

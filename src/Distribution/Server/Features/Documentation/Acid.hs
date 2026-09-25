@@ -1,8 +1,9 @@
 module Distribution.Server.Features.Documentation.Acid
-  ( documentationStateComponent
+  ( acidStore
   ) where
 
 import qualified Distribution.Server.Features.Documentation.State as State
+import qualified Distribution.Server.Features.Documentation.Store as Store
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.BlobStorage (BlobId)
@@ -10,6 +11,20 @@ import Distribution.Server.Framework.BlobStorage (BlobId)
 import Distribution.Package (PackageId)
 import Distribution.Text (display, simpleParse)
 import qualified Data.Map as Map
+
+acidStore :: String -> FilePath -> IO Store.Backend
+acidStore name stateDir = do
+  documentationState <- documentationStateComponent name stateDir
+  pure Store.Backend {
+      Store.backendStore = Store.Store {
+          Store.hasDocumentation = \pkgid -> queryState documentationState (State.HasDocumentation pkgid)
+        , Store.lookupDocumentation = \pkgid -> queryState documentationState (State.LookupDocumentation pkgid)
+        , Store.getDocumentationIndex = State.documentation <$> queryState documentationState State.GetDocumentation
+        , Store.insertDocumentation = \pkgid blobid -> updateState documentationState (State.InsertDocumentation pkgid blobid)
+        , Store.removeDocumentation = \pkgid -> updateState documentationState (State.RemoveDocumentation pkgid)
+        }
+    , Store.backendState = [abstractAcidStateComponent documentationState]
+    }
 
 documentationStateComponent :: String -> FilePath -> IO (StateComponent AcidState State.Documentation)
 documentationStateComponent name stateDir = do
