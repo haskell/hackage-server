@@ -1,6 +1,6 @@
 module Distribution.Server.Features.UserDetails.Backup where
 
-import qualified Distribution.Server.Features.UserDetails.State as Acid
+import qualified Distribution.Server.Features.UserDetails.State as State
 import Distribution.Server.Features.UserDetails.Types
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
@@ -18,10 +18,10 @@ import Text.CSV (CSV, Record)
 -- Data backup and restore
 --
 
-userDetailsBackup :: RestoreBackup Acid.UserDetailsTable
-userDetailsBackup = updateUserBackup Acid.emptyUserDetailsTable
+userDetailsBackup :: RestoreBackup State.UserDetailsTable
+userDetailsBackup = updateUserBackup State.emptyUserDetailsTable
 
-updateUserBackup :: Acid.UserDetailsTable -> RestoreBackup Acid.UserDetailsTable
+updateUserBackup :: State.UserDetailsTable -> RestoreBackup State.UserDetailsTable
 updateUserBackup users = RestoreBackup {
     restoreEntry = \entry -> case entry of
       BackupByteString ["users.csv"] bs -> do
@@ -34,11 +34,11 @@ updateUserBackup users = RestoreBackup {
      return users
   }
 
-importUserDetails :: CSV -> Acid.UserDetailsTable -> Restore Acid.UserDetailsTable
+importUserDetails :: CSV -> State.UserDetailsTable -> Restore State.UserDetailsTable
 importUserDetails = concatM . map fromRecord . drop 2
   where
-    fromRecord :: Record -> Acid.UserDetailsTable -> Restore Acid.UserDetailsTable
-    fromRecord [idStr, nameStr, emailStr, kindStr, notesStr] (Acid.UserDetailsTable tbl) = do
+    fromRecord :: Record -> State.UserDetailsTable -> Restore State.UserDetailsTable
+    fromRecord [idStr, nameStr, emailStr, kindStr, notesStr] (State.UserDetailsTable tbl) = do
         UserId uid <- parseText "user id" idStr
         akind      <- parseKind kindStr
         let udetails = AccountDetails {
@@ -47,7 +47,7 @@ importUserDetails = concatM . map fromRecord . drop 2
                         accountKind         = akind,
                         accountAdminNotes   = T.pack notesStr
                       }
-        return $! Acid.UserDetailsTable (IntMap.insert uid udetails tbl)
+        return $! State.UserDetailsTable (IntMap.insert uid udetails tbl)
 
     fromRecord x _ = fail $ "Error processing user details record: " ++ show x
 
@@ -56,8 +56,8 @@ importUserDetails = concatM . map fromRecord . drop 2
     parseKind "special" = return (Just AccountKindSpecial)
     parseKind sts       = fail $ "unable to parse account kind: " ++ sts
 
-userDetailsToCSV :: BackupType -> Acid.UserDetailsTable -> CSV
-userDetailsToCSV backuptype (Acid.UserDetailsTable tbl)
+userDetailsToCSV :: BackupType -> State.UserDetailsTable -> CSV
+userDetailsToCSV backuptype (State.UserDetailsTable tbl)
     = ([showVersion userCSVVer]:) $
       (userdetailsCSVKey:) $
 

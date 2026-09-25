@@ -8,8 +8,8 @@ module Distribution.Server.Features.UserDetails (
     UserDetailsFeature(..),
   ) where
 
-import qualified Distribution.Server.Features.UserDetails.Acid as Acid
-import qualified Distribution.Server.Features.UserDetails.State as State
+import Distribution.Server.Features.UserDetails.Acid (acidStore)
+import qualified Distribution.Server.Features.UserDetails.Store as Store
 import Distribution.Server.Features.UserDetails.Types
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
@@ -50,8 +50,7 @@ initUserDetailsFeature :: ServerEnv
                            -> UploadFeature
                            -> IO UserDetailsFeature)
 initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
-    -- Canonical state
-    usersDetailsState <- Acid.userDetailsStateComponent serverStateDir
+    userDetailsBackend <- acidStore serverStateDir
 
     --TODO: link up to user feature to delete
 
@@ -61,24 +60,24 @@ initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTempl
       [ "user-details-form.html" ]
 
     return $ \users core upload -> do
-      let feature = userDetailsFeature templates usersDetailsState users core upload
+      let feature = userDetailsFeature templates userDetailsBackend users core upload
       return feature
 
 
 userDetailsFeature :: Templates
-                   -> StateComponent AcidState State.UserDetailsTable
+                   -> Store.Backend
                    -> UserFeature
                    -> CoreFeature
                    -> UploadFeature
                    -> UserDetailsFeature
-userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} UploadFeature{uploadersGroup}
+userDetailsFeature templates Store.Backend{backendStore = userDetailsStore, backendState} UserFeature{..} CoreFeature{..} UploadFeature{uploadersGroup}
   = UserDetailsFeature {..}
 
   where
     userDetailsFeatureInterface = (emptyHackageFeature "user-details") {
         featureDesc      = "Extra information about user accounts, email addresses etc."
       , featureResources = [userNameContactResource, userAdminInfoResource]
-      , featureState     = [abstractAcidStateComponent userDetailsState]
+      , featureState     = backendState
       , featureCaches    = []
       }
 
@@ -113,11 +112,11 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
     --
 
     queryUserDetails :: MonadIO m => UserId -> m (Maybe AccountDetails)
-    queryUserDetails uid = queryState userDetailsState (Acid.LookupUserDetails uid)
+    queryUserDetails = Store.lookupUserDetails userDetailsStore
 
     updateUserDetails :: MonadIO m => UserId -> AccountDetails -> m ()
     updateUserDetails uid udetails = do
-      updateState userDetailsState (Acid.SetUserDetails uid udetails)
+      Store.setUserDetails userDetailsStore uid udetails
 
     -- Request handlers
     --
@@ -169,14 +168,14 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
         NameAndContact name email <- expectAesonContent
         guardValidLookingName name
         guardValidLookingEmail email
-        updateState userDetailsState (Acid.SetUserNameContact uid name email)
+        Store.setUserNameContact userDetailsStore uid name email
         noContent $ toResponse ()
 
     handlerDeleteUserNameContact :: DynamicPath -> ServerPartE Response
     handlerDeleteUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-        updateState userDetailsState (Acid.SetUserNameContact uid T.empty T.empty)
+        Store.setUserNameContact userDetailsStore uid T.empty T.empty
         noContent $ toResponse ()
 
     handlerGetAdminInfo :: DynamicPath -> ServerPartE Response
@@ -198,12 +197,12 @@ userDetailsFeature templates userDetailsState UserFeature{..} CoreFeature{..} Up
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
         AdminInfo akind notes <- expectAesonContent
-        updateState userDetailsState (Acid.SetUserAdminInfo uid akind notes)
+        Store.setUserAdminInfo userDetailsStore uid akind notes
         noContent $ toResponse ()
 
     handlerDeleteAdminInfo :: DynamicPath -> ServerPartE Response
     handlerDeleteAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
-        updateState userDetailsState (Acid.SetUserAdminInfo uid Nothing T.empty)
+        Store.setUserAdminInfo userDetailsStore uid Nothing T.empty
         noContent $ toResponse ()

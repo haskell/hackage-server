@@ -423,6 +423,7 @@ library
       Distribution.Server.Features.UserDetails.Acid
       Distribution.Server.Features.UserDetails.Backup
       Distribution.Server.Features.UserDetails.State
+      Distribution.Server.Features.UserDetails.Store
       Distribution.Server.Features.UserDetails.Types
       Distribution.Server.Features.UserSignup
       Distribution.Server.Features.UserSignup.Acid
