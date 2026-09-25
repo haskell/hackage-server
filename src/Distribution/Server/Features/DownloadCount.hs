@@ -130,9 +130,8 @@ downloadFeature CoreFeature{}
                            , downloadCSV
                            ]
       , featurePostInit  = void $ forkIO registerDownloads
-      , featureState     = [ abstractAcidStateComponent   inMemState
-                           , abstractOnDiskStateComponent onDiskState
-                           ]
+      , featureState     = backendState
+                        ++ [abstractOnDiskStateComponent onDiskState]
       , featureCaches    = [
             CacheComponent {
               cacheDesc       = "recent package downloads cache",
@@ -180,6 +179,8 @@ downloadFeature CoreFeature{}
 
         updateState inMemState $ RegisterDownload pkg
 
+
+    backendState = [abstractAcidStateComponent inMemState]
 
     downloadResource = DownloadResource {
       topDownloads = (resourceAt "/packages/top.:format")
