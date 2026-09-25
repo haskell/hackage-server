@@ -12,7 +12,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
-import Distribution.Server.Features.BuildReports.Backup
+import Distribution.Server.Features.BuildReports.Acid (reportsStateComponent)
 import qualified Distribution.Server.Features.BuildReports.State as Acid
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
@@ -86,19 +86,6 @@ initBuildReportsFeature name env@ServerEnv{serverStateDir} = do
                                         user upload core
                                         reportsState
       return feature
-
-reportsStateComponent :: String -> FilePath -> IO (StateComponent AcidState BuildReports)
-reportsStateComponent name stateDir = do
-  st  <- openLocalStateFrom (stateDir </> "db" </> name) Acid.initialBuildReports
-  return StateComponent {
-      stateDesc    = "Build reports"
-    , stateHandle  = st
-    , getState     = query st Acid.GetBuildReports
-    , putState     = update st . Acid.ReplaceBuildReports
-    , backupState  = \_ -> dumpBackup
-    , restoreState = restoreBackup
-    , resetState   = reportsStateComponent name
-    }
 
 buildReportsFeature :: String
                     -> ServerEnv

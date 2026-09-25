@@ -354,6 +354,7 @@ library
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
       Distribution.Server.Features.BuildReports.BuildReports
+      Distribution.Server.Features.BuildReports.Acid
       Distribution.Server.Features.BuildReports.Backup
       Distribution.Server.Features.BuildReports.Render
       Distribution.Server.Features.BuildReports.State
