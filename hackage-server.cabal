@@ -431,7 +431,7 @@ library
     , HStringTemplate       ^>= 0.8
     , HTTP                   >= 4000.3.16 && < 4000.6
     , http-client           ^>= 0.7       && < 0.8
-    , http-client-tls       ^>= 0.3
+    , http-client-tls       ^>= 0.4
     , http-types             >= 0.10      && < 0.13
     , QuickCheck             >= 2.14      && < 2.19
     , acid-state            ^>= 0.16
@@ -451,10 +451,8 @@ library
         -- commonmark-0.2 needed by commonmark-extensions-0.2.2
     , commonmark-extensions ^>= 0.2.2
         -- Note: 0.2.2 added footnoteSpec to gfmExtensions
-    , cryptohash-md5        ^>= 0.11.100
-    , cryptohash-sha256     ^>= 0.11.100
+    , crypton                >= 1.1.4 && < 1.2
     , csv                   ^>= 0.1
-    , ed25519               ^>= 0.0.5
     , hackage-security       >= 0.6 && < 0.7
         -- N.B: hackage-security-0.6.2 uses Cabal-syntax-3.8.1.0
         -- see https://github.com/haskell/hackage-server/issues/1130
@@ -469,6 +467,7 @@ library
     , hslogger              ^>= 1.3.1
     , lifted-base           ^>= 0.2.1
     , mime-mail             ^>= 0.5
+    , ram                    >= 0.19
     , random                 >= 1.2       && < 1.4
     , rss                   ^>= 3000.2.0.7
     , safecopy              ^>= 0.10
