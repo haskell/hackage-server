@@ -1,11 +1,26 @@
 module Distribution.Server.Features.UserNotify.Acid.Component
   ( notifyStateComponent
+  , acidStore
   ) where
 
 import qualified Distribution.Server.Features.UserNotify.Acid as Acid
 import Distribution.Server.Features.UserNotify.Backup
+import qualified Distribution.Server.Features.UserNotify.Store as Store
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
+
+acidStore :: FilePath -> IO Store.Backend
+acidStore stateDir = do
+  notifyState <- notifyStateComponent stateDir
+  pure Store.Backend {
+      Store.backendStore = Store.Store {
+          Store.lookupNotifyPref = \uid -> queryState notifyState (Acid.LookupNotifyPref uid)
+        , Store.addNotifyPref = \uid pref -> updateState notifyState (Acid.AddNotifyPref uid pref)
+        , Store.getNotificationData = Acid.unNotifyData <$> queryState notifyState Acid.GetNotifyData
+        , Store.setNotifyTime = \time -> updateState notifyState (Acid.SetNotifyTime time)
+        }
+    , Store.backendState = [abstractAcidStateComponent notifyState]
+    }
 
 notifyStateComponent :: FilePath -> IO (StateComponent AcidState Acid.NotifyData)
 notifyStateComponent stateDir = do

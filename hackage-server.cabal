@@ -334,6 +334,7 @@ library
     Distribution.Server.Features.UserNotify.Acid
     Distribution.Server.Features.UserNotify.Acid.Component
     Distribution.Server.Features.UserNotify.Backup
+    Distribution.Server.Features.UserNotify.Store
     Distribution.Server.Features.UserNotify.Types
 
 

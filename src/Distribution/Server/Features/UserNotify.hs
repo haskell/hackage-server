@@ -20,6 +20,7 @@ module Distribution.Server.Features.UserNotify (
 import Distribution.Server.Features.UserDetails.Types
 import qualified Distribution.Server.Features.UserNotify.Acid.Component as AcidComponent
 import qualified Distribution.Server.Features.UserNotify.Acid as Acid
+import qualified Distribution.Server.Features.UserNotify.Store as Store
 import Distribution.Server.Features.UserNotify.Acid (NotifyPref(..))
 import Distribution.Server.Features.UserNotify.Backup
 import Distribution.Server.Features.UserNotify.Types
@@ -228,7 +229,7 @@ initUserNotifyFeature :: ServerEnv
 initUserNotifyFeature ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
     -- Canonical state
-    notifyState <- AcidComponent.notifyStateComponent serverStateDir
+    notifyBackend <- AcidComponent.acidStore serverStateDir
 
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
@@ -238,7 +239,7 @@ initUserNotifyFeature ServerEnv{ serverStateDir, serverTemplatesDir,
     return $ \users core uploadfeature adminlog userdetails reports tags revers vouch -> do
       let feature = userNotifyFeature
                       users core uploadfeature adminlog userdetails reports tags
-                      revers vouch notifyState templates
+                      revers vouch notifyBackend templates
       return feature
 
 data InRange = InRange | OutOfRange
@@ -369,7 +370,7 @@ userNotifyFeature :: UserFeature
                   -> TagsFeature
                   -> ReverseFeature
                   -> VouchFeature
-                  -> StateComponent AcidState Acid.NotifyData
+                  -> Store.Backend
                   -> Templates
                   -> UserNotifyFeature
 userNotifyFeature UserFeature{..}
@@ -381,7 +382,8 @@ userNotifyFeature UserFeature{..}
                   TagsFeature{..}
                   ReverseFeature{queryReverseIndex}
                   VouchFeature{drainQueuedNotifications}
-                  notifyState templates
+                  Store.Backend{backendStore = notifyStore, backendState}
+                  templates
   = UserNotifyFeature {..}
 
   where
@@ -389,7 +391,7 @@ userNotifyFeature UserFeature{..}
     userNotifyFeatureInterface = (emptyHackageFeature "user-notify") {
         featureDesc      = "Notifications to users on metadata updates."
       , featureResources = [userNotifyResource] -- TODO we can add json features here for updating prefs
-      , featureState     = [abstractAcidStateComponent notifyState]
+      , featureState     = backendState
       , featureCaches    = []
       , featureReloadFiles = reloadTemplates templates
       , featurePostInit  = setupNotifyCronJob
@@ -413,10 +415,10 @@ userNotifyFeature UserFeature{..}
     --
 
     queryGetUserNotifyPref  ::  MonadIO m => UserId -> m (Maybe Acid.NotifyPref)
-    queryGetUserNotifyPref uid = queryState notifyState (Acid.LookupNotifyPref uid)
+    queryGetUserNotifyPref = Store.lookupNotifyPref notifyStore
 
     updateSetUserNotifyPref ::  MonadIO m => UserId -> Acid.NotifyPref -> m ()
-    updateSetUserNotifyPref uid np = updateState notifyState (Acid.AddNotifyPref uid np)
+    updateSetUserNotifyPref = Store.addNotifyPref notifyStore
 
     -- Request handlers
     --
@@ -474,7 +476,7 @@ userNotifyFeature UserFeature{..}
       }
 
     notifyCronAction = do
-        (notifyPrefs, lastNotifyTime) <- Acid.unNotifyData <$> queryState notifyState Acid.GetNotifyData
+        (notifyPrefs, lastNotifyTime) <- Store.getNotificationData notifyStore
         now <- getCurrentTime
         let trimLastTime = if diffUTCTime now lastNotifyTime > (60*60*6) -- cap at 6hr
                              then addUTCTime (negate $ (60*60*6)) now
@@ -511,7 +513,7 @@ userNotifyFeature UserFeature{..}
               ]
         mapM_ sendNotifyEmailAndDelay emails
 
-        updateState notifyState (Acid.SetNotifyTime now)
+        Store.setNotifyTime notifyStore now
 
     collectRevisionsAndUploads earlier now = do
         pkgIndex <- queryGetPackageIndex
