@@ -9,10 +9,13 @@ module Distribution.Server.Features.UserDetails.Acid
   , SetUserNameContact(..)
   , SetUserAdminInfo(..)
   , DeleteUserDetails(..)
+  , userDetailsStateComponent
   ) where
 
 import Distribution.Server.Features.UserDetails.State as State
 import Distribution.Server.Framework
+import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Features.UserDetails.Backup
 
 ------------------------------
 -- Acid event types
@@ -40,3 +43,20 @@ makeAcidic ''UserDetailsTable [
   ]
 
 
+---------------------
+-- State components
+--
+
+userDetailsStateComponent :: FilePath -> IO (StateComponent AcidState State.UserDetailsTable)
+userDetailsStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") State.emptyUserDetailsTable
+  return StateComponent {
+      stateDesc    = "Extra details associated with user accounts, email addresses etc"
+    , stateHandle  = st
+    , getState     = query st GetUserDetailsTable
+    , putState     = update st . ReplaceUserDetailsTable
+    , backupState  = \backuptype users ->
+        [csvToBackup ["users.csv"] (userDetailsToCSV backuptype users)]
+    , restoreState = userDetailsBackup
+    , resetState   = userDetailsStateComponent
+    }

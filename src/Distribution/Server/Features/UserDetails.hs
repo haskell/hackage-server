@@ -10,10 +10,8 @@ module Distribution.Server.Features.UserDetails (
 
 import qualified Distribution.Server.Features.UserDetails.Acid as Acid
 import qualified Distribution.Server.Features.UserDetails.State as State
-import Distribution.Server.Features.UserDetails.Backup
 import Distribution.Server.Features.UserDetails.Types
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Users
@@ -42,24 +40,6 @@ instance IsHackageFeature UserDetailsFeature where
   getFeatureInterface = userDetailsFeatureInterface
 
 
----------------------
--- State components
---
-
-userDetailsStateComponent :: FilePath -> IO (StateComponent AcidState State.UserDetailsTable)
-userDetailsStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") State.emptyUserDetailsTable
-  return StateComponent {
-      stateDesc    = "Extra details associated with user accounts, email addresses etc"
-    , stateHandle  = st
-    , getState     = query st Acid.GetUserDetailsTable
-    , putState     = update st . Acid.ReplaceUserDetailsTable
-    , backupState  = \backuptype users ->
-        [csvToBackup ["users.csv"] (userDetailsToCSV backuptype users)]
-    , restoreState = userDetailsBackup
-    , resetState   = userDetailsStateComponent
-    }
-
 ----------------------------------------
 -- Feature definition & initialisation
 --
@@ -71,7 +51,7 @@ initUserDetailsFeature :: ServerEnv
                            -> IO UserDetailsFeature)
 initUserDetailsFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
     -- Canonical state
-    usersDetailsState <- userDetailsStateComponent serverStateDir
+    usersDetailsState <- Acid.userDetailsStateComponent serverStateDir
 
     --TODO: link up to user feature to delete
 
