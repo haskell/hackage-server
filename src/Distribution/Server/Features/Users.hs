@@ -10,14 +10,13 @@ module Distribution.Server.Features.Users (
   ) where
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.Templating
 import qualified Distribution.Server.Framework.Auth as Auth
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.State as Acid
-import Distribution.Server.Users.Backup
 import qualified Distribution.Server.Users.Users as Acid
+import qualified Distribution.Server.Features.Users.Acid as UserAcid
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group
          (UserGroup(..), GroupDescription(..), UserIdSet, nullDescription)
@@ -230,8 +229,8 @@ deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserGroupResource
 initUserFeature :: ServerEnv -> IO (IO UserFeature)
 initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
   -- Canonical state
-  usersState  <- usersStateComponent  serverStateDir
-  adminsState <- adminsStateComponent serverStateDir
+  usersState  <- UserAcid.usersStateComponent  serverStateDir
+  adminsState <- UserAcid.adminsStateComponent serverStateDir
 
   -- Ephemeral state
   groupIndex   <- newMemStateWHNF emptyGroupIndex
@@ -267,32 +266,6 @@ initUserFeature serverEnv@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
         (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
 
     return feature
-
-usersStateComponent :: FilePath -> IO (StateComponent AcidState Acid.Users)
-usersStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "Users") Acid.initialUsers
-  return StateComponent {
-      stateDesc    = "List of users"
-    , stateHandle  = st
-    , getState     = query st Acid.GetUserDb
-    , putState     = update st . Acid.ReplaceUserDb
-    , backupState  = usersBackup
-    , restoreState = usersRestore
-    , resetState   = usersStateComponent
-    }
-
-adminsStateComponent :: FilePath -> IO (StateComponent AcidState Acid.HackageAdmins)
-adminsStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "HackageAdmins") Acid.initialHackageAdmins
-  return StateComponent {
-      stateDesc    = "Admins"
-    , stateHandle  = st
-    , getState     = query st Acid.GetHackageAdmins
-    , putState     = update st . Acid.ReplaceHackageAdmins . Acid.adminList
-    , backupState  = \_ (Acid.HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
-    , restoreState = Acid.HackageAdmins <$> groupBackup ["admins.csv"]
-    , resetState   = adminsStateComponent
-    }
 
 userFeature :: Templates
             -> StateComponent AcidState Acid.Users
