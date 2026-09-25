@@ -40,7 +40,6 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.AdminLog
-import qualified Distribution.Server.Features.AdminLog.Acid as Acid
 import Distribution.Server.Features.AdminLog.Types
 import Distribution.Server.Features.BuildReports
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
@@ -536,7 +535,7 @@ userNotifyFeature UserFeature{..}
         return $ filter isRecent $ (PackageIndex.allPackages pkgIndex)
 
     collectAdminActions earlier now = do
-        aLog <- Acid.adminLog <$> queryGetAdminLog
+        aLog <- queryGetAdminLog
         let isRecent (t,_,_,_) = t > earlier && t <= now
         return $ filter isRecent $ aLog
 

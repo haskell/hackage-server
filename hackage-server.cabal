@@ -349,6 +349,7 @@ library
       Distribution.Server.Features.AdminLog.Acid
       Distribution.Server.Features.AdminLog.Backup
       Distribution.Server.Features.AdminLog.State
+      Distribution.Server.Features.AdminLog.Store
       Distribution.Server.Features.AdminLog.Types
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
