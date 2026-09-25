@@ -18,6 +18,7 @@ module Distribution.Server.Features.UserNotify (
   ) where
 
 import Distribution.Server.Features.UserDetails.Types
+import qualified Distribution.Server.Features.UserNotify.Acid.Component as AcidComponent
 import qualified Distribution.Server.Features.UserNotify.Acid as Acid
 import Distribution.Server.Features.UserNotify.Acid (NotifyPref(..))
 import Distribution.Server.Features.UserNotify.Backup
@@ -36,7 +37,6 @@ import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.AdminLog
@@ -210,20 +210,6 @@ instance ToRadioButtons OK where
 -- State Component
 --
 
-notifyStateComponent :: FilePath -> IO (StateComponent AcidState Acid.NotifyData)
-notifyStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserNotify") =<< Acid.emptyNotifyData
-  return StateComponent {
-      stateDesc    = "State to keep track of revision notifications"
-    , stateHandle  = st
-    , getState     = query st Acid.GetNotifyData
-    , putState     = update st . Acid.ReplaceNotifyData
-    , backupState  = \backuptype tbl ->
-        [csvToBackup ["notifydata.csv"] (notifyDataToCSV backuptype tbl)]
-    , restoreState = userNotifyBackup
-    , resetState   = notifyStateComponent
-    }
-
 ----------------------------
 -- Core Feature
 --
@@ -242,7 +228,7 @@ initUserNotifyFeature :: ServerEnv
 initUserNotifyFeature ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
     -- Canonical state
-    notifyState <- notifyStateComponent serverStateDir
+    notifyState <- AcidComponent.notifyStateComponent serverStateDir
 
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
