@@ -3,24 +3,23 @@
 
 module Distribution.Server.Features.Vouch (VouchFeature(..), initVouchFeature, judgeVouch) where
 
-import qualified Distribution.Server.Features.Vouch.State as Acid
-import Distribution.Server.Features.Vouch.Acid (vouchStateComponent)
+import Distribution.Server.Features.Vouch.Acid (acidStore)
+import qualified Distribution.Server.Features.Vouch.Store as Store
 import Distribution.Server.Features.Vouch.Types
 import Control.Monad (when, join)
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO)
 import qualified Data.ByteString.Lazy.Char8 as LBS
-import qualified Data.Set as Set
 import Data.Time (UTCTime(..), addUTCTime, getCurrentTime, nominalDay, secondsToDiffTime)
 import Data.Time.Format.ISO8601 (formatShow, iso8601Format)
 import Text.XHtml.Strict (prettyHtmlFragment, stringToHtml, li)
 
 import Distribution.Server.Framework ((</>), DynamicPath, HackageFeature, IsHackageFeature, IsHackageFeature(..))
 import Distribution.Server.Framework (MessageSpan(MText), Method(..), Response, ServerEnv(..), ServerPartE)
-import Distribution.Server.Framework (abstractAcidStateComponent, emptyHackageFeature, errBadRequest)
+import Distribution.Server.Framework (emptyHackageFeature, errBadRequest)
 import Distribution.Server.Framework (featureDesc, featureReloadFiles, featureResources, featureState)
-import Distribution.Server.Framework (liftIO, queryState, resourceAt, resourceDesc, resourceGet)
-import Distribution.Server.Framework (resourcePost, toResponse, updateState)
+import Distribution.Server.Framework (liftIO, resourceAt, resourceDesc, resourceGet)
+import Distribution.Server.Framework (resourcePost, toResponse)
 import Distribution.Server.Framework.Templating (($=), TemplateAttr, getTemplate, loadTemplates, reloadTemplates, templateUnescaped)
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types (UserId(..), UserInfo, UserName(..), userName)
@@ -93,17 +92,18 @@ renderVouchers lookupUserInfo (uid, timestamp) = do
 
 initVouchFeature :: ServerEnv -> IO (UserFeature -> UploadFeature -> IO VouchFeature)
 initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
-  vouchState <- vouchStateComponent serverStateDir
+  vouchBackend <- acidStore serverStateDir
   templates <- loadTemplates serverTemplatesMode [ serverTemplatesDir, serverTemplatesDir </> "Html"]
                                                  ["vouch.html"]
   vouchTemplate <- getTemplate templates "vouch.html"
   return $ \UserFeature{userNameInPath, lookupUserName, lookupUserInfo, guardAuthenticated}
             UploadFeature{uploadersGroup} -> do
     let
+      vouchStore = Store.backendStore vouchBackend
       handleGetVouches :: DynamicPath -> ServerPartE Response
       handleGetVouches dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
-        vouches <- queryState vouchState $ Acid.GetVouchesFor uid
+        vouches <- Store.getVouchesFor vouchStore uid
         param <- renderToLBS lookupUserInfo vouches
         pure . toResponse $ vouchTemplate
           [ "msg" $= ""
@@ -116,8 +116,8 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
         ugroup <- liftIO $ Group.queryUserGroup uploadersGroup
         now <- liftIO getCurrentTime
         vouchee <- lookupUserName =<< userNameInPath dpath
-        vouchersForVoucher <- queryState vouchState $ Acid.GetVouchesFor voucher
-        existingVouchers <- queryState vouchState $ Acid.GetVouchesFor vouchee
+        vouchersForVoucher <- Store.getVouchesFor vouchStore voucher
+        existingVouchers <- Store.getVouchesFor vouchStore vouchee
         case judgeVouch ugroup now vouchee vouchersForVoucher existingVouchers voucher of
           Left NotAnUploader ->
             errBadRequest "Not an uploader" [MText "You must be an uploader yourself to endorse other users."]
@@ -130,16 +130,13 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
           Left YouAlreadyVouched ->
             errBadRequest "Already endorsed" [MText "You have already endorsed this user."]
           Right result -> do
-            updateState vouchState $ Acid.PutVouch vouchee (voucher, now)
+            Store.addVouch vouchStore vouchee (voucher, now)
             param <- renderToLBS lookupUserInfo $ existingVouchers ++ [(voucher, now)]
             case result of
               AddVouchComplete -> do
                 -- enqueue vouching completed notification
                 -- which will be read using drainQueuedNotifications
-                Acid.VouchData vouches notNotified <-
-                  queryState vouchState Acid.GetVouchesData
-                let newState = Acid.VouchData vouches (Set.insert vouchee notNotified)
-                updateState vouchState $ Acid.ReplaceVouchesData newState
+                Store.queueVouchCompleteNotification vouchStore vouchee
 
                 liftIO $ Group.addUserToGroup uploadersGroup vouchee
                 pure . toResponse $ vouchTemplate
@@ -169,13 +166,8 @@ initVouchFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMo
               , resourcePost = [("html", handlePostVouch)]
               }
             ]
-          , featureState = [ abstractAcidStateComponent vouchState ]
+          , featureState = Store.backendState vouchBackend
           , featureReloadFiles = reloadTemplates templates
           },
-      drainQueuedNotifications = do
-        Acid.VouchData vouches notNotified <-
-          queryState vouchState Acid.GetVouchesData
-        let newState = Acid.VouchData vouches mempty
-        updateState vouchState $ Acid.ReplaceVouchesData newState
-        pure $ Set.toList notNotified
+      drainQueuedNotifications = Store.drainQueuedNotifications vouchStore
     }

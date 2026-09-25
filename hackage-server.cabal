@@ -403,6 +403,7 @@ library
       Distribution.Server.Features.Vouch
       Distribution.Server.Features.Vouch.Acid
       Distribution.Server.Features.Vouch.State
+      Distribution.Server.Features.Vouch.Store
       Distribution.Server.Features.Vouch.Types
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
