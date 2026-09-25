@@ -362,6 +362,7 @@ library
       Distribution.Server.Features.BuildReports.Render
       Distribution.Server.Features.BuildReports.State
       Distribution.Server.Features.PackageCandidates
+      Distribution.Server.Features.PackageCandidates.Acid
       Distribution.Server.Features.PackageCandidates.Types
       Distribution.Server.Features.PackageCandidates.State
       Distribution.Server.Features.PackageCandidates.Backup

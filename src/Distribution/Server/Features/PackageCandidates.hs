@@ -11,8 +11,8 @@ module Distribution.Server.Features.PackageCandidates (
 import Distribution.Server.Framework
 
 import Distribution.Server.Features.PackageCandidates.Types
+import Distribution.Server.Features.PackageCandidates.Acid (candidatesStateComponent)
 import Distribution.Server.Features.PackageCandidates.State
-import Distribution.Server.Features.PackageCandidates.Backup
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
@@ -154,20 +154,6 @@ initPackageCandidatesFeature env@ServerEnv{serverStateDir} = do
                                       user core upload tarIndexCache
                                       candidatesState
       return feature
-
-candidatesStateComponent :: Bool -> FilePath -> IO (StateComponent AcidState CandidatePackages)
-candidatesStateComponent freshDB stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "CandidatePackages")
-                           (initialCandidatePackages freshDB)
-  return StateComponent {
-      stateDesc    = "Candidate packages"
-    , stateHandle  = st
-    , getState     = query st GetCandidatePackages
-    , putState     = update st . ReplaceCandidatePackages
-    , resetState   = candidatesStateComponent True
-    , backupState  = \_ -> backupCandidates
-    , restoreState = restoreCandidates
-  }
 
 candidatesFeature :: ServerEnv
                   -> UserFeature
