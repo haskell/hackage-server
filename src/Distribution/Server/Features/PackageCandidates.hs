@@ -11,8 +11,8 @@ module Distribution.Server.Features.PackageCandidates (
 import Distribution.Server.Framework
 
 import Distribution.Server.Features.PackageCandidates.Types
-import Distribution.Server.Features.PackageCandidates.Acid (candidatesStateComponent)
-import Distribution.Server.Features.PackageCandidates.State
+import qualified Distribution.Server.Features.PackageCandidates.Acid as Acid
+import qualified Distribution.Server.Features.PackageCandidates.Store as Store
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
@@ -138,21 +138,23 @@ initPackageCandidatesFeature :: ServerEnv
                                  -> TarIndexCacheFeature
                                  -> IO PackageCandidatesFeature)
 initPackageCandidatesFeature env@ServerEnv{serverStateDir} = do
-    candidatesState <- candidatesStateComponent False serverStateDir
+    candidatesBackend <- Acid.acidStore serverStateDir
+    let candidatesStore = Store.backendStore candidatesBackend
 
     return $ \user core upload@UploadFeature{..} tarIndexCache -> do
       -- one-off migration
-      CandidatePackages{candidateMigratedPkgTarball = migratedPkgTarball} <-
-        queryState candidatesState GetCandidatePackages
+      migratedPkgTarball <- Store.candidateTarballIsMigrated candidatesStore
       unless migratedPkgTarball $ do
-        migrateCandidatePkgTarball_v1_to_v2 env candidatesState
-        updateState candidatesState SetMigratedPkgTarball
+        candidateIndex <- Store.getCandidateIndex candidatesStore
+        migrateCandidatePkgTarball_v1_to_v2 env candidateIndex $ \pkgid pkginfo ->
+          void $ Store.updateCandidatePkgInfo candidatesStore pkgid pkginfo
+        Store.setCandidateTarballMigrated candidatesStore
 
-      registerHook packageUploaded $ updateState candidatesState . DeleteCandidate
+      registerHook packageUploaded $ Store.deleteCandidate candidatesStore
 
       let feature = candidatesFeature env
                                       user core upload tarIndexCache
-                                      candidatesState
+                                      candidatesBackend
       return feature
 
 candidatesFeature :: ServerEnv
@@ -160,7 +162,7 @@ candidatesFeature :: ServerEnv
                   -> CoreFeature
                   -> UploadFeature
                   -> TarIndexCacheFeature
-                  -> StateComponent AcidState CandidatePackages
+                  -> Store.Backend
                   -> PackageCandidatesFeature
 candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
@@ -170,7 +172,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                              }
                   UploadFeature{..}
                   TarIndexCacheFeature{packageTarball, findToplevelFile}
-                  candidatesState
+                  Store.Backend{backendStore = candidatesStore, backendState}
   = PackageCandidatesFeature{..}
   where
     candidatesFeatureInterface = (emptyHackageFeature "candidates") {
@@ -188,11 +190,11 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             , candidateContents
             , candidateChangeLog
             ]
-      , featureState = [abstractAcidStateComponent candidatesState]
+      , featureState = backendState
       }
 
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)
-    queryGetCandidateIndex = return . candidateList =<< queryState candidatesState GetCandidatePackages
+    queryGetCandidateIndex = Store.getCandidateIndex candidatesStore
 
     candidatesCoreResource = fix $ \r -> CoreResource {
 -- TODO: There is significant overlap between this definition and the one in Core
@@ -339,14 +341,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     doDeleteCandidate dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
       guardAuthorisedAsMaintainerOrTrustee (packageName candidate)
-      void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
+      Store.deleteCandidate candidatesStore (packageId candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
 
     doDeleteCandidates :: DynamicPath -> ServerPartE Response
     doDeleteCandidates dpath = do
       pkgname <- packageInPath dpath
       guardAuthorisedAsMaintainerOrTrustee pkgname
-      void $ updateState candidatesState $ DeleteCandidates pkgname
+      Store.deleteCandidates candidatesStore pkgname
       seeOther (packageCandidatesUri candidatesResource "" pkgname) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPartE Response
@@ -398,7 +400,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         checkCandidate "Upload failed" uid regularIndex candidate >>= \case
             Just failed -> throwError failed
             Nothing -> do
-                void $ updateState candidatesState $ AddCandidate candidate
+                Store.addCandidate candidatesStore candidate
                 let group = maintainersGroup (packageName pkgid)
                 liftIO $ Group.addUserToGroup group uid
                 return candidate
@@ -459,7 +461,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             then do
               -- delete when requested: "moving" the resource
               -- should this be required? (see notes in PackageCandidatesResource)
-              when doDelete $ updateState candidatesState $ DeleteCandidate (packageId candidate)
+              when doDelete $ Store.deleteCandidate candidatesStore (packageId candidate)
               return uresult
             else errForbidden "Upload failed" [MText "Package already exists."]
 
@@ -538,8 +540,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     lookupCandidateName :: PackageName -> ServerPartE [CandPkgInfo]
     lookupCandidateName pkgname = do
       guardValidPackageName core pkgname
-      state <- queryState candidatesState GetCandidatePackages
-      return $ PackageIndex.lookupPackageName (candidateList state) pkgname
+      candidateIndex <- queryGetCandidateIndex
+      return $ PackageIndex.lookupPackageName candidateIndex pkgname
 
     -- TODO: Unlike the corresponding function in core, we don't return the
     -- "latest" candidate when Version is empty. Should we?
@@ -547,8 +549,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     lookupCandidateId :: PackageId -> ServerPartE CandPkgInfo
     lookupCandidateId pkgid = do
       guard (pkgVersion pkgid /= nullVersion)
-      state <- queryState candidatesState GetCandidatePackages
-      case PackageIndex.lookupPackageId (candidateList state) pkgid of
+      candidateIndex <- queryGetCandidateIndex
+      case PackageIndex.lookupPackageId candidateIndex pkgid of
         Just pkg -> return pkg
         _ -> errNotFound "Candidate not found" [MText $ "No such candidate version for " ++ display (packageName pkgid)]
 
