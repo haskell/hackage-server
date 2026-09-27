@@ -333,6 +333,7 @@ library
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
     Distribution.Server.Features.Users.Acid
+    Distribution.Server.Features.Users.Store
     Distribution.Server.Features.UserNotify
     Distribution.Server.Features.UserNotify.Acid
     Distribution.Server.Features.UserNotify.Acid.Component
