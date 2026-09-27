@@ -283,6 +283,11 @@ userFeature templates usersState adminsState
              adminGroup adminResource userFeatureServerEnv
   = (UserFeature {..}, adminGroupDesc)
   where
+    userStateComponents = [
+          abstractAcidStateComponent usersState
+        , abstractAcidStateComponent adminsState
+        ]
+
     userFeatureInterface = (emptyHackageFeature "users") {
         featureDesc = "Manipulate the user database."
       , featureResources =
