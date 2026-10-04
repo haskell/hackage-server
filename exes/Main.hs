@@ -6,7 +6,7 @@
 module Main where
 
 import qualified Distribution.Server as Server
-import Distribution.Server (ListenOn(..), ServerConfig(..), Server)
+import Distribution.Server (InfallibleListenOn(..), ListenOn(..), ServerConfig(..), Server)
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Logging
 import Distribution.Server.Framework.BackupRestore (equalTarBall, restoreServerBackup)
@@ -44,7 +44,7 @@ import Distribution.Simple.Command
 import Distribution.Simple.Setup
          ( Flag, pattern Flag, pattern NoFlag, fromFlag, fromFlagOrDefault, flagToList, flagToMaybe )
 import Data.Maybe
-         ( isNothing )
+         ( isNothing, isJust )
 import Data.List
          ( intercalate, isInfixOf )
 import Data.Foldable
@@ -209,7 +209,9 @@ data RunFlags = RunFlags {
     -- Online backup flags
     flagRunBackupOutputDir :: Flag FilePath,
     flagRunBackupLinkBlobs :: Flag Bool,
-    flagRunBackupScrubbed  :: Flag Bool
+    flagRunBackupScrubbed  :: Flag Bool,
+    flagRunSocketActivationOnly :: Flag Bool,
+    flagRunNoSocketActivation   :: Flag Bool
   }
 
 defaultRunFlags :: RunFlags
@@ -228,7 +230,9 @@ defaultRunFlags = RunFlags {
     flagRunLiveTemplates   = Flag False,
     flagRunBackupOutputDir = Flag "backups",
     flagRunBackupLinkBlobs = Flag False,
-    flagRunBackupScrubbed  = Flag False
+    flagRunBackupScrubbed  = Flag False,
+    flagRunSocketActivationOnly = Flag False,
+    flagRunNoSocketActivation   = Flag False
   }
 
 runCommand :: CommandUI RunFlags
@@ -311,6 +315,14 @@ runCommand =
           "Do not cache templates, for quicker feedback during development."
           flagRunLiveTemplates (\v flags -> flags { flagRunLiveTemplates = v })
           (noArg (Flag True))
+      , option [] ["socket-activation-only"]
+          "Require systemd socket activation (LISTEN_FDS); do not fall back to binding a port."
+          flagRunSocketActivationOnly (\v flags -> flags { flagRunSocketActivationOnly = v })
+          (noArg (Flag True))
+      , option [] ["no-socket-activation"]
+          "Always bind a port ourselves; ignore socket activation (LISTEN_FDS). Implied by --ip or --port."
+          flagRunNoSocketActivation (\v flags -> flags { flagRunNoSocketActivation = v })
+          (noArg (Flag True))
       ]
 
 runAction :: RunFlags -> IO ()
@@ -326,10 +338,21 @@ runAction opts = do
     let stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagRunStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagRunStaticDir opts)
         tmpDir    = fromFlagOrDefault (confTmpDir    defaults) (flagRunTmpDir    opts)
-        listenOn  = (confListenOn defaults) {
-                       loPortNum = port,
-                       loIP      = ip
-                    }
+        socketActivationOnly = fromFlag (flagRunSocketActivationOnly opts)
+        -- Explicitly asking for an address to listen on is itself a request
+        -- to bind it ourselves, so it implies --no-socket-activation. (Pass
+        -- --host-uri if you only meant to change the advertised URI.)
+        noSocketActivation = fromFlag (flagRunNoSocketActivation opts)
+                          || explicitFlag (flagRunIP   opts)
+                          || explicitFlag (flagRunPort opts)
+        boundSocket = Server.FreshlyBoundSocket {
+                          Server.loIP      = ip,
+                          Server.loPortNum = port
+                      }
+        listenOn
+          | noSocketActivation = Server.ListenOnInfallible boundSocket
+          | socketActivationOnly = Server.ListenOnSocketActivation Nothing
+          | otherwise = Server.ListenOnSocketActivation (Just boundSocket)
         config    = defaults {
                         confHostUri    = hosturi,
                         confUserContentUri = usercontenturi,
@@ -346,6 +369,9 @@ runAction opts = do
         linkBlobs = fromFlag (flagRunBackupLinkBlobs opts)
         scrubbed  = fromFlag (flagRunBackupScrubbed  opts)
         liveTemplates = fromFlag (flagRunLiveTemplates opts)
+
+    when (socketActivationOnly && noSocketActivation) $
+      fail "--socket-activation-only conflicts with --no-socket-activation (or with --ip/--port, which imply it)"
 
     checkBlankServerState =<< Server.hasSavedState config
     checkStaticDir staticDir (flagRunStaticDir opts)
@@ -379,9 +405,19 @@ runAction opts = do
   where
     verbosity = fromFlag (flagRunVerbosity opts)
 
+    explicitFlag = isJust . flagToMaybe
+
+    -- Extract default IP/port from the config's fallback
+    defaultInfallible defaults = case confListenOn defaults of
+      ListenOnInfallible bs             -> Just bs
+      ListenOnSocketActivation (Just bs) -> Just bs
+      ListenOnSocketActivation Nothing   -> Nothing
+    defaultPortNum defaults = maybe 8080 loPortNum (defaultInfallible defaults)
+    defaultIP      defaults = maybe "127.0.0.1" loIP (defaultInfallible defaults)
+
     -- Option handling:
     --
-    checkPortOpt defaults Nothing    = return (loPortNum (confListenOn defaults))
+    checkPortOpt defaults Nothing    = return (defaultPortNum defaults)
     checkPortOpt _        (Just str) = case reads str of
       [(n,"")]  | n >= 1 && n <= 65535
                -> return n
@@ -419,7 +455,7 @@ runAction opts = do
     checkRequiredBaseHostHeader _ Nothing    = fail "You must provide the --required-base-host-header= flag. It's typically the host part of the base-uri."
     checkRequiredBaseHostHeader _ (Just str) = pure str
 
-    checkIPOpt defaults Nothing    = return (loIP (confListenOn defaults))
+    checkIPOpt defaults Nothing    = return (defaultIP defaults)
     checkIPOpt _        (Just str) =
       let pQuad = do ds <- Parse.many1 Parse.digit
                      let quad = read ds :: Integer

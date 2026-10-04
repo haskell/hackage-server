@@ -57,18 +57,20 @@ in
       defaultText = lib.literalMD "the data files of {option}`package`";
       description = ''
         Directory containing HTML templates, static files, and TUF keys.
+        Defaults to the data-files directory shipped with the package.
+        In prod, this is the `datafiles/` directory.
       '';
     };
 
     port = lib.mkOption {
       type = lib.types.port;
       default = 8080;
-      description = "TCP port to listen on.";
+      description = "TCP port for the listening socket.";
     };
 
     ip = lib.mkOption {
       type = lib.types.str;
-      default = "127.0.0.1";
+      default = "0.0.0.0";
       description = "IPv4 address to bind.";
     };
 
@@ -102,11 +104,19 @@ in
       "d ${cfg.stateDir}/state/tmp 0750 ${cfg.user} ${cfg.group} -"
     ];
 
+    systemd.sockets.hackage-server = {
+      description = "Hackage Server listening socket";
+      wantedBy = [ "sockets.target" ];
+      socketConfig = {
+        ListenStream = "${cfg.ip}:${toString cfg.port}";
+        Accept = false;
+      };
+    };
+
     systemd.services.hackage-server = {
       description = "Hackage Server";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
-      wantedBy = [ "multi-user.target" ];
+      requires = [ "hackage-server.socket" ];
+      # No wantedBy — service is started on-demand by socket activation
 
       preStart = ''
         if [ ! -d "${cfg.stateDir}/state/db" ]; then
@@ -129,8 +139,7 @@ in
         ExecStart = lib.concatStringsSep " " [
           (lib.getExe pkg)
           "run"
-          "--ip=${cfg.ip}"
-          "--port=${toString cfg.port}"
+          "--socket-activation-only"
           "--base-uri=${cfg.baseUri}"
           "--user-content-uri=${cfg.userContentUri}"
           "--required-base-host-header=${cfg.requiredBaseHostHeader}"

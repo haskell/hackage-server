@@ -20,11 +20,13 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     machine.start()
-    machine.wait_for_unit("hackage-server.service")
+    machine.wait_for_unit("hackage-server.socket")
+
+    # Trigger socket activation and wait for the service to come up
     machine.wait_for_open_port(8080)
 
     # Smoke test
-    machine.succeed("curl -fsS --max-time 10 http://localhost:8080/")
+    machine.succeed("curl -fsS --max-time 30 http://localhost:8080/")
     machine.succeed("curl -fsS --max-time 10 http://localhost:8080/users/.json")
   '';
 }
