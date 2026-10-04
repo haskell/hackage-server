@@ -18,7 +18,9 @@ module Distribution.Server.Features.UserNotify (
   ) where
 
 import Distribution.Server.Features.UserDetails.Types
+import qualified Distribution.Server.Features.UserNotify.Acid.Component as AcidComponent
 import qualified Distribution.Server.Features.UserNotify.Acid as Acid
+import qualified Distribution.Server.Features.UserNotify.Store as Store
 import Distribution.Server.Features.UserNotify.Acid (NotifyPref(..))
 import Distribution.Server.Features.UserNotify.Backup
 import Distribution.Server.Features.UserNotify.Types
@@ -36,11 +38,9 @@ import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.AdminLog
-import qualified Distribution.Server.Features.AdminLog.Acid as Acid
 import Distribution.Server.Features.AdminLog.Types
 import Distribution.Server.Features.BuildReports
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
@@ -211,20 +211,6 @@ instance ToRadioButtons OK where
 -- State Component
 --
 
-notifyStateComponent :: FilePath -> IO (StateComponent AcidState Acid.NotifyData)
-notifyStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserNotify") =<< Acid.emptyNotifyData
-  return StateComponent {
-      stateDesc    = "State to keep track of revision notifications"
-    , stateHandle  = st
-    , getState     = query st Acid.GetNotifyData
-    , putState     = update st . Acid.ReplaceNotifyData
-    , backupState  = \backuptype tbl ->
-        [csvToBackup ["notifydata.csv"] (notifyDataToCSV backuptype tbl)]
-    , restoreState = userNotifyBackup
-    , resetState   = notifyStateComponent
-    }
-
 ----------------------------
 -- Core Feature
 --
@@ -243,7 +229,7 @@ initUserNotifyFeature :: ServerEnv
 initUserNotifyFeature ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
     -- Canonical state
-    notifyState <- notifyStateComponent serverStateDir
+    notifyBackend <- AcidComponent.acidStore serverStateDir
 
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
@@ -253,7 +239,7 @@ initUserNotifyFeature ServerEnv{ serverStateDir, serverTemplatesDir,
     return $ \users core uploadfeature adminlog userdetails reports tags revers vouch -> do
       let feature = userNotifyFeature
                       users core uploadfeature adminlog userdetails reports tags
-                      revers vouch notifyState templates
+                      revers vouch notifyBackend templates
       return feature
 
 data InRange = InRange | OutOfRange
@@ -384,7 +370,7 @@ userNotifyFeature :: UserFeature
                   -> TagsFeature
                   -> ReverseFeature
                   -> VouchFeature
-                  -> StateComponent AcidState Acid.NotifyData
+                  -> Store.Backend
                   -> Templates
                   -> UserNotifyFeature
 userNotifyFeature UserFeature{..}
@@ -396,7 +382,8 @@ userNotifyFeature UserFeature{..}
                   TagsFeature{..}
                   ReverseFeature{queryReverseIndex}
                   VouchFeature{drainQueuedNotifications}
-                  notifyState templates
+                  Store.Backend{backendStore = notifyStore, backendState}
+                  templates
   = UserNotifyFeature {..}
 
   where
@@ -404,7 +391,7 @@ userNotifyFeature UserFeature{..}
     userNotifyFeatureInterface = (emptyHackageFeature "user-notify") {
         featureDesc      = "Notifications to users on metadata updates."
       , featureResources = [userNotifyResource] -- TODO we can add json features here for updating prefs
-      , featureState     = [abstractAcidStateComponent notifyState]
+      , featureState     = backendState
       , featureCaches    = []
       , featureReloadFiles = reloadTemplates templates
       , featurePostInit  = setupNotifyCronJob
@@ -428,10 +415,10 @@ userNotifyFeature UserFeature{..}
     --
 
     queryGetUserNotifyPref  ::  MonadIO m => UserId -> m (Maybe Acid.NotifyPref)
-    queryGetUserNotifyPref uid = queryState notifyState (Acid.LookupNotifyPref uid)
+    queryGetUserNotifyPref = Store.lookupNotifyPref notifyStore
 
     updateSetUserNotifyPref ::  MonadIO m => UserId -> Acid.NotifyPref -> m ()
-    updateSetUserNotifyPref uid np = updateState notifyState (Acid.AddNotifyPref uid np)
+    updateSetUserNotifyPref = Store.addNotifyPref notifyStore
 
     -- Request handlers
     --
@@ -489,7 +476,7 @@ userNotifyFeature UserFeature{..}
       }
 
     notifyCronAction = do
-        (notifyPrefs, lastNotifyTime) <- Acid.unNotifyData <$> queryState notifyState Acid.GetNotifyData
+        (notifyPrefs, lastNotifyTime) <- Store.getNotificationData notifyStore
         now <- getCurrentTime
         let trimLastTime = if diffUTCTime now lastNotifyTime > (60*60*6) -- cap at 6hr
                              then addUTCTime (negate $ (60*60*6)) now
@@ -526,7 +513,7 @@ userNotifyFeature UserFeature{..}
               ]
         mapM_ sendNotifyEmailAndDelay emails
 
-        updateState notifyState (Acid.SetNotifyTime now)
+        Store.setNotifyTime notifyStore now
 
     collectRevisionsAndUploads earlier now = do
         pkgIndex <- queryGetPackageIndex
@@ -536,7 +523,7 @@ userNotifyFeature UserFeature{..}
         return $ filter isRecent $ (PackageIndex.allPackages pkgIndex)
 
     collectAdminActions earlier now = do
-        aLog <- Acid.adminLog <$> queryGetAdminLog
+        aLog <- queryGetAdminLog
         let isRecent (t,_,_,_) = t > earlier && t <= now
         return $ filter isRecent $ aLog
 

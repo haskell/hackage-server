@@ -33,6 +33,8 @@ import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Features.DownloadCount.State
 import Distribution.Server.Features.DownloadCount.Backup
+import Distribution.Server.Features.DownloadCount.Acid (acidStore)
+import qualified Distribution.Server.Features.DownloadCount.Store as Store
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
@@ -74,7 +76,7 @@ data PackageDownloads = PackageDownloads {
 initDownloadFeature :: ServerEnv
                     -> IO (CoreFeature -> UserFeature -> IO DownloadFeature)
 initDownloadFeature serverEnv@ServerEnv{serverStateDir} = do
-    inMemState     <- inMemStateComponent  serverStateDir
+    inMemBackend   <- acidStore serverStateDir
     let onDiskState = onDiskStateComponent serverStateDir
     (recentDownloads,
      totalDownloads) <- computeRecentAndTotalDownloads =<< getState onDiskState
@@ -83,25 +85,11 @@ initDownloadFeature serverEnv@ServerEnv{serverStateDir} = do
     downChan       <- newChan
 
     return $ \core users -> do
-      let feature = downloadFeature core users serverEnv inMemState
+      let feature = downloadFeature core users serverEnv inMemBackend
                       onDiskState totalsCache recentCache downChan
 
       registerHook (packageDownloadHook core) (writeChan downChan)
       return feature
-
-inMemStateComponent :: FilePath -> IO (StateComponent AcidState InMemStats)
-inMemStateComponent stateDir = do
-  initSt <- initInMemStats <$> getToday
-  st <- openLocalStateFrom (dcPath stateDir </> "inmem") initSt
-  return StateComponent {
-      stateDesc    = "Today's download counts"
-    , stateHandle  = st
-    , getState     = query st GetInMemStats
-    , putState     = update st . ReplaceInMemStats
-    , backupState  = \_ -> inMemBackup
-    , restoreState = inMemRestore
-    , resetState   = inMemStateComponent
-    }
 
 onDiskStateComponent :: FilePath -> StateComponent OnDiskState OnDiskStats
 onDiskStateComponent stateDir = StateComponent {
@@ -121,7 +109,7 @@ onDiskStateComponent stateDir = StateComponent {
 downloadFeature :: CoreFeature
                 -> UserFeature
                 -> ServerEnv
-                -> StateComponent AcidState   InMemStats
+                -> Store.Backend
                 -> StateComponent OnDiskState OnDiskStats
                 -> MemState TotalDownloads
                 -> MemState RecentDownloads
@@ -131,21 +119,22 @@ downloadFeature :: CoreFeature
 downloadFeature CoreFeature{}
                 UserFeature{..}
                 ServerEnv{serverStateDir}
-                inMemState
+                inMemBackend
                 onDiskState
                 totalDownloadsCache
                 recentDownloadsCache
                 downloadStream
   = DownloadFeature{..}
   where
+    inMemStore = Store.backendStore inMemBackend
+
     downloadFeatureInterface = (emptyHackageFeature "download") {
         featureResources = [ topDownloads downloadResource
                            , downloadCSV
                            ]
       , featurePostInit  = void $ forkIO registerDownloads
-      , featureState     = [ abstractAcidStateComponent   inMemState
-                           , abstractOnDiskStateComponent onDiskState
-                           ]
+      , featureState     = Store.backendState inMemBackend
+                        ++ [abstractOnDiskStateComponent onDiskState]
       , featureCaches    = [
             CacheComponent {
               cacheDesc       = "recent package downloads cache",
@@ -167,15 +156,15 @@ downloadFeature CoreFeature{}
     registerDownloads = forever $ do
         pkg    <- readChan downloadStream
         today  <- getToday
-        today' <- query (stateHandle inMemState) RecordedToday
+        today' <- Store.recordedToday inMemStore
 
         --TODO: do this asyncronously rather than blocking this request
         when (today /= today') $ do
           -- For the first download each day we reset the in-memory stats and..
-          inMemStats <- getState inMemState
-          putState inMemState $ initInMemStats today
+          inMemStats <- Store.getInMemStats inMemStore
+          Store.replaceInMemStats inMemStore $ initInMemStats today
           -- we can discard the large eventlog by writing a small checkpoint
-          createCheckpoint (stateHandle inMemState)
+          Store.checkpointInMemStats inMemStore
 
           -- Write yesterday's downloads to the log
           appendToLog (dcPath serverStateDir) inMemStats
@@ -191,7 +180,8 @@ downloadFeature CoreFeature{}
           writeMemState totalDownloadsCache totalDownloads
 
 
-        updateState inMemState $ RegisterDownload pkg
+        Store.registerDownload inMemStore pkg
+
 
 
     downloadResource = DownloadResource {

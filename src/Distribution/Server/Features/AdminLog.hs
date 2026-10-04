@@ -4,18 +4,18 @@
 
 module Distribution.Server.Features.AdminLog where
 
-import qualified Distribution.Server.Features.AdminLog.Acid as Acid
-import Distribution.Server.Features.AdminLog.Backup
+import Distribution.Server.Features.AdminLog.Acid (acidStore)
+import qualified Distribution.Server.Features.AdminLog.Store as Store
 import Distribution.Server.Features.AdminLog.Types
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.Group
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Pages.AdminLog
 import Distribution.Server.Features.Users
 
-import Data.Time.Clock (getCurrentTime)
+import Data.Time.Clock (getCurrentTime, UTCTime)
+import qualified Data.ByteString.Lazy.Char8 as BS
 import Distribution.Server.Util.Parse
 
 --TODO Maybe Reason
@@ -29,7 +29,7 @@ mkAdminAction gd isAdd uid = (if isAdd then Admin_GroupAddUser else Admin_GroupD
 
 data AdminLogFeature = AdminLogFeature {
       adminLogFeatureInterface :: HackageFeature
-    , queryGetAdminLog :: forall m. MonadIO m => m Acid.AdminLog
+    , queryGetAdminLog :: forall m. MonadIO m => m [(UTCTime,UserId,AdminAction,BS.ByteString)]
 }
 
 instance IsHackageFeature AdminLogFeature where
@@ -37,22 +37,22 @@ instance IsHackageFeature AdminLogFeature where
 
 initAdminLogFeature :: ServerEnv -> IO (UserFeature -> IO AdminLogFeature)
 initAdminLogFeature ServerEnv{serverStateDir} = do
-  adminLogState <- adminLogStateComponent serverStateDir
+  adminLogBackend <- acidStore serverStateDir
   return $ \users@UserFeature{groupChangedHook} -> do
 
-    let feature = adminLogFeature users adminLogState
+    let feature = adminLogFeature users adminLogBackend
 
     registerHook groupChangedHook $ \(gd,addOrDel,actorUid,targetUid,reason) -> do
         now <- getCurrentTime
-        updateState adminLogState $ Acid.AddAdminLog
+        Store.addAdminLog (Store.backendStore adminLogBackend)
             (now, actorUid, mkAdminAction gd addOrDel targetUid, packUTF8 reason)
 
     return feature
 
 adminLogFeature :: UserFeature
-                -> StateComponent AcidState Acid.AdminLog
+                -> Store.Backend
                 -> AdminLogFeature
-adminLogFeature UserFeature{..} adminLogState
+adminLogFeature UserFeature{..} Store.Backend{backendStore = adminLogStore, backendState}
   = AdminLogFeature {..}
 
   where
@@ -60,7 +60,7 @@ adminLogFeature UserFeature{..} adminLogState
       (emptyHackageFeature "admin-actions-log") {
         featureDesc      = "Log of additions and removals of users from groups.",
         featureResources = [adminLogResource],
-        featureState     = [abstractAcidStateComponent adminLogState]
+        featureState     = backendState
       }
 
     adminLogResource :: Resource
@@ -70,13 +70,13 @@ adminLogFeature UserFeature{..} adminLogState
         resourceGet  = [("html", serveAdminLogGet)]
       }
 
-    queryGetAdminLog :: MonadIO m => m Acid.AdminLog
-    queryGetAdminLog = queryState adminLogState Acid.GetAdminLog
+    queryGetAdminLog :: MonadIO m => m [(UTCTime,UserId,AdminAction,BS.ByteString)]
+    queryGetAdminLog = Store.getAdminLog adminLogStore
 
     serveAdminLogGet _ = do
-      aLog  <- queryState adminLogState Acid.GetAdminLog
+      aLog  <- queryGetAdminLog
       users <- queryGetUserDb
-      return . toResponse . adminLogPage users . map mkRow . Acid.adminLog $ aLog
+      return . toResponse . adminLogPage users . map mkRow $ aLog
 
     mkRow (time, actorId, Admin_GroupDelUser targetId group, reason) =
           (time, actorId, "Acid.Delete", targetId, nameIt group, unpackUTF8 reason)
@@ -87,18 +87,3 @@ adminLogFeature UserFeature{..} adminLogState
     nameIt AdminGroup           = "Administrators"
     nameIt TrusteeGroup         = "Trustees"
     nameIt (OtherGroup s)       = unpackUTF8 s
-
-adminLogStateComponent :: FilePath -> IO (StateComponent AcidState Acid.AdminLog)
-adminLogStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "AdminLog") Acid.initialAdminLog
-  return StateComponent {
-      stateDesc    = "AdminLog"
-    , stateHandle  = st
-    , getState     = query st Acid.GetAdminLog
-    , putState     = update st . Acid.ReplaceAdminLog
-    , backupState  = \_ (Acid.AdminLog xs) ->
-                      [BackupByteString ["adminLog.txt"] . backupLogEntries $ xs]
-    , restoreState = restoreAdminLogBackup
-    , resetState   = adminLogStateComponent
-    }
-

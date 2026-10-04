@@ -17,6 +17,8 @@ import Distribution.Server.Framework
 import Distribution.Server.Framework.BlobStorage
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Features.TarIndexCache.Acid (acidStore)
+import qualified Distribution.Server.Features.TarIndexCache.Store as Store
 import qualified Distribution.Server.Features.TarIndexCache.State as Acid
 import Distribution.Server.Features.Users
 import Distribution.Server.Packages.Types
@@ -45,36 +47,19 @@ initTarIndexCacheFeature :: ServerEnv
                          -> IO (UserFeature
                              -> IO TarIndexCacheFeature)
 initTarIndexCacheFeature env@ServerEnv{serverStateDir} = do
-    tarIndexCache <- tarIndexCacheStateComponent serverStateDir
+    tarIndexCacheBackend <- acidStore serverStateDir
 
     return $ \users -> do
-      let feature = tarIndexCacheFeature env users tarIndexCache
+      let feature = tarIndexCacheFeature env users tarIndexCacheBackend
       return feature
-
-tarIndexCacheStateComponent :: FilePath -> IO (StateComponent AcidState Acid.TarIndexCache)
-tarIndexCacheStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "TarIndexCache") Acid.initialTarIndexCache
-  return StateComponent {
-      stateDesc    = "Mapping from tarball blob IDs to tarindex blob IDs"
-    , stateHandle  = st
-    , getState     = query st Acid.GetTarIndexCache
-    , putState     = update st . Acid.ReplaceTarIndexCache
-    , resetState   = tarIndexCacheStateComponent
-    -- We don't backup the tar indices, but reconstruct them on demand
-    , backupState  = \_ _ -> []
-    , restoreState = RestoreBackup {
-                         restoreEntry    = error "The impossible happened"
-                       , restoreFinalize = return Acid.initialTarIndexCache
-                       }
-    }
 
 tarIndexCacheFeature :: ServerEnv
                      -> UserFeature
-                     -> StateComponent AcidState Acid.TarIndexCache
+                     -> Store.Backend
                      -> TarIndexCacheFeature
 tarIndexCacheFeature ServerEnv{serverBlobStore = store}
                      UserFeature{..}
-                     tarIndexCache =
+                     Store.Backend{backendStore = tarIndexCache, backendState} =
    TarIndexCacheFeature{..}
   where
     tarIndexCacheFeatureInterface :: HackageFeature
@@ -84,7 +69,7 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
         -- (TODO: We could potentially check that if a package occurs in both
         -- packages then both caches point to identical tar indices, but for
         -- that we would need to be in IO)
-      , featureState = [abstractAcidStateComponent' (\_ _ -> []) tarIndexCache]
+      , featureState = backendState
       , featureResources = [
             (resourceAt "/server-status/tarindices.:format") {
                 resourceDesc   = [ (GET,    "Which tar indices have been generated?")
@@ -99,7 +84,7 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
     -- This is the heart of this feature
     cachedTarIndex :: BlobId -> IO TarIndex
     cachedTarIndex tarBallBlobId = do
-      mTarIndexBlobId <- queryState tarIndexCache (Acid.FindTarIndex tarBallBlobId)
+      mTarIndexBlobId <- Store.findTarIndex tarIndexCache tarBallBlobId
       case mTarIndexBlobId of
         Just tarIndexBlobId -> do
           serializedTarIndex <- fetch store tarIndexBlobId
@@ -112,7 +97,7 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
                               Left  err      -> throwIO (userError err)
                               Right tarIndex -> return tarIndex
           tarIndexBlobId <- add store (runPutLazy (safePut tarIndex))
-          updateState tarIndexCache (Acid.SetTarIndex tarBallBlobId tarIndexBlobId)
+          Store.setTarIndex tarIndexCache tarBallBlobId tarIndexBlobId
           return tarIndex
 
     cachedPackageTarIndex :: PkgTarball -> IO TarIndex
@@ -120,7 +105,7 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
 
     serveTarIndicesStatus :: ServerPartE Response
     serveTarIndicesStatus = do
-      Acid.TarIndexCache state <- liftIO $ getState tarIndexCache
+      Acid.TarIndexCache state <- liftIO $ Store.getTarIndexCache tarIndexCache
       return . toResponse . toJSON . Map.toList $ state
 
     -- | With curl:
@@ -131,7 +116,7 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
       guardAuthorised_ [InGroup adminGroup]
       -- TODO: This resets the tar indices _state_ only, we don't actually
       -- remove any blobs
-      liftIO $ putState tarIndexCache Acid.initialTarIndexCache
+      liftIO $ Store.replaceTarIndexCache tarIndexCache Acid.initialTarIndexCache
       ok $ toResponse "Ok!"
 
     -- Functions to access specific files in a tarball

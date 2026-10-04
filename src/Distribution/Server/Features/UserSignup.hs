@@ -12,12 +12,11 @@ module Distribution.Server.Features.UserSignup (
   ) where
 
 import qualified Distribution.Server.Features.UserSignup.Acid as Acid
-import Distribution.Server.Features.UserSignup.Backup
+import qualified Distribution.Server.Features.UserSignup.Store as Store
 import Distribution.Server.Features.UserSignup.Types
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
-import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
@@ -30,7 +29,6 @@ import Distribution.Server.Util.Nonce
 import Distribution.Server.Util.Validators
 import qualified Distribution.Server.Users.Users as Users
 
-import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -90,26 +88,6 @@ instance IsHackageFeature UserSignupFeature where
 --      set new password
 --
 
----------------------
--- State components
---
-
-signupResetStateComponent :: FilePath -> IO (StateComponent AcidState Acid.SignupResetTable)
-signupResetStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserSignupReset") Acid.emptySignupResetTable
-  return StateComponent {
-      stateDesc    = "State to keep track of outstanding requests for user signup and password resets"
-    , stateHandle  = st
-    , getState     = query st Acid.GetSignupResetTable
-    , putState     = update st . Acid.ReplaceSignupResetTable
-    , backupState  = \backuptype tbl ->
-        [csvToBackup ["signups.csv"] (signupInfoToCSV backuptype tbl)
-        ,csvToBackup ["resets.csv"]  (resetInfoToCSV backuptype tbl)]
-    , restoreState = signupResetBackup
-    , resetState   = signupResetStateComponent
-    }
-
-
 ----------------------------------------
 -- Feature definition & initialisation
 --
@@ -122,7 +100,7 @@ initUserSignupFeature :: ServerEnv
 initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
     -- Canonical state
-    signupResetState <- signupResetStateComponent serverStateDir
+    signupResetBackend <- Acid.acidStore serverStateDir
 
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
@@ -135,7 +113,7 @@ initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
     return $ \users userdetails upload -> do
       let feature = userSignupFeature env
                       users userdetails upload
-                      signupResetState templates
+                      signupResetBackend templates
       return feature
 
 
@@ -143,15 +121,17 @@ userSignupFeature :: ServerEnv
                   -> UserFeature
                   -> UserDetailsFeature
                   -> UploadFeature
-                  -> StateComponent AcidState Acid.SignupResetTable
+                  -> Store.Backend
                   -> Templates
                   -> UserSignupFeature
 userSignupFeature ServerEnv{serverBaseURI, serverCron}
                   UserFeature{..} UserDetailsFeature{..}
-                  UploadFeature{uploadersGroup} signupResetState templates
+                  UploadFeature{uploadersGroup} signupResetBackend templates
   = UserSignupFeature {..}
 
   where
+    signupResetStore = Store.backendStore signupResetBackend
+
     userSignupFeatureInterface = (emptyHackageFeature "user-signup-reset") {
         featureDesc      = "Extra information about user accounts, email addresses etc."
       , featureResources = [signupRequestsResource,
@@ -159,7 +139,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
                             signupRequestResource,
                             resetRequestsResource,
                             resetRequestResource]
-      , featureState     = [abstractAcidStateComponent signupResetState]
+      , featureState     = Store.backendState signupResetBackend
       , featureCaches    = []
       , featureReloadFiles = reloadTemplates templates
       , featurePostInit  = setupExpireCronJob
@@ -211,31 +191,29 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
     --
 
     queryAllSignupResetInfo :: MonadIO m => m [SignupResetInfo]
-    queryAllSignupResetInfo =
-          queryState signupResetState Acid.GetSignupResetTable
-      >>= \(Acid.SignupResetTable tbl) -> return (Map.elems tbl)
+    queryAllSignupResetInfo = Store.getSignupResetInfos signupResetStore
 
     querySignupInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     querySignupInfo nonce =
-        justSignupInfo <$> queryState signupResetState (Acid.LookupSignupResetInfo nonce)
+        justSignupInfo <$> Store.lookupSignupResetInfo signupResetStore nonce
       where
         justSignupInfo (Just info@SignupInfo{}) = Just info
         justSignupInfo _                        = Nothing
 
     queryResetInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     queryResetInfo nonce =
-        justResetInfo <$> queryState signupResetState (Acid.LookupSignupResetInfo nonce)
+        justResetInfo <$> Store.lookupSignupResetInfo signupResetStore nonce
       where
         justResetInfo (Just info@ResetInfo{}) = Just info
         justResetInfo _                       = Nothing
 
     updateAddSignupResetInfo :: Nonce -> SignupResetInfo -> MonadIO m => m Bool
     updateAddSignupResetInfo nonce signupInfo =
-        updateState signupResetState (Acid.AddSignupResetInfo nonce signupInfo)
+        Store.addSignupResetInfo signupResetStore nonce signupInfo
 
     updateDeleteSignupResetInfo :: Nonce -> MonadIO m => m ()
     updateDeleteSignupResetInfo nonce =
-        updateState signupResetState (Acid.DeleteSignupResetInfo nonce)
+        Store.deleteSignupResetInfo signupResetStore nonce
 
     -- Expiry
     --
@@ -247,7 +225,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
         cronJobAction    = do
           now <- getCurrentTime
           let expire = now { utctDay = addDays (-7) (utctDay now) }
-          updateState signupResetState (Acid.DeleteAllExpired expire)
+          Store.deleteExpiredResetInfos signupResetStore expire
       }
 
     -- Request handlers

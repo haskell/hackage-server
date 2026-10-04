@@ -18,8 +18,6 @@ module Distribution.Server.Features.Core (
     -- * Misc other utils
     packageExists,
     packageIdExists,
-
-    packagesStateComponent,
   ) where
 
 -- stdlib
@@ -37,9 +35,9 @@ import qualified Data.Vector                                        as Vec
 -- hackage
 import           Distribution.Server.Prelude
 
-import           Distribution.Server.Features.Core.Backup
+import           Distribution.Server.Features.Core.Acid             (acidStore)
+import qualified Distribution.Server.Features.Core.Store            as Store
 import qualified Distribution.Server.Features.Core.State            as Acid
-import           Distribution.Server.Features.Security.Migration
 import           Distribution.Server.Features.Security.SHA256       (sha256)
 import           Distribution.Server.Features.Users
 import           Distribution.Server.Framework
@@ -75,6 +73,15 @@ data CoreFeature = CoreFeature {
     -- Queries
     -- | Retrieves the entire main package index.
     queryGetPackageIndex :: forall m. MonadIO m => m (PackageIndex PkgInfo),
+
+    -- | Retrieves all versions of a package.
+    queryLookupPackageName :: forall m. MonadIO m => PackageName -> m [PkgInfo],
+
+    -- | Retrieves a specific package version.
+    queryLookupPackageId :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo),
+
+    -- | Retrieves the latest version of every package.
+    queryLatestPackages :: forall m. MonadIO m => m [PkgInfo],
 
     -- | Retrieve the raw tarball info
     queryGetIndexTarballInfo :: forall m. MonadIO m => m IndexTarballInfo,
@@ -269,8 +276,8 @@ data CoreResource = CoreResource {
 initCoreFeature :: ServerEnv -> IO (UserFeature -> IO CoreFeature)
 initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
                               serverVerbosity = verbosity} = do
-    -- Canonical state
-    packagesState <- packagesStateComponent verbosity False serverStateDir
+    packagesBackend <- acidStore env verbosity False serverStateDir
+    let packagesStore = Store.backendStore packagesBackend
 
     -- Hooks
     packageChangeHook   <- newHook
@@ -300,16 +307,16 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
       -- need any other kind of migration.
 
       migrateUpdateLog <- (isLeft . Acid.packageUpdateLog) <$>
-                             queryState packagesState Acid.GetPackagesState
+                             Store.getPackagesState packagesStore
       when migrateUpdateLog $ do
         -- Migrate Acid.PackagesState (introduce package update log)
         logTiming verbosity "migrating package update log" $ do
           userdb <- queryGetUserDb users
-          updateState packagesState (Acid.MigrateAddUpdateLog userdb)
+          Store.migrateAddUpdateLog packagesStore userdb
 
         -- Migrate PkgTarball
         logTiming verbosity "migrating PkgTarball" $
-          migratePkgTarball_v1_to_v2 env packagesState
+          Store.migratePackageTarballs packagesStore
 
         -- Create a checkpoint
         --
@@ -325,11 +332,11 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
         -- reconstruct the package log rather than use the package log as it was
         -- constructed in the first place, and we might potentially lose
         -- information.
-        createCheckpoint (stateHandle packagesState)
+        Store.createStoreCheckpoint packagesStore
 
       rec let (feature, getIndexTarball)
                 = coreFeature env users
-                              packagesState indexTar
+                              packagesBackend indexTar
                               packageChangeHook
                               preIndexUpdateHook
                               packageDownloadHook
@@ -354,29 +361,14 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
              PackageChangeAdd _ -> return ()
              _ -> do
                      additionalEntries <- concat <$> runHook preIndexUpdateHook packageChange
-                     forM_ additionalEntries $ updateState packagesState . Acid.AddOtherIndexEntry
+                     forM_ additionalEntries $ Store.addOtherIndexEntry packagesStore
         prodAsyncCache indexTar "package change"
 
       return feature
 
-packagesStateComponent :: Verbosity -> Bool -> FilePath -> IO (StateComponent AcidState Acid.PackagesState)
-packagesStateComponent verbosity freshDB stateDir = do
-  let stateFile = stateDir </> "db" </> "PackagesState"
-  st <- logTiming verbosity "Loaded PackagesState" $
-          openLocalStateFrom stateFile (Acid.initialPackagesState freshDB)
-  return StateComponent {
-       stateDesc    = "Main package database"
-     , stateHandle  = st
-     , getState     = query st Acid.GetPackagesState
-     , putState     = update st . Acid.ReplacePackagesState
-     , backupState  = \_ -> indexToAllVersions
-     , restoreState = packagesBackup
-     , resetState   = packagesStateComponent verbosity True
-     }
-
 coreFeature :: ServerEnv
             -> UserFeature
-            -> StateComponent AcidState Acid.PackagesState
+            -> Store.Backend
             -> AsyncCache IndexTarballInfo
             -> Hook PackageChange ()
             -> Hook PackageChange [TarIndexEntry]
@@ -385,7 +377,7 @@ coreFeature :: ServerEnv
                , IO IndexTarballInfo )
 
 coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
-            packagesState cacheIndexTarball
+            Store.Backend{backendStore = packagesStore, backendState} cacheIndexTarball
             packageChangeHook
             preIndexUpdateHook
             packageDownloadHook
@@ -408,7 +400,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           , coreAdminDeauth
           , corePackUserDeauth
           ]
-      , featureState    = [abstractAcidStateComponent packagesState]
+      , featureState    = backendState
       , featureCaches   = [
             CacheComponent {
               cacheDesc       = "main package index tarball",
@@ -505,7 +497,16 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- Queries
     --
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
-    queryGetPackageIndex = Acid.packageIndex <$> queryState packagesState Acid.GetPackagesState
+    queryGetPackageIndex = Acid.packageIndex <$> Store.getPackagesState packagesStore
+
+    queryLookupPackageName :: MonadIO m => PackageName -> m [PkgInfo]
+    queryLookupPackageName = Store.lookupPackageName packagesStore
+
+    queryLookupPackageId :: MonadIO m => PackageId -> m (Maybe PkgInfo)
+    queryLookupPackageId = Store.lookupPackageId packagesStore
+
+    queryLatestPackages :: MonadIO m => m [PkgInfo]
+    queryLatestPackages = Store.latestPackages packagesStore
 
     queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
     queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball
@@ -526,12 +527,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       let pkginfo = Acid.mkPackageInfo pkgid cabalFile uploadinfo mtarball
       additionalEntries <- concat `liftM` runHook preIndexUpdateHook  (PackageChangeAdd pkginfo)
 
-      successFlag <- updateState packagesState $
-        Acid.AddPackage3
-          pkginfo
-          uploadinfo
-          (userName userInfo)
-          additionalEntries
+      successFlag <- Store.addPackage packagesStore
+                       pkginfo
+                       uploadinfo
+                       (userName userInfo)
+                       additionalEntries
 
       loginfo maxBound ("updateState(AddPackage3," ++ display pkgid ++ ") -> " ++ show successFlag)
       if successFlag
@@ -541,7 +541,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     updateDeletePackage :: MonadIO m => PackageId -> m Bool
     updateDeletePackage pkgid = logTiming maxBound ("updateDeletePackage " ++ display pkgid) $ do
-      mpkginfo <- updateState packagesState (Acid.DeletePackage pkgid)
+      mpkginfo <- Store.deletePackage packagesStore pkgid
       case mpkginfo of
         Nothing -> return False
         Just pkginfo -> do
@@ -552,12 +552,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     updateAddPackageRevision pkgid cabalfile uploadinfo@(_, uid) = logTiming maxBound ("updateAddPackageRevision " ++ display pkgid) $ do
       usersdb <- queryGetUserDb
       let Just userInfo = lookupUserId uid usersdb
-      (moldpkginfo, newpkginfo) <- updateState packagesState $
-        Acid.AddPackageRevision2
-          pkgid
-          cabalfile
-          uploadinfo
-          (userName userInfo)
+      (moldpkginfo, newpkginfo) <- Store.addPackageRevision packagesStore
+                                     pkgid
+                                     cabalfile
+                                     uploadinfo
+                                     (userName userInfo)
       loginfo maxBound ("updateState(AddPackageRevision2," ++ display pkgid ++ ") -> " ++ maybe "Nothing" (const "Just _") moldpkginfo)
       case moldpkginfo of
         Nothing ->
@@ -567,7 +566,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
     updateAddPackageTarball pkgid tarball uploadinfo = logTiming maxBound ("updateAddPackageTarball " ++ display pkgid) $ do
-      mpkginfo <- updateState packagesState (Acid.AddPackageTarball pkgid tarball uploadinfo)
+      mpkginfo <- Store.addPackageTarball packagesStore pkgid tarball uploadinfo
 
       case mpkginfo of
         Nothing -> return False
@@ -576,7 +575,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           return True
 
     updateSetPackageUploader pkgid userid = do
-      mpkginfo <- updateState packagesState (Acid.SetPackageUploader pkgid userid)
+      mpkginfo <- Store.setPackageUploader packagesStore pkgid userid
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
@@ -584,7 +583,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           return True
 
     updateSetPackageUploadTime pkgid time = do
-      mpkginfo <- updateState packagesState (Acid.SetPackageUploadTime pkgid time)
+      mpkginfo <- Store.setPackageUploadTime packagesStore pkgid time
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
@@ -593,8 +592,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     updateArchiveIndexEntry :: MonadIO m => FilePath -> LazyByteString -> UTCTime -> m ()
     updateArchiveIndexEntry entryName entryData entryTime = logTiming maxBound ("updateArchiveIndexEntry " ++ show entryName) $ do
-      updateState packagesState $
-        Acid.AddOtherIndexEntry $ ExtraEntry entryName entryData entryTime
+      Store.addOtherIndexEntry packagesStore $ ExtraEntry entryName entryData entryTime
       runHook_ packageChangeHook (PackageChangeIndexExtra entryName entryData entryTime)
 
     -- Cache updates
@@ -603,7 +601,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     getIndexTarball = do
       users <- queryGetUserDb  -- note, changes here don't automatically propagate
       time  <- getCurrentTime
-      Acid.PackagesState index (Right updateSeq) <- queryState packagesState Acid.GetPackagesState
+      Acid.PackagesState index (Right updateSeq) <- Store.getPackagesState packagesStore
       let updateLog     = Foldable.toList updateSeq
           legacyTarball = Packages.Index.writeLegacy
                             users
@@ -638,8 +636,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     lookupPackageName :: PackageName -> ServerPartE [PkgInfo]
     lookupPackageName pkgname = do
-      pkgsIndex <- queryGetPackageIndex
-      case PackageIndex.lookupPackageName pkgsIndex pkgname of
+      pkgs <- queryLookupPackageName pkgname
+      case pkgs of
         []   -> packageError [MText "No such package in package index"]
         pkgs -> return pkgs
 
@@ -649,8 +647,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       -- pkgs is sorted by version number and non-empty
       return (last pkgs)
     lookupPackageId pkgid = do
-      pkgsIndex <- queryGetPackageIndex
-      case PackageIndex.lookupPackageId pkgsIndex pkgid of
+      mpkg <- queryLookupPackageId pkgid
+      case mpkg of
         Just pkg -> return pkg
         _ -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
 

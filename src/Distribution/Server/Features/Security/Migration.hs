@@ -25,7 +25,6 @@ import Distribution.Package (PackageId)
 
 -- hackage
 import Distribution.Server.Features.Core.State
-import Distribution.Server.Features.PackageCandidates.State
 import Distribution.Server.Features.PackageCandidates.Types
 import Distribution.Server.Features.Security.Layout
 import Distribution.Server.Framework hiding (Length)
@@ -68,15 +67,15 @@ migratePkgTarball_v1_to_v2 env@ServerEnv{ serverVerbosity = verbosity }
 
 -- | Similar migration for candidates
 migrateCandidatePkgTarball_v1_to_v2 :: ServerEnv
-                                    -> StateComponent AcidState CandidatePackages
+                                    -> PackageIndex.PackageIndex CandPkgInfo
+                                    -> (PackageId -> PkgInfo -> IO ())
                                     -> IO ()
 migrateCandidatePkgTarball_v1_to_v2 env@ServerEnv{ serverVerbosity = verbosity }
-                                    candidatesState
+                                    candidateIndex updatePackage
                                     = do
     precomputedHashes <- readPrecomputedHashes env
-    CandidatePackages{candidateList} <- queryState candidatesState GetCandidatePackages
-    let allCandidates = PackageIndex.allPackages candidateList
-        partitionSz   = PackageIndex.numPackageVersions candidateList `div` 10
+    let allCandidates = PackageIndex.allPackages candidateIndex
+        partitionSz   = PackageIndex.numPackageVersions candidateIndex `div` 10
         partitioned   = partition partitionSz allCandidates
     stats <- forM (zip [1..] partitioned) $ \(i, candidates) -> do
       let pkgs = map candPkgInfo candidates
@@ -84,12 +83,6 @@ migrateCandidatePkgTarball_v1_to_v2 env@ServerEnv{ serverVerbosity = verbosity }
         migratePkgs env updatePackage precomputedHashes pkgs
     loginfo verbosity $ prettyMigrationStats (mconcat stats)
   where
-    updatePackage :: PackageId -> PkgInfo -> IO ()
-    updatePackage pkgId pkgInfo = do
-      _didUpdate <- updateState candidatesState $
-                      UpdateCandidatePkgInfo pkgId pkgInfo
-      return ()
-
     partitionLogMsg :: Int -> Int -> String
     partitionLogMsg i n = "Computing candidates blob info "
                        ++ "(" ++ show i ++ "/" ++ show n ++ ")"

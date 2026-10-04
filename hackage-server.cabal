@@ -307,10 +307,13 @@ library
     Distribution.Server.Features.Browse.Options
     Distribution.Server.Features.Browse.Parsers
     Distribution.Server.Features.Core
+    Distribution.Server.Features.Core.Acid
     Distribution.Server.Features.Core.State
-    Distribution.Server.Features.Core.Backup
-    Distribution.Server.Features.Security
-    Distribution.Server.Features.Security.Backup
+    Distribution.Server.Features.Core.Store
+      Distribution.Server.Features.Core.Backup
+      Distribution.Server.Features.Security
+      Distribution.Server.Features.Security.Acid
+      Distribution.Server.Features.Security.Backup
     Distribution.Server.Features.Security.FileInfo
     Distribution.Server.Features.Security.Layout
     Distribution.Server.Features.Security.MD5
@@ -319,14 +322,25 @@ library
     Distribution.Server.Features.Security.ResponseContentTypes
     Distribution.Server.Features.Security.SHA256
     Distribution.Server.Features.Security.State
+    Distribution.Server.Features.Security.Store
     Distribution.Server.Features.Mirror
+    Distribution.Server.Features.Mirror.Acid
+    Distribution.Server.Features.Mirror.Store
+    Distribution.Server.Features.TarIndexCache.Acid
+    Distribution.Server.Features.TarIndexCache.Store
     Distribution.Server.Features.Upload
+    Distribution.Server.Features.Upload.Acid
+    Distribution.Server.Features.Upload.Store
     Distribution.Server.Features.Upload.State
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
+    Distribution.Server.Features.Users.Acid
+    Distribution.Server.Features.Users.Store
     Distribution.Server.Features.UserNotify
     Distribution.Server.Features.UserNotify.Acid
+    Distribution.Server.Features.UserNotify.Acid.Component
     Distribution.Server.Features.UserNotify.Backup
+    Distribution.Server.Features.UserNotify.Store
     Distribution.Server.Features.UserNotify.Types
 
 
@@ -342,35 +356,49 @@ library
       Distribution.Server.Features.AdminLog
       Distribution.Server.Features.AdminLog.Acid
       Distribution.Server.Features.AdminLog.Backup
+      Distribution.Server.Features.AdminLog.State
+      Distribution.Server.Features.AdminLog.Store
       Distribution.Server.Features.AdminLog.Types
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
       Distribution.Server.Features.BuildReports.BuildReports
+      Distribution.Server.Features.BuildReports.Acid
       Distribution.Server.Features.BuildReports.Backup
+      Distribution.Server.Features.BuildReports.Store
       Distribution.Server.Features.BuildReports.Render
       Distribution.Server.Features.BuildReports.State
       Distribution.Server.Features.PackageCandidates
+      Distribution.Server.Features.PackageCandidates.Acid
       Distribution.Server.Features.PackageCandidates.Types
       Distribution.Server.Features.PackageCandidates.State
       Distribution.Server.Features.PackageCandidates.Backup
+      Distribution.Server.Features.PackageCandidates.Store
       Distribution.Server.Features.PackageFeed
       Distribution.Server.Features.PackageList
       Distribution.Server.Features.Distro
+      Distribution.Server.Features.Distro.Acid
       Distribution.Server.Features.Distro.Distributions
       Distribution.Server.Features.Distro.Backup
       Distribution.Server.Features.Distro.State
+      Distribution.Server.Features.Distro.Store
       Distribution.Server.Features.Distro.Types
       Distribution.Server.Features.Documentation
+      Distribution.Server.Features.Documentation.Acid
       Distribution.Server.Features.Documentation.State
+      Distribution.Server.Features.Documentation.Store
       Distribution.Server.Features.DownloadCount
+      Distribution.Server.Features.DownloadCount.Acid
       Distribution.Server.Features.DownloadCount.State
+      Distribution.Server.Features.DownloadCount.Store
       Distribution.Server.Features.DownloadCount.Backup
       Distribution.Server.Features.EditCabalFiles
       Distribution.Server.Features.Html
       Distribution.Server.Features.Html.HtmlUtilities
       Distribution.Server.Features.HoogleData
       Distribution.Server.Features.HaskellPlatform
+      Distribution.Server.Features.HaskellPlatform.Acid
       Distribution.Server.Features.HaskellPlatform.State
+      Distribution.Server.Features.HaskellPlatform.Store
       Distribution.Server.Features.PackageInfoJSON
       Distribution.Server.Features.Search
       Distribution.Server.Features.Search.BM25F
@@ -385,33 +413,47 @@ library
       Distribution.Server.Features.Search.TermBag
       Distribution.Server.Features.Sitemap.Functions
       Distribution.Server.Features.Votes
+      Distribution.Server.Features.Votes.Acid
       Distribution.Server.Features.Votes.Render
       Distribution.Server.Features.Votes.State
+      Distribution.Server.Features.Votes.Store
       Distribution.Server.Features.Votes.Types
       Distribution.Server.Features.Vouch
+      Distribution.Server.Features.Vouch.Acid
       Distribution.Server.Features.Vouch.State
+      Distribution.Server.Features.Vouch.Store
       Distribution.Server.Features.Vouch.Types
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
+      Distribution.Server.Features.PreferredVersions.Acid
       Distribution.Server.Features.PreferredVersions.State
       Distribution.Server.Features.PreferredVersions.Types
       Distribution.Server.Features.PreferredVersions.Backup
+      Distribution.Server.Features.PreferredVersions.Store
       Distribution.Server.Features.ReverseDependencies
       Distribution.Server.Features.ReverseDependencies.State
       Distribution.Server.Features.Tags
+      Distribution.Server.Features.Tags.Acid
       Distribution.Server.Features.Tags.Backup
+      Distribution.Server.Features.Tags.Store
       Distribution.Server.Features.Tags.State
       Distribution.Server.Features.Tags.Types
       Distribution.Server.Features.AnalyticsPixels
+      Distribution.Server.Features.AnalyticsPixels.Acid
       Distribution.Server.Features.AnalyticsPixels.State
+      Distribution.Server.Features.AnalyticsPixels.Store
       Distribution.Server.Features.AnalyticsPixels.Types
       Distribution.Server.Features.UserDetails
       Distribution.Server.Features.UserDetails.Acid
       Distribution.Server.Features.UserDetails.Backup
+      Distribution.Server.Features.UserDetails.State
+      Distribution.Server.Features.UserDetails.Store
       Distribution.Server.Features.UserDetails.Types
       Distribution.Server.Features.UserSignup
       Distribution.Server.Features.UserSignup.Acid
       Distribution.Server.Features.UserSignup.Backup
+      Distribution.Server.Features.UserSignup.State
+      Distribution.Server.Features.UserSignup.Store
       Distribution.Server.Features.UserSignup.Types
       Distribution.Server.Features.StaticFiles
       Distribution.Server.Features.ServerIntrospect

@@ -3,7 +3,7 @@
 module Distribution.Server.Features.UserSignup.Backup where
 
 import Distribution.Server.Features.UserSignup.Types
-import qualified Distribution.Server.Features.UserSignup.Acid as Acid
+import qualified Distribution.Server.Features.UserSignup.State as State
 
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
@@ -20,10 +20,10 @@ import Text.CSV (CSV, Record)
 -- Data backup and restore
 --
 
-signupResetBackup :: RestoreBackup Acid.SignupResetTable
+signupResetBackup :: RestoreBackup State.SignupResetTable
 signupResetBackup = go []
   where
-   go :: [(Nonce, SignupResetInfo)] -> RestoreBackup Acid.SignupResetTable
+   go :: [(Nonce, SignupResetInfo)] -> RestoreBackup State.SignupResetTable
    go st =
      RestoreBackup {
        restoreEntry = \entry -> case entry of
@@ -40,7 +40,7 @@ signupResetBackup = go []
          _ -> return (go st)
 
      , restoreFinalize =
-        return (Acid.SignupResetTable (Map.fromList st))
+        return (State.SignupResetTable (Map.fromList st))
      }
 
 importSignupInfo :: CSV -> Restore [(Nonce, SignupResetInfo)]
@@ -59,8 +59,8 @@ importSignupInfo = mapM fromRecord . drop 2
         return (nonce, signupinfo)
     fromRecord x = fail $ "Error processing signup info record: " ++ show x
 
-signupInfoToCSV :: BackupType -> Acid.SignupResetTable -> CSV
-signupInfoToCSV backuptype (Acid.SignupResetTable tbl)
+signupInfoToCSV :: BackupType -> State.SignupResetTable -> CSV
+signupInfoToCSV backuptype (State.SignupResetTable tbl)
     = ["0.1"]
     : [ "token", "username", "realname", "email", "timestamp" ]
     : [ [ if backuptype == FullBackup
@@ -90,8 +90,8 @@ importResetInfo = mapM fromRecord . drop 2
         return (nonce, signupinfo)
     fromRecord x = fail $ "Error processing signup info record: " ++ show x
 
-resetInfoToCSV :: BackupType -> Acid.SignupResetTable -> CSV
-resetInfoToCSV backuptype (Acid.SignupResetTable tbl)
+resetInfoToCSV :: BackupType -> State.SignupResetTable -> CSV
+resetInfoToCSV backuptype (State.SignupResetTable tbl)
     = ["0.1"]
     : [ "token", "userid", "timestamp" ]
     : [ [ if backuptype == FullBackup
@@ -101,4 +101,3 @@ resetInfoToCSV backuptype (Acid.SignupResetTable tbl)
         , formatUTCTime nonceTimestamp
         ]
       | (nonce, ResetInfo{..}) <- Map.toList tbl ]
-

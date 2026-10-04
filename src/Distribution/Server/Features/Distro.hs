@@ -11,9 +11,9 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
-import qualified Distribution.Server.Features.Distro.State as Acid
+import qualified Distribution.Server.Features.Distro.Acid as Acid
+import qualified Distribution.Server.Features.Distro.Store as Store
 import Distribution.Server.Features.Distro.Types
-import Distribution.Server.Features.Distro.Backup (dumpBackup, restoreBackup)
 import Distribution.Server.Util.Parse (unpackUTF8)
 
 import Distribution.Text (display, simpleParse)
@@ -46,7 +46,8 @@ data DistroResource = DistroResource {
 initDistroFeature :: ServerEnv
                   -> IO (UserFeature -> CoreFeature -> IO DistroFeature)
 initDistroFeature ServerEnv{serverStateDir} = do
-    distrosState <- distrosStateComponent serverStateDir
+    distrosBackend <- Acid.acidStore serverStateDir
+    let distrosStore = Store.backendStore distrosBackend
 
     return $ \user@UserFeature{adminGroup, groupResourcesAt} core@CoreFeature{coreResource} -> do
       rec
@@ -55,14 +56,14 @@ initDistroFeature ServerEnv{serverStateDir} = do
           maintainersUserGroup name =
             UserGroup {
               groupDesc             = maintainerGroupDescription name,
-              queryUserGroup        = queryState  distrosState $ Acid.GetDistroMaintainers name,
-              addUserToGroup        = updateState distrosState . Acid.AddDistroMaintainer name,
-              removeUserFromGroup   = updateState distrosState . Acid.RemoveDistroMaintainer name,
+              queryUserGroup        = Store.queryDistroMaintainers distrosStore name,
+              addUserToGroup        = Store.addDistroMaintainer distrosStore name,
+              removeUserFromGroup   = Store.removeDistroMaintainer distrosStore name,
               groupsAllowedToAdd    = [adminGroup],
               groupsAllowedToDelete = [adminGroup]
             }
-          feature = distroFeature user core distrosState maintainersGroupResource maintainersUserGroup
-        distroNames <- queryState distrosState Acid.EnumerateDistros
+          feature = distroFeature user core distrosBackend maintainersGroupResource maintainersUserGroup
+        distroNames <- Store.enumerateDistros distrosStore
         (_maintainersGroup, maintainersGroupResource) <-
           groupResourcesAt "/distro/:package/maintainers"
                            maintainersUserGroup
@@ -72,28 +73,15 @@ initDistroFeature ServerEnv{serverStateDir} = do
 
       return feature
 
-distrosStateComponent :: FilePath -> IO (StateComponent AcidState Acid.Distros)
-distrosStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "Distros") Acid.initialDistros
-  return StateComponent {
-      stateDesc    = ""
-    , stateHandle  = st
-    , getState     = query st Acid.GetDistributions
-    , putState     = \(Acid.Distros dists versions) -> update st (Acid.ReplaceDistributions dists versions)
-    , backupState  = \_ -> dumpBackup
-    , restoreState = restoreBackup
-    , resetState   = distrosStateComponent
-    }
-
 distroFeature :: UserFeature
               -> CoreFeature
-              -> StateComponent AcidState Acid.Distros
+              -> Store.Backend
               -> GroupResource
               -> (DistroName -> UserGroup)
               -> DistroFeature
 distroFeature UserFeature{..}
               CoreFeature{coreResource=CoreResource{packageInPath}}
-              distrosState
+              Store.Backend{backendStore = distrosStore, backendState}
               maintainersGroupResource
               distroGroup
   = DistroFeature{..}
@@ -108,11 +96,11 @@ distroFeature UserFeature{..}
             , distroPackages
             , distroPackage
             ]
-      , featureState = [abstractAcidStateComponent distrosState]
+      , featureState = backendState
       }
 
     queryPackageStatus :: MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]
-    queryPackageStatus pkgname = queryState distrosState (Acid.PackageStatus pkgname)
+    queryPackageStatus = Store.queryPackageStatus distrosStore
 
     distroResource = DistroResource
           { distroIndexPage = (resourceAt "/distros/.:format") {
@@ -135,7 +123,7 @@ distroFeature UserFeature{..}
               }
           }
 
-    textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (queryState distrosState Acid.EnumerateDistros)
+    textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (Store.enumerateDistros distrosStore)
     textDistroPkgs dpath = withDistroPath dpath $ \dname pkgs -> do
         let pkglines = map (\(name, info) -> display name ++ " at " ++ display (distroVersion info) ++ ": " ++ distroUrl info) pkgs
         return $ toResponse (unlines $ ("Packages for " ++ display dname):pkglines)
@@ -148,7 +136,7 @@ distroFeature UserFeature{..}
       withDistroNamePath dpath $ \distro -> do
         guardAuthorised_ [InGroup adminGroup]
         -- should also check for existence here of distro here
-        void $ updateState distrosState $ Acid.RemoveDistro distro
+        Store.removeDistro distrosStore distro
         seeOther "/distros/" (toResponse ())
 
     -- result: ok response or not-found error
@@ -158,21 +146,21 @@ distroFeature UserFeature{..}
         case info of
             Nothing -> notFound . toResponse $ "Package not found for " ++ display pkgname
             Just {} -> do
-                void $ updateState distrosState $ Acid.DropPackage dname pkgname
+                Store.dropDistroPackage distrosStore dname pkgname
                 ok $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authenticated or not found (todo)
     distroPackagePut dpath =
       withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
         guardAuthorised_ [InGroup $ distroGroup dname]
-        void $ updateState distrosState $ Acid.AddPackage dname pkgname newPkgInfo
+        Store.addDistroPackage distrosStore dname pkgname newPkgInfo
         seeOther ("/distro/" ++ display dname ++ "/" ++ display pkgname) $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authentcated or bad request
     distroPostNew _ =
       lookDistroName $ \dname -> do
         guardAuthorised_ [InGroup adminGroup]
-        success <- updateState distrosState $ Acid.AddDistro dname
+        success <- Store.addDistro distrosStore dname
         if success
             then seeOther ("/distro/" ++ display dname) $ toResponse "Ok!"
             else badRequest $ toResponse "Selected distribution name is already in use"
@@ -180,7 +168,7 @@ distroFeature UserFeature{..}
     distroPutNew dpath =
       withDistroNamePath dpath $ \dname -> do
         guardAuthorised_ [InGroup adminGroup]
-        _success <- updateState distrosState $ Acid.AddDistro dname
+        _success <- Store.addDistro distrosStore dname
         -- it doesn't matter if it exists already or not
         ok $ toResponse "Ok!"
 
@@ -194,7 +182,7 @@ distroFeature UserFeature{..}
                     badRequest $ toResponse $
                       "Could not parse CSV File to a distro package list: " ++ msg
                 Right list -> do
-                    void $ updateState distrosState $ Acid.PutDistroPackageList dname list
+                    Store.putDistroPackageList distrosStore dname list
                     ok $ toResponse "Ok!"
 
     withDistroNamePath :: DynamicPath -> (DistroName -> ServerPartE Response) -> ServerPartE Response
@@ -202,11 +190,11 @@ distroFeature UserFeature{..}
 
     withDistroPath :: DynamicPath -> (DistroName -> [(PackageName, DistroPackageInfo)] -> ServerPartE Response) -> ServerPartE Response
     withDistroPath dpath func = withDistroNamePath dpath $ \dname -> do
-        isDist <- queryState distrosState (Acid.IsDistribution dname)
+        isDist <- Store.isDistribution distrosStore dname
         case isDist of
           False -> notFound $ toResponse "Distribution does not exist"
           True -> do
-            pkgs <- queryState distrosState (Acid.DistroStatus dname)
+            pkgs <- Store.queryDistroStatus distrosStore dname
             func dname pkgs
 
     -- guards on the distro existing, but not the package
@@ -214,11 +202,11 @@ distroFeature UserFeature{..}
     withDistroPackagePath dpath func =
       withDistroNamePath dpath $ \dname -> do
         pkgname <- packageInPath dpath
-        isDist <- queryState distrosState (Acid.IsDistribution dname)
+        isDist <- Store.isDistribution distrosStore dname
         case isDist of
           False -> notFound $ toResponse "Distribution does not exist"
           True -> do
-            pkgInfo <- queryState distrosState (Acid.DistroPackageStatus dname pkgname)
+            pkgInfo <- Store.queryDistroPackageStatus distrosStore dname pkgname
             func dname pkgname pkgInfo
 
     lookPackageInfo :: (DistroPackageInfo -> ServerPartE Response) -> ServerPartE Response

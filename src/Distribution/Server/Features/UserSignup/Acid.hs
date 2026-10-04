@@ -1,35 +1,57 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Distribution.Server.Features.UserSignup.Acid where
 
 import Distribution.Server.Features.UserSignup.Types
+import Distribution.Server.Features.UserSignup.State
+import Distribution.Server.Features.UserSignup.Backup
+import qualified Distribution.Server.Features.UserSignup.Store as Store
 
 import Distribution.Server.Framework hiding (Method)
+import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Util.Nonce
 
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put, modify)
 import Data.Acid.Compat
-import Data.SafeCopy
 
 import Data.Time
 
--------------------------
--- Types of stored data
---
+acidStore :: FilePath -> IO Store.Backend
+acidStore stateDir = do
+  signupResetState <- signupResetStateComponent stateDir
+  pure Store.Backend {
+      Store.backendStore = Store.Store {
+          Store.getSignupResetInfos =
+                queryState signupResetState GetSignupResetTable
+            >>= \(SignupResetTable tbl) -> return (Map.elems tbl)
+        , Store.lookupSignupResetInfo = \nonce -> queryState signupResetState (LookupSignupResetInfo nonce)
+        , Store.addSignupResetInfo = \nonce info -> updateState signupResetState (AddSignupResetInfo nonce info)
+        , Store.deleteSignupResetInfo = \nonce -> updateState signupResetState (DeleteSignupResetInfo nonce)
+        , Store.deleteExpiredResetInfos = \expiry -> updateState signupResetState (DeleteAllExpired expiry)
+        }
+    , Store.backendState = [abstractAcidStateComponent signupResetState]
+    }
 
-newtype SignupResetTable = SignupResetTable (Map Nonce SignupResetInfo)
-  deriving (Eq, Show, MemSize)
-
-emptySignupResetTable :: SignupResetTable
-emptySignupResetTable = SignupResetTable Map.empty
-
-$(deriveSafeCopy 0 'base ''SignupResetTable)
+signupResetStateComponent :: FilePath -> IO (StateComponent AcidState SignupResetTable)
+signupResetStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "UserSignupReset") emptySignupResetTable
+  return StateComponent {
+      stateDesc    = "State to keep track of outstanding requests for user signup and password resets"
+    , stateHandle  = st
+    , getState     = query st GetSignupResetTable
+    , putState     = update st . ReplaceSignupResetTable
+    , backupState  = \backuptype tbl ->
+        [csvToBackup ["signups.csv"] (signupInfoToCSV backuptype tbl)
+        ,csvToBackup ["resets.csv"]  (resetInfoToCSV backuptype tbl)]
+    , restoreState = signupResetBackup
+    , resetState   = signupResetStateComponent
+    }
 
 ------------------------------
 -- State queries and updates

@@ -7,15 +7,13 @@ module Distribution.Server.Features.Upload (
   ) where
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump
 
-import qualified Distribution.Server.Features.Upload.State as Acid
-import Distribution.Server.Features.Upload.Backup
+import qualified Distribution.Server.Features.Upload.Acid as UploadAcid
+import qualified Distribution.Server.Features.Upload.Store as UploadStore
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
-import Distribution.Server.Users.Backup
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
@@ -109,9 +107,7 @@ initUploadFeature :: ServerEnv
                   -> IO (UserFeature -> CoreFeature -> IO UploadFeature)
 initUploadFeature env@ServerEnv{serverStateDir} = do
     -- Canonical state
-    trusteesState    <- trusteesStateComponent    serverStateDir
-    uploadersState   <- uploadersStateComponent   serverStateDir
-    maintainersState <- maintainersStateComponent serverStateDir
+    uploadBackend <- UploadAcid.acidStore serverStateDir
 
     packageUploaded  <- newHook
 
@@ -124,9 +120,10 @@ initUploadFeature env@ServerEnv{serverStateDir} = do
                trusteesGroupDescription, uploadersGroupDescription,
                maintainersGroupDescription)
                 = uploadFeature env core user
-                                trusteesState    trusteesGroup    trusteesGroupResource
-                                uploadersState   uploadersGroup   uploadersGroupResource
-                                maintainersState maintainersGroup maintainersGroupResource
+                                uploadBackend
+                                trusteesGroup    trusteesGroupResource
+                                uploadersGroup   uploadersGroupResource
+                                maintainersGroup maintainersGroupResource
                                 packageUploaded
 
           (trusteesGroup,  trusteesGroupResource) <-
@@ -145,51 +142,13 @@ initUploadFeature env@ServerEnv{serverStateDir} = do
 
       return feature
 
-trusteesStateComponent :: FilePath -> IO (StateComponent AcidState Acid.HackageTrustees)
-trusteesStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "HackageTrustees") Acid.initialHackageTrustees
-  return StateComponent {
-      stateDesc    = "Trustees"
-    , stateHandle  = st
-    , getState     = query st Acid.GetHackageTrustees
-    , putState     = update st . Acid.ReplaceHackageTrustees . Acid.trusteeList
-    , backupState  = \_ (Acid.HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
-    , restoreState = Acid.HackageTrustees <$> groupBackup ["trustees.csv"]
-    , resetState   = trusteesStateComponent
-    }
-
-uploadersStateComponent :: FilePath -> IO (StateComponent AcidState Acid.HackageUploaders)
-uploadersStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "HackageUploaders") Acid.initialHackageUploaders
-  return StateComponent {
-      stateDesc    = "Uploaders"
-    , stateHandle  = st
-    , getState     = query st Acid.GetHackageUploaders
-    , putState     = update st . Acid.ReplaceHackageUploaders . Acid.uploaderList
-    , backupState  = \_ (Acid.HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
-    , restoreState = Acid.HackageUploaders <$> groupBackup ["uploaders.csv"]
-    , resetState   = uploadersStateComponent
-    }
-
-maintainersStateComponent :: FilePath -> IO (StateComponent AcidState Acid.PackageMaintainers)
-maintainersStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "PackageMaintainers") Acid.initialPackageMaintainers
-  return StateComponent {
-      stateDesc    = "Package maintainers"
-    , stateHandle  = st
-    , getState     = query st Acid.AllPackageMaintainers
-    , putState     = update st . Acid.ReplacePackageMaintainers
-    , backupState  = \_ (Acid.PackageMaintainers mains) -> [maintToExport mains]
-    , restoreState = maintainerBackup
-    , resetState   = maintainersStateComponent
-    }
-
 uploadFeature :: ServerEnv
               -> CoreFeature
               -> UserFeature
-              -> StateComponent AcidState Acid.HackageTrustees    -> UserGroup -> GroupResource
-              -> StateComponent AcidState Acid.HackageUploaders   -> UserGroup -> GroupResource
-              -> StateComponent AcidState Acid.PackageMaintainers -> (PackageName -> UserGroup) -> GroupResource
+              -> UploadStore.Backend
+              -> UserGroup -> GroupResource
+              -> UserGroup -> GroupResource
+              -> (PackageName -> UserGroup) -> GroupResource
               -> Hook PackageId ()
               -> (UploadFeature,
                   UserGroup,
@@ -202,9 +161,10 @@ uploadFeature ServerEnv{serverBlobStore = store}
                          , updateAddPackage
                          }
               UserFeature{..}
-              trusteesState    trusteesGroup    trusteesGroupResource
-              uploadersState   uploadersGroup   uploadersGroupResource
-              maintainersState maintainersGroup maintainersGroupResource
+              UploadStore.Backend{backendStore = uploadStore, backendState = uploadStateComponents}
+              trusteesGroup    trusteesGroupResource
+              uploadersGroup   uploadersGroupResource
+              maintainersGroup maintainersGroupResource
               packageUploaded
    = ( UploadFeature {..}
      , trusteesGroupDescription, uploadersGroupDescription, maintainersGroupDescription)
@@ -220,11 +180,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
             , groupResource     uploadersGroupResource
             , groupUserResource uploadersGroupResource
             ]
-      , featureState = [
-            abstractAcidStateComponent trusteesState
-          , abstractAcidStateComponent uploadersState
-          , abstractAcidStateComponent maintainersState
-          ]
+      , featureState = uploadStateComponents
       }
 
     uploadResource = UploadResource
@@ -255,9 +211,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
     trusteesGroupDescription :: UserGroup
     trusteesGroupDescription = UserGroup {
         groupDesc             = trusteeDescription,
-        queryUserGroup        = queryState  trusteesState   Acid.GetTrusteesList,
-        addUserToGroup        = updateState trusteesState . Acid.AddHackageTrustee,
-        removeUserFromGroup   = updateState trusteesState . Acid.RemoveHackageTrustee,
+        queryUserGroup        = UploadStore.getTrustees uploadStore,
+        addUserToGroup        = UploadStore.addTrustee uploadStore,
+        removeUserFromGroup   = UploadStore.removeTrustee uploadStore,
         groupsAllowedToAdd    = [adminGroup],
         groupsAllowedToDelete = [adminGroup]
     }
@@ -265,9 +221,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploadersGroupDescription :: UserGroup
     uploadersGroupDescription = UserGroup {
         groupDesc             = uploaderDescription,
-        queryUserGroup        = queryState  uploadersState   Acid.GetUploadersList,
-        addUserToGroup        = updateState uploadersState . Acid.AddHackageUploader,
-        removeUserFromGroup   = updateState uploadersState . Acid.RemoveHackageUploader,
+        queryUserGroup        = UploadStore.getUploaders uploadStore,
+        addUserToGroup        = UploadStore.addUploader uploadStore,
+        removeUserFromGroup   = UploadStore.removeUploader uploadStore,
         groupsAllowedToAdd    = [adminGroup, trusteesGroup],
         groupsAllowedToDelete = [adminGroup, trusteesGroup]
     }
@@ -277,9 +233,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
       fix $ \thisgroup ->
       UserGroup {
         groupDesc             = maintainerDescription name,
-        queryUserGroup        = queryState  maintainersState $ Acid.GetPackageMaintainers name,
-        addUserToGroup        = updateState maintainersState . Acid.AddPackageMaintainer name,
-        removeUserFromGroup   = updateState maintainersState . Acid.RemovePackageMaintainer name,
+        queryUserGroup        = UploadStore.getPackageMaintainers uploadStore name,
+        addUserToGroup        = UploadStore.addPackageMaintainer uploadStore name,
+        removeUserFromGroup   = UploadStore.removePackageMaintainer uploadStore name,
         groupsAllowedToAdd    = [thisgroup, adminGroup],
         groupsAllowedToDelete = [thisgroup, adminGroup]
       }
