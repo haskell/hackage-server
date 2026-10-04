@@ -103,15 +103,18 @@ inMemStateComponent stateDir = do
     , resetState   = inMemStateComponent
     }
 
+mkOnDiskStatePath :: FilePath -> FilePath
+mkOnDiskStatePath stateDir = dcPath stateDir </> "ondisk"
+
 onDiskStateComponent :: FilePath -> StateComponent OnDiskState OnDiskStats
 onDiskStateComponent stateDir = StateComponent {
       stateDesc    = "All time download counts"
     , stateHandle  = OnDiskState
-    , getState     = readOnDiskStats (dcPath stateDir </> "ondisk")
+    , getState     = readOnDiskStatsLazily (mkOnDiskStatePath stateDir)
     , putState     = \onDiskStats -> do
                        --TODO: we should extend the backup system so we can
                        -- write these files out incrementally
-                       writeOnDiskStats (dcPath stateDir </> "ondisk") onDiskStats
+                       writeOnDiskStats (mkOnDiskStatePath stateDir) onDiskStats
                        reconstructLog (dcPath stateDir) onDiskStats
     , backupState  = \_ -> onDiskBackup
     , restoreState = onDiskRestore
@@ -180,13 +183,14 @@ downloadFeature CoreFeature{}
           -- Write yesterday's downloads to the log
           appendToLog (dcPath serverStateDir) inMemStats
 
+          let onDiskStateFile = mkOnDiskStatePath serverStateDir
           -- Update the on-disk statistics and recompute recent downloads
-          onDiskStats' <- updateHistory inMemStats <$> getState onDiskState
-          writeOnDiskStats (dcPath serverStateDir </> "ondisk") onDiskStats'
+          onDiskStats' <- updateHistory inMemStats <$> readOnDiskStatsLazily onDiskStateFile
+          writeOnDiskStats onDiskStateFile onDiskStats'
           --TODO: this is still stupid, writing it out only to read it back
           -- we should be able to update the in memory ones incrementally
           (recentDownloads,
-           totalDownloads) <- computeRecentAndTotalDownloads =<< getState onDiskState
+           totalDownloads) <- computeRecentAndTotalDownloads =<< readOnDiskStatsLazily onDiskStateFile
           writeMemState recentDownloadsCache recentDownloads
           writeMemState totalDownloadsCache totalDownloads
 
@@ -232,7 +236,7 @@ downloadFeature CoreFeature{}
       onDiskStats  <- cmFromCSV csv
       liftIO $ do
         --TODO: if the onDiskStats are large, can we stream it?
-        writeOnDiskStats (dcPath serverStateDir </> "ondisk") onDiskStats
+        writeOnDiskStats (mkOnDiskStatePath serverStateDir) onDiskStats
         (recentDownloads,
          totalDownloads) <- computeRecentAndTotalDownloads onDiskStats
         writeMemState recentDownloadsCache recentDownloads
