@@ -4,6 +4,7 @@
 module Distribution.Server.Framework.CacheControl (
     cacheControl,
     cacheControlWithoutETag,
+    setCacheControl,
     CacheControl(..),
     ETag(..),
     etagFromHash,
@@ -21,7 +22,7 @@ import qualified Data.ByteString.Char8 as BS8
 import Data.Hashable
 import Numeric
 
-data CacheControl = MaxAge Int | Public | Private | NoCache | NoTransform
+data CacheControl = MaxAge Int | Public | Private | NoCache | NoStore | NoTransform
 
 maxAgeSeconds, maxAgeMinutes, maxAgeHours,
   maxAgeDays, maxAgeMonths :: Int -> CacheControl
@@ -36,6 +37,7 @@ formatCacheControl (MaxAge n)  = "max-age=" ++ show n
 formatCacheControl Public      = "public"
 formatCacheControl Private     = "private"
 formatCacheControl NoCache     = "no-cache"
+formatCacheControl NoStore     = "no-store"
 formatCacheControl NoTransform = "no-transform"
 
 -- | Adds a @Cache-Control@ and @ETag@ header to the response. Also handles the
