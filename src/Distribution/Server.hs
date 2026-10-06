@@ -202,6 +202,8 @@ run server@Server{ serverEnv = env } = do
       cronJobAction    = checkpoint server
     }
 
+    mapM_ Feature.featureRunHook (serverFeatures server)
+
     runServer listenOn $ do
 
       handlePutPostQuotas

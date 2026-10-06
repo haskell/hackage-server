@@ -47,6 +47,9 @@ data HackageFeature = HackageFeature {
   , featureErrHandlers :: [(String, ServerErrorResponse)]
 
   , featurePostInit    :: IO ()
+    -- | Run just before the server starts accepting HTTP connections, which is
+    -- useful to start background worker threads.
+  , featureRunHook     :: IO ()
     -- | Run when the server is shutting down, before the feature's state
     -- components are closed. Must not throw.
   , featurePreShutdown :: IO ()
@@ -72,6 +75,7 @@ emptyHackageFeature name = HackageFeature {
     featureErrHandlers= [],
 
     featurePostInit  = return (),
+    featureRunHook   = return (),
     featurePreShutdown = return (),
     featureReloadFiles = return (),
 

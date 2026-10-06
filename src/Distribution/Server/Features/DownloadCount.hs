@@ -147,7 +147,7 @@ downloadFeature CoreFeature{}
         featureResources = [ topDownloads downloadResource
                            , downloadCSV
                            ]
-      , featurePostInit  = void $ forkIO (flushDownloadsLoop serverFlushDownloadsPeriod)
+      , featureRunHook   = void $ forkIO (flushDownloadsLoop serverFlushDownloadsPeriod)
       , featureState     = Store.backendState inMemBackend
                         ++ [abstractOnDiskStateComponent onDiskState]
       , featurePreShutdown = shutdownFlush
