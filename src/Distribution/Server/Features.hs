@@ -451,9 +451,12 @@ featureCheckpoint = mapM_ abstractStateCheckpoint . featureState
 checkpointAllFeatures :: [HackageFeature] -> IO ()
 checkpointAllFeatures = mapM_ featureCheckpoint
 
--- | Cleanly shut down a feature's state components.
+-- | Cleanly shut down a feature: run its pre-shutdown hook, then close its
+-- state components.
 featureShutdown :: HackageFeature -> IO ()
-featureShutdown = mapM_ abstractStateClose . featureState
+featureShutdown feature = do
+  featurePreShutdown feature
+  mapM_ abstractStateClose (featureState feature)
 
 -- | Cleanly shut down all features' state components.
 shutdownAllFeatures :: [HackageFeature] -> IO ()

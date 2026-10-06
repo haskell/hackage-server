@@ -73,6 +73,11 @@ data ServerEnv = ServerEnv {
     -- increasing the time taken to update the cache we can push this further.
     serverCacheDelay :: Int,
 
+    -- | A tunable parameter for the download counts in-memory accumulation.
+    -- Download counts are accumulated in-memory and flushed to disk every 'serverFlushDownloadPeriods'
+    -- microseconds.
+    serverFlushDownloadsPeriod :: Int,
+
     serverVerbosity  :: Verbosity
 }
 

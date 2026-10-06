@@ -702,6 +702,20 @@ benchmark RevDeps
   ghc-options: -with-rtsopts=-s
   other-modules: RevDepCommon
 
+benchmark DownloadCountBench
+  import: test-defaults
+  type: exitcode-stdio-1.0
+  hs-source-dirs: benchmarks
+  main-is: DownloadCountBench.hs
+  build-tool-depends: hackage-server:hackage-server
+  -- NOTE: version constraints inherited from hackage-server
+  -- We are not using 'gauge' as it is not supported for
+  -- GHC 9.10+
+  build-depends:
+    , acid-state
+    , stm
+  ghc-options: -with-rtsopts=-T
+
 test-suite PaginationTest
   import: test-defaults
   type: exitcode-stdio-1.0
@@ -716,6 +730,14 @@ test-suite BrowseQueryParserTest
   build-tool-depends: hackage-server:hackage-server
   other-modules: Util
   build-depends: attoparsec
+
+test-suite DownloadCountTest
+  import: test-defaults
+  type: exitcode-stdio-1.0
+  main-is: DownloadCountTest.hs
+  build-tool-depends: hackage-server:hackage-server
+  -- NOTE: version constraints inherited from hackage-server
+  build-depends: acid-state
 
 test-suite CreateUserTest
   import:         test-defaults

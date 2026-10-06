@@ -22,6 +22,7 @@ data Store = Store {
     recordedToday         :: forall m. MonadIO m => m Day
   , getInMemStats         :: forall m. MonadIO m => m State.InMemStats
   , replaceInMemStats     :: forall m. MonadIO m => State.InMemStats -> m ()
-  , registerDownload      :: forall m. MonadIO m => PackageId -> m ()
+    -- | Record a batch of downloads: @(package, number of downloads)@ pairs.
+  , registerDownloads     :: forall m. MonadIO m => [(PackageId, Int)] -> m ()
   , checkpointInMemStats  :: forall m. MonadIO m => m ()
   }
