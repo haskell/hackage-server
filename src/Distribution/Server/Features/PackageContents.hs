@@ -19,7 +19,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Util.ServeTarball
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Distribution.Server.Util.Parse (unpackUTF8)
-import Distribution.Server.Pages.Template (hackagePage)
+import Distribution.Server.Pages.Template (hackagePageWithHead, syntaxHighlightingHead)
 
 import Distribution.Text
 import Distribution.Package
@@ -151,7 +151,8 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
           return $ toResponse $ Resource.XHtml $
             let title  = "Changelog for " ++ pkgName
                 title2 = "Changelog for " XHtml.+++ (XHtml.anchor ! [XHtml.href url] << pkgName)
-            in hackagePage title
+                headExtra = if supposedToBeMarkdown filename then syntaxHighlightingHead else []
+            in hackagePageWithHead headExtra title
                  [ XHtml.h2 << title2
                  , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
                                << if supposedToBeMarkdown filename
@@ -184,8 +185,10 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
                   =<< liftIO (loadTarEntry tarfile offset)
           cacheControl [Public, maxAgeDays 30] etag
           return $ toResponse $ Resource.XHtml $
-            let title = "Readme for " ++ display (packageId pkg) in
-            hackagePage title
+            let title = "Readme for " ++ display (packageId pkg)
+                headExtra = if supposedToBeMarkdown filename then syntaxHighlightingHead else []
+            in
+            hackagePageWithHead headExtra title
               [ XHtml.h2 << title
               , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
                             << if supposedToBeMarkdown filename

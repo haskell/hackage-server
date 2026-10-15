@@ -41,6 +41,7 @@ import Data.Time.Format         (defaultTimeLocale, formatTime)
 import qualified Data.ByteString.Lazy as BS (ByteString)
 
 import qualified Distribution.Server.Pages.Package as Old
+import Distribution.Server.Pages.Template (syntaxHighlightingHead)
 import Data.Time.Clock (UTCTime)
 
 import Distribution.Server.Features.Html.HtmlUtilities
@@ -97,6 +98,7 @@ packagePageTemplate render
     -- Miscellaneous things that could still stand to be refactored a bit.
     [ "moduleList"        $= Old.moduleSection render mdocIndex docURL mPkgId hasQuickNav
     , "downloadSection"   $= Old.downloadSection render
+    , "syntaxHighlighting" $= readmeSyntaxHighlighting
     ]
     else
     -- The main two namespaces
@@ -111,8 +113,15 @@ packagePageTemplate render
     , "stability"         $= renderStability desc
     , "isDeprecated"      $= isJust deprs
     , "deprecatedMsg"     $= deprHtml deprs
+    , "syntaxHighlighting" $= readmeSyntaxHighlighting
     ]
   where
+    readmeSyntaxHighlighting =
+      case (rendReadme render, mreadme) of
+        (Just (_, _, _, filename), Just _)
+          | supposedToBeMarkdown filename -> toHtml syntaxHighlightingHead
+        _ -> noHtml
+
     -- Access via "$hackage.varName$"
     hackageFieldsTemplate =
       if isCandidate

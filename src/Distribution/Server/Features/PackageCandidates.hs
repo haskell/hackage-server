@@ -35,7 +35,7 @@ import Distribution.Server.Features.Security.Migration
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Util.ServeTarball
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
-import Distribution.Server.Pages.Template (hackagePage)
+import Distribution.Server.Pages.Template (hackagePageWithHead, syntaxHighlightingHead)
 
 import Distribution.Text
 import Distribution.Package
@@ -586,8 +586,10 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                   =<< liftIO (loadTarEntry tarfile offset)
           cacheControl [Public, maxAgeDays 30] etag
           return $ toResponse $ Resource.XHtml $
-            let title = "Changelog for " ++ display (packageId pkg) in
-            hackagePage title
+            let title = "Changelog for " ++ display (packageId pkg)
+                headExtra = if supposedToBeMarkdown filename then syntaxHighlightingHead else []
+            in
+            hackagePageWithHead headExtra title
               [ XHtml.h2 << title
               , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
                             << if supposedToBeMarkdown filename
