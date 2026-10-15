@@ -27,8 +27,8 @@ import qualified Data.ByteString.Char8                 as BS.Char8
 import qualified Data.ByteString.Lazy                  as BS.Lazy
 import qualified Data.Text.Encoding                    as T
 
--- cryptohash
-import qualified Crypto.Hash.SHA256                    as SHA256
+import qualified Data.ByteArray                        as BA
+import qualified Crypto.Hash                           as Hash
 
 -- hackage
 import           Distribution.Server.Framework.MemSize
@@ -48,6 +48,9 @@ sha256digestFromBS :: BS.ByteString -> SHA256Digest
 sha256digestFromBS bs = case runGet getSHA256NoPfx bs of
     Left  e -> error ("sha256digestFromBS: " ++ e)
     Right d -> d
+
+fromCryptonDigest :: Hash.Digest Hash.SHA256 -> SHA256Digest
+fromCryptonDigest = sha256digestFromBS . BA.convert
 
 -- | 'Data.Serialize.Get' helper to read a raw 32byte SHA256Digest w/o
 -- any length-prefix
@@ -80,7 +83,7 @@ instance ReadDigest SHA256Digest where
 
 -- | Compute SHA256 digest
 sha256 :: BS.Lazy.ByteString -> SHA256Digest
-sha256 = sha256digestFromBS . SHA256.hashlazy
+sha256 = fromCryptonDigest . Hash.hashlazy
 
 instance MemSize SHA256Digest where
   memSize _ = 5
