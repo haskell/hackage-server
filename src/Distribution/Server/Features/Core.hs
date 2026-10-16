@@ -376,7 +376,7 @@ coreFeature :: ServerEnv
             -> ( CoreFeature
                , IO IndexTarballInfo )
 
-coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
+coreFeature env@ServerEnv{serverBlobStore = store} UserFeature{..}
             Store.Backend{backendStore = packagesStore, backendState} cacheIndexTarball
             packageChangeHook
             preIndexUpdateHook
@@ -706,11 +706,39 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
                      [MText "No tarball exists for this package version."]
         Just (tarball, (uploadtime, _uid), _revNo) -> do
           let blobId = blobInfoId $ pkgTarballGz tarball
-          cacheControl [Public, NoTransform, maxAgeDays 30]
-                       (BlobStorage.blobETag blobId)
-          file <- liftIO $ BlobStorage.fetch store blobId
-          runHook_ packageDownloadHook pkgid
-          return $ toResponse $ Resource.PackageTarball file blobId uploadtime
+          host' <- requestHost env
+          -- Accurately counting downloads in the presence of a content-delivery network
+          -- is tricky. We want every download to be counted, even if the /data/ itself
+          -- is served from some other cache.
+          --
+          -- A solution to this is implemented below, using two endpoints. The first
+          -- endpoint counts the download, and redirects to the /real/ download endpoint.
+          -- The key is that this first endpoint set the `Cache-Control` header to `No-Store`,
+          -- such that content-delivery networks don't cache the redirect.
+          -- Then, the second endpoint serves the actual content, and its response can be cached.
+          --
+          -- One additional wrinkle is that Hackage can respond from multiple hosts.
+          -- If using the 'MainHost'/'UserContentHost' setup, we count downloads from the
+          -- main host, and serve content -- without counting downloads -- from the user-content host.
+          -- If the host is unrecognised (see 'UnrecognisedHost'), there is no well-defined redirect scheme
+          -- we can use, so we count and serve at the same time.
+          case host' of
+            MainHost -> do
+              runHook_ packageDownloadHook pkgid
+              setCacheControl [NoStore]
+              uri <- userContentRequestURI env
+              found (show uri) $ contentLength $ toResponse ()
+            UserContentHost -> serveBlob blobId uploadtime
+            UnrecognisedHost -> do
+              runHook_ packageDownloadHook pkgid
+              serveBlob blobId uploadtime
+
+    serveBlob :: BlobStorage.BlobId -> UTCTime -> ServerPartE Response
+    serveBlob blobId uploadtime = do
+      cacheControl [Public, NoTransform, maxAgeDays 30]
+                   (BlobStorage.blobETag blobId)
+      file <- liftIO $ BlobStorage.fetch store blobId
+      return $ toResponse $ Resource.PackageTarball file blobId uploadtime
 
     -- result: cabal file or not-found error
     serveCabalFile :: DynamicPath -> ServerPartE Response
