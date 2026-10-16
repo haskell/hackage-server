@@ -3,6 +3,7 @@ module Distribution.Server.Pages.Template
     ( hackagePage
     , hackagePageWith
     , hackagePageWithHead
+    , syntaxHighlightingHead
     ) where
 
 import Text.XHtml.Strict
@@ -62,6 +63,36 @@ navigationBar =
           , anchor ! [href accountsURL] << "User accounts"
           ]
 
+
+-- | Stylesheets and scripts that highlight fenced code blocks in rendered
+-- Markdown.
+syntaxHighlightingHead :: [Html]
+syntaxHighlightingHead =
+    [ cdnStylesheet "themes/prism-solarizedlight.min.css"
+        "sha384-k3ZUhhfN2mU6+BTQVzpopVVQOC5ZJ4WNroBrXNNQqawO4e3kOWFCYCT77lDQupo2"
+        "(prefers-color-scheme: light)"
+    , cdnStylesheet "themes/prism-tomorrow.min.css"
+        "sha384-wFjoQjtV1y5jVHbt0p35Ui8aV8GVpEZkyF99OXWqP/eNJDU93D3Ugxkoyh6Y2I4A"
+        "(prefers-color-scheme: dark)"
+    , (script noHtml) ! [strAttr "defer" "defer", src "/static/prism-setup.js"]
+    , cdnScript "components/prism-core.min.js"
+        "sha384-zLRFO4dwowZvh8kzutOb5AWhH7f39HeJp+N7PtHF1SQtTBnifRx0AtmvTYs3F4YV"
+    , cdnScript "plugins/autoloader/prism-autoloader.min.js"
+        "sha384-Uq05+JLko69eOiPr39ta9bh7kld5PKZoU+fF7g0EXTAriEollhZ+DrN8Q/Oi8J2Q"
+    ]
+  where
+    prismURL path = "https://cdn.jsdelivr.net/npm/prismjs@1.30.0/" ++ path
+    cdnStylesheet path hash media =
+        thelink ! [ rel "stylesheet"
+                  , href (prismURL path)
+                  , strAttr "integrity" hash
+                  , strAttr "crossorigin" "anonymous"
+                  , strAttr "media" media] << noHtml
+    cdnScript path hash =
+        (script noHtml) ! [ strAttr "defer" "defer"
+                          , src (prismURL path)
+                          , strAttr "integrity" hash
+                          , strAttr "crossorigin" "anonymous"]
 
 googleFontURL :: URL
 googleFontURL = "https://fonts.googleapis.com/css?family=PT+Sans:400,400i,700"
