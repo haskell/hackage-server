@@ -83,6 +83,19 @@ data CoreFeature = CoreFeature {
     -- | Retrieves the latest version of every package.
     queryLatestPackages :: forall m. MonadIO m => m [PkgInfo],
 
+    -- | Retrieves the name of every package, in ascending order.
+    queryAllPackageNames :: forall m. MonadIO m => m [PackageName],
+
+    -- | Retrieves the ID of every version of every package.
+    queryAllPackageIds :: forall m. MonadIO m => m [PackageId],
+
+    -- | Counts the packages, i.e. the number of distinct package names.
+    queryCountPackages :: forall m. MonadIO m => m Int,
+
+    -- | Retrieves the package versions whose latest upload or revision
+    -- happened after the first time and no later than the second.
+    queryLatestUploadsBetween :: forall m. MonadIO m => UTCTime -> UTCTime -> m [PkgInfo],
+
     -- | Retrieve the raw tarball info
     queryGetIndexTarballInfo :: forall m. MonadIO m => m IndexTarballInfo,
 
@@ -508,6 +521,18 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     queryLatestPackages :: MonadIO m => m [PkgInfo]
     queryLatestPackages = Store.latestPackages packagesStore
 
+    queryAllPackageNames :: MonadIO m => m [PackageName]
+    queryAllPackageNames = Store.allPackageNames packagesStore
+
+    queryAllPackageIds :: MonadIO m => m [PackageId]
+    queryAllPackageIds = Store.allPackageIds packagesStore
+
+    queryCountPackages :: MonadIO m => m Int
+    queryCountPackages = Store.countPackages packagesStore
+
+    queryLatestUploadsBetween :: MonadIO m => UTCTime -> UTCTime -> m [PkgInfo]
+    queryLatestUploadsBetween = Store.latestUploadsBetween packagesStore
+
     queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
     queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball
 
@@ -683,9 +708,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- as we don't keep the parsed cabal files in memory)
     servePackageList :: DynamicPath -> ServerPartE Response
     servePackageList _ = do
-      pkgIndex <- queryGetPackageIndex
-      let pkgNames = PackageIndex.allPackageNames pkgIndex
-          list = map display pkgNames
+      pkgNames <- queryAllPackageNames
+      let list = map display pkgNames
       -- We construct the JSON manually so that we control what it looks like;
       -- in particular, we use objects for the packages so that we can add
       -- additional fields later without (hopefully) breaking clients

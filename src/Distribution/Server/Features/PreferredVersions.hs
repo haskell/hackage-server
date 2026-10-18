@@ -30,7 +30,6 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Tags
 
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types
 
 import Distribution.Package
@@ -271,9 +270,9 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     withPackageVersion :: PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a
     withPackageVersion pkgid func = do
-        pkgIndex <- queryGetPackageIndex
         guard (packageVersion pkgid /= nullVersion)
-        case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
+        pkgs <- queryLookupPackageName (packageName pkgid)
+        case pkgs of
             []   ->  packageError [MText $ "No such package in package index. ", MLink "Search for related terms instead?"$ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
             pkg -> case find ((== packageVersion pkgid) . packageVersion) pkg of
                 Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
@@ -286,8 +285,8 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     -- which is outside of the scope of this feature.
     withPackagePreferred :: PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
     withPackagePreferred pkgid func = do
-      pkgIndex <- queryGetPackageIndex
-      case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
+      allPkgs <- queryLookupPackageName (packageName pkgid)
+      case allPkgs of
             []   ->  packageError [MText "No such package in package index. ", MLink "Search for related terms instead?" $ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
             pkgs  | pkgVersion pkgid == nullVersion -> Store.getPreferredInfo preferredStore (packageName pkgid) >>= \info -> do
                 let rangeToCheck = sumRange info
@@ -346,13 +345,12 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     putDeprecated pkgname = do
       guardValidPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee pkgname
-      index  <- queryGetPackageIndex
       isDepr <- optional $ look "deprecated"
       case isDepr of
           Just {} -> do
               depr <- optional $ fmap words $ look "by"
               case mapM simpleParse =<< depr of
-                  Just deprs -> case filter (null . PackageIndex.lookupPackageName index) deprs of
+                  Just deprs -> filterM (fmap null . queryLookupPackageName) deprs >>= \case
                       [] -> case pkgname `elem` deprs of
                               True -> deprecatedError "You can not deprecate a package in favor of itself!"
                               _ -> do

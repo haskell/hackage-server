@@ -15,7 +15,7 @@ import Distribution.Server.Framework.Logging
 
 import Distribution.Server.Features.StaticFiles (initStaticFilesFeature)
 import Distribution.Server.Features.Users    (initUserFeature, UserFeature)
-import Distribution.Server.Features.Core     (initCoreFeature, coreResource, queryGetPackageIndex)
+import Distribution.Server.Features.Core     (initCoreFeature, coreResource, queryAllPackageIds)
 import Distribution.Server.Features.Security (initSecurityFeature)
 import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
@@ -243,7 +243,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     documentationCoreFeature <- mkDocumentationCoreFeature
                          (coreResource coreFeature)
-                         (map packageId . allPackages <$> queryGetPackageIndex coreFeature)
+                         (queryAllPackageIds coreFeature)
                          uploadFeature
                          tarIndexCacheFeature
                          reportsCoreFeature

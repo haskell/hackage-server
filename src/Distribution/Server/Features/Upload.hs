@@ -132,7 +132,7 @@ initUploadFeature env@ServerEnv{serverStateDir} = do
           (uploadersGroup, uploadersGroupResource) <-
             groupResourceAt "/packages/uploaders" uploadersGroupDescription
 
-          pkgNames <- PackageIndex.packageNames <$> queryGetPackageIndex
+          pkgNames <- queryAllPackageNames
           (maintainersGroup, maintainersGroupResource) <-
             groupResourcesAt "/package/:package/maintainers"
                              maintainersGroupDescription
