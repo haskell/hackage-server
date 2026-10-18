@@ -15,10 +15,10 @@ import Distribution.Server.Features.UserDetails.Types
 import Distribution.Server.Features.UserSignup
 
 import Distribution.Server.Users.Types
-import qualified Distribution.Server.Users.Users as Users
 import Distribution.Text
 
 import qualified Data.Text as T
+import qualified Data.Map as Map
 import Control.Applicative (optional)
 import Data.Maybe (isJust)
 
@@ -168,12 +168,12 @@ adminFrontendFeature _env templates
         guardAuthorised_ [InGroup adminGroup]
         cacheControlWithoutETag [Private]
         template     <- getTemplate templates "resets.html"
-        usersdb      <- queryGetUserDb
         allResetInfo <- queryAllSignupResetInfo
+        usersdb      <- queryLookupUserIds [ resetUserId | ResetInfo {resetUserId} <- allResetInfo ]
         ok $ toResponse $ template
           [ "resets" $= [ resetRequestToTemplate resetInfo uinfo
                         | resetInfo@ResetInfo {resetUserId} <- allResetInfo
-                        , let Just uinfo = Users.lookupUserId resetUserId usersdb
+                        , let Just uinfo = Map.lookup resetUserId usersdb
                         ]
           ]
 

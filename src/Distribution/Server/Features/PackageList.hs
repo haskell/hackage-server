@@ -15,7 +15,6 @@ import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload(UploadFeature(..))
-import Distribution.Server.Users.Users (userIdToName)
 import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Users.Group(UserGroup(..), GroupDescription(..))
 import Distribution.Server.Features.PreferredVersions
@@ -164,8 +163,8 @@ initListFeature _env = do
          case fmap (mkPackageName . fst) (groupEntity gd) of
               Just pkgname -> do
                    maintainers <- queryUserGroup (maintainersGroup pkgname)
-                   users' <- queryGetUserDb
-                   modifyItem pkgname (\x -> x {itemMaintainer = map (userIdToName users') (UserIdSet.toList maintainers)})
+                   userIdToName <- queryUserNamesFor (UserIdSet.toList maintainers)
+                   modifyItem pkgname (\x -> x {itemMaintainer = map userIdToName (UserIdSet.toList maintainers)})
                    runHook_ itemUpdate (Set.singleton pkgname)
               Nothing -> return ()
 
@@ -282,17 +281,17 @@ listFeature CoreFeature{..}
         let pkgname = packageName pkg
             desc = pkgDesc pkg
         intRevDirectCount <- revDirectCount pkgname
-        users <- queryGetUserDb
         tags  <- queryTagsForPackage pkgname
         downs <- recentPackageDownloads
         votes <- pkgNumScore pkgname
         deprs <- queryGetDeprecatedFor pkgname
         maintainers <- queryUserGroup (maintainersGroup pkgname)
+        userIdToName <- queryUserNamesFor (UserIdSet.toList maintainers)
         prefsinfo <- queryGetPreferredInfo pkgname
 
         return $ (,) pkgname . updateReferenceVersion prefsinfo [pkgVersion (pkgInfoId pkg)] $ (updateDescriptionItem desc $ emptyPackageItem pkgname) {
             itemTags       = tags
-          , itemMaintainer = map (userIdToName users) (UserIdSet.toList maintainers)
+          , itemMaintainer = map userIdToName (UserIdSet.toList maintainers)
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
           , itemVotes      = votes

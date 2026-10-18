@@ -8,8 +8,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Framework
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Types
-import qualified Distribution.Server.Users.Users as Users
-import Distribution.Server.Users.Users (Users)
+import Distribution.Server.Users.Types (UserId, UserName)
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
@@ -77,12 +76,12 @@ packageFeedFeature ServerEnv{..}
 
     packageFeed :: DynamicPath -> ServerPartE Response
     packageFeed dpath = do
-      users <- queryGetUserDb
       now <- liftIO getCurrentTime
       pkgname <- packageInPath dpath
       pkgs <- sortOn (Down . pkgOriginalUploadTime) <$> lookupPackageName pkgname
+      userIdToName <- queryUserNamesFor (map (snd . pkgOriginalUploadInfo) pkgs)
       pkgs' <- liftIO $ forM pkgs changelog
-      return $ toResponse $ renderPackageFeed users serverBaseURI now pkgname pkgs'
+      return $ toResponse $ renderPackageFeed userIdToName serverBaseURI now pkgname pkgs'
 
     changelog :: PkgInfo -> IO (PkgInfo, XHtml.Html)
     changelog pkg = findToplevelFile pkg isChangeLogFile >>= \case
@@ -95,11 +94,11 @@ packageFeedFeature ServerEnv{..}
                 then return (pkg, renderMarkdown filename content)
                 else return (pkg, XHtml.pre << unpackUTF8 content)
 
-renderPackageFeed :: Users -> URI -> UTCTime -> PackageName -> [(PkgInfo, XHtml.Html)] -> RSS
-renderPackageFeed users hostURI now name pkgs = RSS title uri desc (channel updated) items
+renderPackageFeed :: (UserId -> UserName) -> URI -> UTCTime -> PackageName -> [(PkgInfo, XHtml.Html)] -> RSS
+renderPackageFeed userIdToName hostURI now name pkgs = RSS title uri desc (channel updated) items
   where title = unPackageName name ++ " – new releases on Hackage"
         desc = "New releases of package '" ++ unPackageName name ++ "' on Hackage."
-        items = feedItems users uri <$> pkgs
+        items = feedItems userIdToName uri <$> pkgs
         uri = hostURI { uriPath = "/package/" ++ display name }
         updated = maybe now (fst . pkgOriginalUploadInfo . fst) (listToMaybe pkgs)
 
@@ -113,8 +112,8 @@ channel updated =
   , RSS.Generator "rss-feed"
   ]
 
-feedItems :: Users -> URI -> (PkgInfo, XHtml.Html) -> [RSS.ItemElem]
-feedItems users hostURI (pkgInfo, chlog) =
+feedItems :: (UserId -> UserName) -> URI -> (PkgInfo, XHtml.Html) -> [RSS.ItemElem]
+feedItems userIdToName hostURI (pkgInfo, chlog) =
   [ RSS.Title title
   , RSS.Link uri
   , RSS.Guid True (uriToString id uri "")
@@ -133,6 +132,6 @@ feedItems users hostURI (pkgInfo, chlog) =
         pkgName = display (pkgInfoId pkgInfo)
         (time, uploaderId) = pkgOriginalUploadInfo pkgInfo
         timestr = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" time
-        uploader = display $ Users.userIdToName users uploaderId
+        uploader = display $ userIdToName uploaderId
         pd = packageDescription (pkgDesc pkgInfo)
         d dt dd = XHtml.dterm (XHtml.toHtml dt) +++ XHtml.ddef (XHtml.toHtml dd)

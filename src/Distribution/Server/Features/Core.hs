@@ -50,7 +50,6 @@ import qualified Distribution.Server.Packages.PackageIndex          as PackageIn
 import           Distribution.Server.Packages.Types
 import           Distribution.Server.Users.Types                    (UserId,
                                                                      userName)
-import           Distribution.Server.Users.Users                    (userIdToName)
 
 -- Cabal
 import           Distribution.Package
@@ -747,9 +746,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     serveCabalFileRevisionsList :: DynamicPath -> ServerPartE Response
     serveCabalFileRevisionsList dpath = do
       revisions <- fmap pkgMetadataRevisions $ packageInPath dpath >>= lookupPackageId
-      users   <- queryGetUserDb
+      userIdToName <- queryUserNamesFor (map (snd . snd) (Vec.toList revisions))
       let revisionToObj rev (cabalFileText, (utime, uid)) =
-            let uname = userIdToName users uid
+            let uname = userIdToName uid
                 hash = sha256 (fromStrict $ cabalFileByteString cabalFileText)
             in
             Object $ KeyMap.fromList

@@ -75,6 +75,11 @@ data UserFeature = UserFeature {
     queryGetUserDb    :: forall m. MonadIO m => m Acid.Users,
     queryLookupUserId :: forall m. MonadIO m => UserId -> m (Maybe UserInfo),
     queryLookupUserName :: forall m. MonadIO m => UserName -> m (Maybe (UserId, UserInfo)),
+    -- | Retrieves the given user accounts, leaving out ids that do not exist.
+    queryLookupUserIds :: forall m. MonadIO m => [UserId] -> m (Map UserId UserInfo),
+    -- | Retrieves the given user accounts, as a function from user id to user
+    -- name. Ids that were not given or do not exist get a placeholder name.
+    queryUserNamesFor :: forall m. MonadIO m => [UserId] -> m (UserId -> UserName),
     -- | Retrieves every user account, including disabled and deleted ones.
     queryAllUsers     :: forall m. MonadIO m => m [(UserId, UserInfo)],
     -- | Retrieves every user account except deleted ones.
@@ -380,6 +385,12 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
 
     queryLookupUserName :: MonadIO m => UserName -> m (Maybe (UserId, UserInfo))
     queryLookupUserName = UserStore.lookupUserName userStore
+
+    queryLookupUserIds :: MonadIO m => [UserId] -> m (Map UserId UserInfo)
+    queryLookupUserIds = UserStore.lookupUserIds userStore
+
+    queryUserNamesFor :: MonadIO m => [UserId] -> m (UserId -> UserName)
+    queryUserNamesFor uids = Acid.userIdToNameIn <$> queryLookupUserIds uids
 
     queryAllUsers :: MonadIO m => m [(UserId, UserInfo)]
     queryAllUsers = UserStore.enumerateAllUsers userStore
@@ -870,14 +881,14 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
 
     serveUserGroupGet groupr dpath = do
       group    <- getGroup groupr dpath
-      userDb   <- queryGetUserDb
       userlist <- liftIO $ queryUserGroup group
+      userIdToName <- queryUserNamesFor (Group.toList userlist)
       return . toResponse $ toJSON
           UserGroupResource {
             ui_title       = T.pack $ groupTitle (groupDesc group),
             ui_description = T.pack $ groupPrologue (groupDesc group),
             ui_members     = [ UserNameIdResource {
-                                 ui_username = Acid.userIdToName userDb uid,
+                                 ui_username = userIdToName uid,
                                  ui_userid   = uid
                                }
                              | uid <- Group.toList userlist ]

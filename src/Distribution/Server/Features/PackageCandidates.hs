@@ -24,7 +24,6 @@ import Distribution.Server.Packages.Render
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Readme
 import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -52,6 +51,7 @@ import           Data.Function            (fix)
 import           Data.List                (find, intersperse)
 import           Data.Time.Clock          (getCurrentTime)
 import qualified Data.Vector               as Vec
+import qualified Data.Map                  as Map
 
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
@@ -269,16 +269,19 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         pkgname <- packageInPath dpath
         pkgs <- lookupCandidateName pkgname
 
-        users  <- queryGetUserDb
-        let lupUserName uid = (uid, fmap Users.userName (Users.lookupUserId uid users))
+        let latestTarballs = [ (p, tarball, time, uploader)
+                             | p <- pkgs
+                             , (tarball, (time, uploader), _) <- maybeToList $ pkgLatestTarball $ candPkgInfo p
+                             ]
+        users  <- queryLookupUserIds [ uploader | (_, _, _, uploader) <- latestTarballs ]
+        let lupUserName uid = (uid, fmap Users.userName (Map.lookup uid users))
 
         let pvs = [ object [ Key.fromString "version"  .= (T.pack . display . packageVersion . candInfoId) p
                            , Key.fromString "sha256"   .= (blobInfoHashSHA256 . pkgTarballGz) tarball
                            , Key.fromString "time"     .= time
                            , Key.fromString "uploader" .= lupUserName uploader
                            ]
-                  | p <- pkgs
-                  , (tarball, (time, uploader), _) <- maybeToList $ pkgLatestTarball $ candPkgInfo p
+                  | (p, tarball, time, uploader) <- latestTarballs
                   ]
 
         return . toResponse . toJSON $ pvs
@@ -516,14 +519,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     candidateRender :: CandPkgInfo -> IO CandidateRender
     candidateRender cand = do
-        users  <- queryGetUserDb
-        indexedPkgs <- queryLookupPackageName (packageName cand)
         let pkg = candPkgInfo cand
+        users  <- queryLookupUserIds (packageRenderUserIds pkg)
+        indexedPkgs <- queryLookupPackageName (packageName cand)
         changeLog <- findToplevelFile pkg isChangeLogFile
                  >>= either (\_ -> return Nothing) (return . Just)
         readme    <- findToplevelFile pkg isReadmeFile
                  >>= either (\_ -> return Nothing) (return . Just)
-        let render = doPackageRender users pkg
+        let render = doPackageRender (`Map.lookup` users) pkg
         return $ CandidateRender {
           candPackageRender = render { rendPkgUri    = rendPkgUri render ++ "/candidate"
                                      , rendChangeLog = changeLog

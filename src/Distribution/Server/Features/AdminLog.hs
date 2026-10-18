@@ -74,9 +74,9 @@ adminLogFeature UserFeature{..} Store.Backend{backendStore = adminLogStore, back
     queryGetAdminLog = Store.getAdminLog adminLogStore
 
     serveAdminLogGet _ = do
-      aLog  <- queryGetAdminLog
-      users <- queryGetUserDb
-      return . toResponse . adminLogPage users . map mkRow $ aLog
+      rows  <- map mkRow <$> queryGetAdminLog
+      userIdToName <- queryUserNamesFor (concatMap (\(_, actorId, _, targetId, _, _) -> [actorId, targetId]) rows)
+      return . toResponse . adminLogPage userIdToName $ rows
 
     mkRow (time, actorId, Admin_GroupDelUser targetId group, reason) =
           (time, actorId, "Acid.Delete", targetId, nameIt group, unpackUTF8 reason)

@@ -4,13 +4,14 @@
 module Distribution.Server.Pages.Recent (
     recentPage,
     recentFeed,
+    recentUserIds,
     revisionsPage,
     recentRevisionsFeed,
+    revisionsUserIds,
   ) where
 
 import Distribution.Server.Packages.Types
-import qualified Distribution.Server.Users.Users as Users
-import Distribution.Server.Users.Users (Users)
+import Distribution.Server.Users.Types (UserId, UserName)
 import Distribution.Server.Pages.Template
          ( hackagePageWithHead )
 
@@ -34,11 +35,19 @@ import Data.Maybe ( listToMaybe, fromMaybe)
 import Distribution.Server.Util.Paging (PaginatedConfiguration(..), hasNext,
   hasPrev, nextURL, pageIndexRange, paginate, prevURL, toURL, allPagedURLs, pagingInfo)
 
+-- | The users that 'recentPage' and 'recentFeed' show.
+recentUserIds :: PaginatedConfiguration -> [PkgInfo] -> [UserId]
+recentUserIds conf = map (snd . pkgOriginalUploadInfo) . paginate conf
+
+-- | The users that 'revisionsPage' and 'recentRevisionsFeed' show.
+revisionsUserIds :: PaginatedConfiguration -> [PkgInfo] -> [UserId]
+revisionsUserIds conf = map (snd . pkgLatestUploadInfo) . paginate conf
+
 -- | Takes a list of package info, in reverse order by timestamp.
 
-recentPage :: PaginatedConfiguration -> Users -> [PkgInfo] -> Html
-recentPage conf users pkgs =
-  let log_rows = makeRow users <$> paginate conf pkgs
+recentPage :: PaginatedConfiguration -> (UserId -> UserName) -> [PkgInfo] -> Html
+recentPage conf userIdToName pkgs =
+  let log_rows = makeRow userIdToName <$> paginate conf pkgs
       docBody =
         [ XHtml.h2 << "Recent additions",
           pageSizeForm recentURL,
@@ -110,9 +119,9 @@ insertAt n a x = case splitAt n x of (hts, hts') -> hts ++ [a] ++ hts'
 takeLast :: Int -> [a] -> [a]
 takeLast n = reverse . take n . reverse
 
-revisionsPage :: PaginatedConfiguration -> Users -> [PkgInfo] -> Html
-revisionsPage conf users pkgs =
-  let log_rows = map (makeRevisionRow users) (paginate conf pkgs)
+revisionsPage :: PaginatedConfiguration -> (UserId -> UserName) -> [PkgInfo] -> Html
+revisionsPage conf userIdToName pkgs =
+  let log_rows = map (makeRevisionRow userIdToName) (paginate conf pkgs)
       docBody =
         [ XHtml.h2 << "Recent cabal metadata revisions",
           pageSizeForm recentRevisionsURL,
@@ -129,8 +138,8 @@ revisionsPage conf users pkgs =
           << XHtml.noHtml
    in hackagePageWithHead [rss_link] "recent revisions" docBody
 
-makeRow :: Users -> PkgInfo -> Html
-makeRow users pkginfo =
+makeRow :: (UserId -> UserName) -> PkgInfo -> Html
+makeRow userIdToName pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
             [showTimeHtml time, nbsp, nbsp],
@@ -140,13 +149,13 @@ makeRow users pkginfo =
                            [XHtml.href (packageURL pkgid)] << display pkgid]]
   where
     nbsp = XHtml.primHtmlChar "nbsp"
-    user = Users.userIdToName users userId
+    user = userIdToName userId
 
     (time, userId) = pkgOriginalUploadInfo pkginfo
     pkgid = pkgInfoId pkginfo
 
-makeRevisionRow :: Users -> PkgInfo -> Html
-makeRevisionRow users pkginfo =
+makeRevisionRow :: (UserId -> UserName) -> PkgInfo -> Html
+makeRevisionRow userIdToName pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
             [showTimeHtml time, nbsp, nbsp],
@@ -156,7 +165,7 @@ makeRevisionRow users pkginfo =
                            [XHtml.href (packageURL pkgid ++ "/revisions")] << revlabel]]
   where
     nbsp = XHtml.primHtmlChar "nbsp"
-    user = Users.userIdToName users userId
+    user = userIdToName userId
 
     (time, userId) = pkgLatestUploadInfo pkginfo
     pkgid = pkgInfoId pkginfo
@@ -190,26 +199,26 @@ recentRevisionsURL :: URL
 recentRevisionsURL = "/packages/recent/revisions.html"
 
 
-recentFeed :: PaginatedConfiguration -> Users -> URI -> UTCTime -> [PkgInfo] -> RSS
-recentFeed conf users hostURI now pkgs = RSS
+recentFeed :: PaginatedConfiguration -> (UserId -> UserName) -> URI -> UTCTime -> [PkgInfo] -> RSS
+recentFeed conf userIdToName hostURI now pkgs = RSS
   "Recent additions"
   (hostURI { uriPath = recentAdditionsURL})
   desc
   (channel updated)
-  (map (releaseItem users hostURI) pkgList)
+  (map (releaseItem userIdToName hostURI) pkgList)
   where
     (start,end) = pageIndexRange conf
     desc = "Showing " ++ show start ++ " - " ++ show end ++ " most recent additions to Hackage, the Haskell package database."
     pkgList = paginate conf pkgs
     updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
 
-recentRevisionsFeed :: PaginatedConfiguration -> Users -> URI -> UTCTime -> [PkgInfo] -> RSS
-recentRevisionsFeed conf users hostURI now pkgs = RSS
+recentRevisionsFeed :: PaginatedConfiguration -> (UserId -> UserName) -> URI -> UTCTime -> [PkgInfo] -> RSS
+recentRevisionsFeed conf userIdToName hostURI now pkgs = RSS
   "Recent revisions"
   (hostURI { uriPath = recentRevisionsURL})
   desc
   (channel updated)
-  (map (revisionItem users hostURI) pkgList)
+  (map (revisionItem userIdToName hostURI) pkgList)
   where
     (start, end) = pageIndexRange conf
     desc = "Showing " ++ show start ++ " - " ++ show end ++ " most recent revisions to cabal metadata in Hackage, the Haskell package database."
@@ -228,8 +237,8 @@ channel updated =
   where
     email = "admin@hackage.haskell.org" --TODO: make this configurable
 
-releaseItem :: Users -> URI -> PkgInfo -> [RSS.ItemElem]
-releaseItem users hostURI pkgInfo =
+releaseItem :: (UserId -> UserName) -> URI -> PkgInfo -> [RSS.ItemElem]
+releaseItem userIdToName hostURI pkgInfo =
   [ RSS.Title title
   , RSS.Link uri
   , RSS.Guid True (uriToString id uri "")
@@ -242,13 +251,13 @@ releaseItem users hostURI pkgInfo =
     body  = fromShortText $ synopsis (packageDescription (pkgDesc pkgInfo))
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body ++ "</p>"
-    user = Users.userIdToName users userId
+    user = userIdToName userId
 
     (time, userId) = pkgOriginalUploadInfo pkgInfo
     pkgId = pkgInfoId pkgInfo
 
-revisionItem :: Users -> URI -> PkgInfo -> [RSS.ItemElem]
-revisionItem users hostURI pkgInfo =
+revisionItem :: (UserId -> UserName) -> URI -> PkgInfo -> [RSS.ItemElem]
+revisionItem userIdToName hostURI pkgInfo =
   [ RSS.Title title
   , RSS.Link uri
   , RSS.Guid True (uriToString id guid "")
@@ -262,7 +271,7 @@ revisionItem users hostURI pkgInfo =
     body  = "Revision #" ++ show revision
     desc  = "<i>Revised by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body ++ "</p>"
-    user = Users.userIdToName users userId
+    user = userIdToName userId
     revision = pkgNumRevisions pkgInfo - 1
 
     (time, userId) = pkgLatestUploadInfo pkgInfo

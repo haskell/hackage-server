@@ -27,6 +27,7 @@ import Distribution.PackageDescription
 
 import qualified Text.XHtml.Strict as XHtml
 import qualified Distribution.Utils.ShortText as ST
+import qualified Data.Map as Map
 import           Text.XHtml.Strict ((<<), (!))
 
 
@@ -71,7 +72,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
                                     }
                                   }
                        TarIndexCacheFeature{packageTarball, findToplevelFile}
-                       UserFeature{queryGetUserDb, userFeatureServerEnv}
+                       UserFeature{queryLookupUserIds, userFeatureServerEnv}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
@@ -103,12 +104,12 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
 
     packageRender :: PkgInfo -> IO PackageRender
     packageRender pkg = do
-        users <- queryGetUserDb
+        users <- queryLookupUserIds (packageRenderUserIds pkg)
         changeLog <- findToplevelFile pkg isChangeLogFile
                  >>= either (\_ -> return Nothing) (return . Just)
         readme    <- findToplevelFile pkg isReadmeFile
                  >>= either (\_ -> return Nothing) (return . Just)
-        let render = doPackageRender users pkg
+        let render = doPackageRender (`Map.lookup` users) pkg
         return $ render { rendChangeLog = changeLog, rendReadme = readme }
 
 {-------------------------------------------------------------------------------

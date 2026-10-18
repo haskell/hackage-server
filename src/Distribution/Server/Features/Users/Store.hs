@@ -17,6 +17,7 @@ import Distribution.Server.Users.Users
     )
 
 import Control.Monad.Trans (MonadIO)
+import Data.Map (Map)
 import Data.Text (Text)
 
 data Backend = Backend {
@@ -28,6 +29,8 @@ data Store = Store {
     getUsers :: forall m. MonadIO m => m Users
   , lookupUserId :: forall m. MonadIO m => UserId -> m (Maybe UserInfo)
   , lookupUserName :: forall m. MonadIO m => UserName -> m (Maybe (UserId, UserInfo))
+    -- | The given users that exist.
+  , lookupUserIds :: forall m. MonadIO m => [UserId] -> m (Map UserId UserInfo)
   , lookupAuthToken :: forall m. MonadIO m => AuthToken -> m (Maybe (UserId, UserInfo))
   , enumerateAllUsers :: forall m. MonadIO m => m [(UserId, UserInfo)]
     -- | Every user account except deleted ones.

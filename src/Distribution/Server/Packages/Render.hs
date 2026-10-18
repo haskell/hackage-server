@@ -8,6 +8,7 @@ module Distribution.Server.Packages.Render (
   , DependencyTree
   , IsBuildable (..)
   , doPackageRender
+  , packageRenderUserIds
   , ModSigIndex(..)
 
     -- * Utils
@@ -48,7 +49,6 @@ import Distribution.Types.LibraryVisibility (LibraryVisibility(LibraryVisibility
 import Distribution.Server.Framework.CacheControl (ETag)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ModuleForest
-import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
 import Distribution.Utils.Path (getSymbolicPath)
 import Distribution.Utils.ShortText (fromShortText)
@@ -97,8 +97,12 @@ data PackageRender = PackageRender {
     rendOther        :: PackageDescription
 }
 
-doPackageRender :: Users.Users -> PkgInfo -> PackageRender
-doPackageRender users info = PackageRender
+-- | The users whose info 'doPackageRender' shows.
+packageRenderUserIds :: PkgInfo -> [UserId]
+packageRenderUserIds info = [snd (pkgOriginalUploadInfo info), snd (pkgLatestUploadInfo info)]
+
+doPackageRender :: (UserId -> Maybe UserInfo) -> PkgInfo -> PackageRender
+doPackageRender lookupUser info = PackageRender
     { rendPkgId        = packageId'
     , rendDepends      = flatDependencies genDesc
     , rendLibName      = renderLibName
@@ -123,10 +127,10 @@ doPackageRender users info = PackageRender
     , rendChangeLog    = Nothing -- populated later
     , rendReadme       = Nothing -- populated later
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info
-                         in (utime, Users.lookupUserId uid users)
+                         in (utime, lookupUser uid)
     , rendUpdateInfo   = let maxrevision  = pkgMaxRevision info
                              (utime, uid) = pkgLatestUploadInfo info
-                             uinfo        = Users.lookupUserId uid users
+                             uinfo        = lookupUser uid
                          in if maxrevision > MetadataRevIx 0
                               then Just (maxrevision, utime, uinfo)
                               else Nothing

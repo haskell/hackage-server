@@ -26,6 +26,7 @@ module Distribution.Server.Users.Users (
 
     -- ** Lookup utils
     userIdToName,
+    userIdToNameIn,
     userNameOrPlaceholder,
 
     -- * Enumeration
@@ -174,6 +175,12 @@ lookupAuthToken authTok users =
 userIdToName :: Users -> UserId -> UserName
 userIdToName users userId =
     userNameOrPlaceholder userId (lookupUserId userId users)
+
+-- | Like 'userIdToName', but for users that have already been looked up.
+--
+userIdToNameIn :: Map.Map UserId UserInfo -> UserId -> UserName
+userIdToNameIn infos userId =
+    userNameOrPlaceholder userId (Map.lookup userId infos)
 
 -- | The name of a looked-up user. If there is no such user, an ugly
 -- placeholder is used instead.

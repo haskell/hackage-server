@@ -15,6 +15,7 @@ import Distribution.Server.Users.Types (UserInfo(userName), UserName(UserName))
 import Distribution.Simple.Utils (lowercase)
 
 import Data.List (isInfixOf)
+import qualified Data.Map as Map
 
 acidStore :: FilePath -> IO Store.Backend
 acidStore stateDir = do
@@ -27,6 +28,8 @@ acidStore stateDir = do
           Store.getUsers = queryState usersState Acid.GetUserDb
         , Store.lookupUserId = \uid -> withUsers (Acid.lookupUserId uid)
         , Store.lookupUserName = \uname -> withUsers (Acid.lookupUserName uname)
+        , Store.lookupUserIds = \uids -> withUsers $ \users ->
+            Map.fromList [ (uid, uinfo) | uid <- uids, Just uinfo <- [Acid.lookupUserId uid users] ]
         , Store.lookupAuthToken = \token -> withUsers (Acid.lookupAuthToken token)
         , Store.enumerateAllUsers = withUsers Acid.enumerateAllUsers
         , Store.enumerateActiveUsers = withUsers Acid.enumerateActiveUsers
