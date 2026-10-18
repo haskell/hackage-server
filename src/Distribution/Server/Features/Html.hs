@@ -1782,8 +1782,8 @@ mkHtmlTags HtmlUtilities{..}
 
     serveTagsListing :: DynamicPath -> ServerPartE Response
     serveTagsListing _ = do
-        tagList <- queryGetTagList
-        let withCounts = filter ((>0) . snd) . map (\(tg, pkgs) -> (tg, Set.size pkgs)) $ tagList
+        tagCounts <- queryTagCounts
+        let withCounts = filter ((>0) . snd) tagCounts
             countSort = sortBy (flip compare `on` snd) withCounts
         return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags"
           [ h2 << "Hackage tags"

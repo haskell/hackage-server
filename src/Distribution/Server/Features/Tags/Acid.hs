@@ -10,18 +10,24 @@ import Distribution.Server.Features.Tags.Backup
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+
 acidStore :: FilePath -> IO Store.Backend
 acidStore stateDir = do
   tagsState <- tagsStateComponent stateDir
   tagAlias <- tagsAliasComponent stateDir
   pure Store.Backend {
       Store.backendStore = Store.Store {
-          Store.getTagList = queryState tagsState State.GetTagList
+          Store.getTagCounts = map (fmap Set.size) <$> queryState tagsState State.GetTagList
         , Store.getTagsForPackage = \pkgname -> queryState tagsState (State.TagsForPackage pkgname)
         , Store.getReviewTagsForPackage = \pkgname -> queryState tagsState (State.LookupReviewTags pkgname)
         , Store.getTagAlias = \tag -> queryState tagAlias (State.GetTagAlias tag)
         , Store.getPackagesForTag = \tag -> queryState tagsState (State.PackagesForTag tag)
-        , Store.getPackageTags = queryState tagsState State.GetPackageTags
+        , Store.getTagsForPackages = \pkgnames -> do
+            pkgTags <- State.packageTags <$> queryState tagsState State.GetPackageTags
+            pure $ Map.fromList
+              [ (pkgname, Map.findWithDefault Set.empty pkgname pkgTags) | pkgname <- pkgnames ]
         , Store.setPackageTags = \pkgname tags -> updateState tagsState (State.SetPackageTags pkgname tags)
         , Store.setTagPackages = \tag pkgs -> updateState tagsState (State.SetTagPackages tag pkgs)
         , Store.addTagAlias = \tag alias -> updateState tagAlias (State.AddTagAlias tag alias)

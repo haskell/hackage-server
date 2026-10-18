@@ -6,11 +6,11 @@ module Distribution.Server.Features.Tags.Store
   ) where
 
 import Distribution.Package (PackageName)
-import Distribution.Server.Features.Tags.State (PackageTags)
 import Distribution.Server.Features.Tags.Types (Tag)
 import Distribution.Server.Framework (AbstractStateComponent)
 
 import Control.Monad.Trans (MonadIO)
+import Data.Map (Map)
 import Data.Set (Set)
 
 data Backend = Backend {
@@ -19,12 +19,14 @@ data Backend = Backend {
   }
 
 data Store = Store {
-    getTagList :: forall m. MonadIO m => m [(Tag, Set PackageName)]
+    -- | Every tag with its number of packages, in tag order.
+    getTagCounts :: forall m. MonadIO m => m [(Tag, Int)]
   , getTagsForPackage :: forall m. MonadIO m => PackageName -> m (Set Tag)
   , getReviewTagsForPackage :: forall m. MonadIO m => PackageName -> m (Set Tag, Set Tag)
   , getTagAlias :: forall m. MonadIO m => Tag -> m Tag
   , getPackagesForTag :: forall m. MonadIO m => Tag -> m (Set PackageName)
-  , getPackageTags :: forall m. MonadIO m => m PackageTags
+    -- | The tags of each given package, including packages with none.
+  , getTagsForPackages :: forall m. MonadIO m => [PackageName] -> m (Map PackageName (Set Tag))
   , setPackageTags :: forall m. MonadIO m => PackageName -> Set Tag -> m ()
   , setTagPackages :: forall m. MonadIO m => Tag -> Set PackageName -> m ()
   , addTagAlias :: forall m. MonadIO m => Tag -> Tag -> m ()
