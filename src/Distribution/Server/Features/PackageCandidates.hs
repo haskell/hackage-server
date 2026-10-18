@@ -145,7 +145,7 @@ initPackageCandidatesFeature env@ServerEnv{serverStateDir} = do
       -- one-off migration
       migratedPkgTarball <- Store.candidateTarballIsMigrated candidatesStore
       unless migratedPkgTarball $ do
-        candidateIndex <- Store.getCandidateIndex candidatesStore
+        candidateIndex <- PackageIndex.fromList <$> Store.allCandidates candidatesStore
         migrateCandidatePkgTarball_v1_to_v2 env candidateIndex $ \pkgid pkginfo ->
           void $ Store.updateCandidatePkgInfo candidatesStore pkgid pkginfo
         Store.setCandidateTarballMigrated candidatesStore
@@ -195,7 +195,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       }
 
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)
-    queryGetCandidateIndex = Store.getCandidateIndex candidatesStore
+    queryGetCandidateIndex = PackageIndex.fromList <$> Store.allCandidates candidatesStore
 
     candidatesCoreResource = fix $ \r -> CoreResource {
 -- TODO: There is significant overlap between this definition and the one in Core
@@ -541,8 +541,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     lookupCandidateName :: PackageName -> ServerPartE [CandPkgInfo]
     lookupCandidateName pkgname = do
       guardValidPackageName core pkgname
-      candidateIndex <- queryGetCandidateIndex
-      return $ PackageIndex.lookupPackageName candidateIndex pkgname
+      Store.lookupCandidateName candidatesStore pkgname
 
     -- TODO: Unlike the corresponding function in core, we don't return the
     -- "latest" candidate when Version is empty. Should we?
@@ -550,8 +549,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     lookupCandidateId :: PackageId -> ServerPartE CandPkgInfo
     lookupCandidateId pkgid = do
       guard (pkgVersion pkgid /= nullVersion)
-      candidateIndex <- queryGetCandidateIndex
-      case PackageIndex.lookupPackageId candidateIndex pkgid of
+      mcand <- Store.lookupCandidateId candidatesStore pkgid
+      case mcand of
         Just pkg -> return pkg
         _ -> errNotFound "Candidate not found" [MText $ "No such candidate version for " ++ display (packageName pkgid)]
 

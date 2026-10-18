@@ -8,7 +8,6 @@ module Distribution.Server.Features.PackageCandidates.Store
 import Distribution.Package (PackageId, PackageName)
 import Distribution.Server.Features.PackageCandidates.Types (CandPkgInfo)
 import Distribution.Server.Framework (AbstractStateComponent)
-import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types (PkgInfo)
 
 import Control.Monad.Trans (MonadIO)
@@ -19,7 +18,9 @@ data Backend = Backend {
   }
 
 data Store = Store {
-    getCandidateIndex :: forall m. MonadIO m => m (PackageIndex CandPkgInfo)
+    lookupCandidateName :: forall m. MonadIO m => PackageName -> m [CandPkgInfo]
+  , lookupCandidateId :: forall m. MonadIO m => PackageId -> m (Maybe CandPkgInfo)
+  , allCandidates :: forall m. MonadIO m => m [CandPkgInfo]
   , candidateTarballIsMigrated :: forall m. MonadIO m => m Bool
   , setCandidateTarballMigrated :: forall m. MonadIO m => m ()
   , addCandidate :: forall m. MonadIO m => CandPkgInfo -> m ()
