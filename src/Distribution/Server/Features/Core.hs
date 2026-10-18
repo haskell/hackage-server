@@ -25,6 +25,7 @@ import qualified Codec.Compression.GZip                             as GZip
 import           Data.Aeson                                         (Value (..), toJSON)
 import qualified Data.Aeson.Key                                     as Key
 import qualified Data.Aeson.KeyMap                                  as KeyMap
+import           Data.Map                                           (Map)
 import           Data.ByteString.Lazy                               (LazyByteString, fromStrict)
 import qualified Data.Foldable                                      as Foldable
 import qualified Data.Text                                          as Text
@@ -78,6 +79,10 @@ data CoreFeature = CoreFeature {
 
     -- | Retrieves a specific package version.
     queryLookupPackageId :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo),
+
+    -- | Retrieves all versions of the given packages, leaving out names that
+    -- do not exist.
+    queryLookupPackageNames :: forall m. MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo]),
 
     -- | Retrieves the latest version of every package.
     queryLatestPackages :: forall m. MonadIO m => m [PkgInfo],
@@ -515,6 +520,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     queryLookupPackageId :: MonadIO m => PackageId -> m (Maybe PkgInfo)
     queryLookupPackageId = Store.lookupPackageId packagesStore
+
+    queryLookupPackageNames :: MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo])
+    queryLookupPackageNames = Store.lookupPackageNames packagesStore
 
     queryLatestPackages :: MonadIO m => m [PkgInfo]
     queryLatestPackages = Store.latestPackages packagesStore

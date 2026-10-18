@@ -15,6 +15,7 @@ import Distribution.Server.Users.Users (Users)
 import Distribution.Package (PackageId, PackageName)
 
 import Control.Monad.Trans (MonadIO)
+import Data.Map (Map)
 import Data.Time.Clock (UTCTime)
 
 data Backend = Backend {
@@ -26,6 +27,8 @@ data Store = Store {
     getPackagesState       :: forall m. MonadIO m => m PackagesState
   , lookupPackageName      :: forall m. MonadIO m => PackageName -> m [PkgInfo]
   , lookupPackageId        :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
+    -- | The given packages that exist, with all their versions.
+  , lookupPackageNames     :: forall m. MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo])
   , latestPackages         :: forall m. MonadIO m => m [PkgInfo]
     -- | Every package name, in ascending order.
   , allPackageNames        :: forall m. MonadIO m => m [PackageName]
