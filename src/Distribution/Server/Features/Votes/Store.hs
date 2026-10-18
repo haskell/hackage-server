@@ -24,7 +24,7 @@ data Backend = Backend {
   }
 
 data Store = Store {
-    getAllPackageVoteSets :: forall m. MonadIO m => m (Map.Map PackageName (Map.Map UserId Score))
+    getAllPackageVoteScores :: forall m. MonadIO m => m (Map.Map PackageName Float)
   , addVote               :: forall m. MonadIO m => PackageName -> UserId -> Score -> m Float
   , removeVote            :: forall m. MonadIO m => PackageName -> UserId -> m Bool
   , getPackageVoteCount   :: forall m. MonadIO m => PackageName -> m Int
