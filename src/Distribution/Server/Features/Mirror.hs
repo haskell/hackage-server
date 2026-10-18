@@ -186,8 +186,9 @@ mirrorFeature ServerEnv{serverBlobStore = store}
 
     uploaderGet dpath = do
       pkg    <- packageInPath dpath >>= lookupPackageId
-      userdb <- queryGetUserDb
-      return $ toResponse $ display (userIdToName userdb (pkgLatestUploadUser pkg))
+      let uid = pkgLatestUploadUser pkg
+      muser  <- queryLookupUserId uid
+      return $ toResponse $ display (userNameOrPlaceholder uid muser)
 
     uploaderPut :: DynamicPath -> ServerPartE Response
     uploaderPut dpath = do

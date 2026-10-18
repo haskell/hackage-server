@@ -50,8 +50,7 @@ import qualified Distribution.Server.Packages.PackageIndex          as PackageIn
 import           Distribution.Server.Packages.Types
 import           Distribution.Server.Users.Types                    (UserId,
                                                                      userName)
-import           Distribution.Server.Users.Users                    (lookupUserId,
-                                                                     userIdToName)
+import           Distribution.Server.Users.Users                    (userIdToName)
 
 -- Cabal
 import           Distribution.Package
@@ -86,7 +85,6 @@ data CoreFeature = CoreFeature {
     -- | Retrieves the name of every package, in ascending order.
     queryAllPackageNames :: forall m. MonadIO m => m [PackageName],
 
-    -- | Retrieves the ID of every version of every package.
     queryAllPackageIds :: forall m. MonadIO m => m [PackageId],
 
     -- | Counts the packages, i.e. the number of distinct package names.
@@ -546,8 +544,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
                      -> CabalFileText -> UploadInfo
                      -> Maybe PkgTarball -> m Bool
     updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
-      usersdb <- queryGetUserDb
-      let Just userInfo = lookupUserId uid usersdb
+      muserInfo <- queryLookupUserId uid
+      let Just userInfo = muserInfo
 
       let pkginfo = Acid.mkPackageInfo pkgid cabalFile uploadinfo mtarball
       additionalEntries <- concat `liftM` runHook preIndexUpdateHook  (PackageChangeAdd pkginfo)
@@ -575,8 +573,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     updateAddPackageRevision :: MonadIO m => PackageId -> CabalFileText -> UploadInfo -> m ()
     updateAddPackageRevision pkgid cabalfile uploadinfo@(_, uid) = logTiming maxBound ("updateAddPackageRevision " ++ display pkgid) $ do
-      usersdb <- queryGetUserDb
-      let Just userInfo = lookupUserId uid usersdb
+      muserInfo <- queryLookupUserId uid
+      let Just userInfo = muserInfo
       (moldpkginfo, newpkginfo) <- Store.addPackageRevision packagesStore
                                      pkgid
                                      cabalfile

@@ -26,6 +26,7 @@ module Distribution.Server.Users.Users (
 
     -- ** Lookup utils
     userIdToName,
+    userNameOrPlaceholder,
 
     -- * Enumeration
     enumerateAllUsers,
@@ -171,10 +172,15 @@ lookupAuthToken authTok users =
 -- an ugly placeholder is used instead.
 --
 userIdToName :: Users -> UserId -> UserName
-userIdToName users userId@(UserId idNum) =
-    case lookupUserId userId users of
-      Just user -> userName user
-      Nothing   -> UserName $ "~id#" ++ show idNum
+userIdToName users userId =
+    userNameOrPlaceholder userId (lookupUserId userId users)
+
+-- | The name of a looked-up user. If there is no such user, an ugly
+-- placeholder is used instead.
+--
+userNameOrPlaceholder :: UserId -> Maybe UserInfo -> UserName
+userNameOrPlaceholder _ (Just user) = userName user
+userNameOrPlaceholder (UserId idNum) Nothing = UserName $ "~id#" ++ show idNum
 
 
 -- | Add a new user account, in the enabled state.

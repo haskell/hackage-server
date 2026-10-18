@@ -73,6 +73,15 @@ data UserFeature = UserFeature {
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
     -- | Retrieves the entire user base.
     queryGetUserDb    :: forall m. MonadIO m => m Acid.Users,
+    queryLookupUserId :: forall m. MonadIO m => UserId -> m (Maybe UserInfo),
+    queryLookupUserName :: forall m. MonadIO m => UserName -> m (Maybe (UserId, UserInfo)),
+    -- | Retrieves every user account, including disabled and deleted ones.
+    queryAllUsers     :: forall m. MonadIO m => m [(UserId, UserInfo)],
+    -- | Retrieves every user account except deleted ones.
+    queryActiveUsers  :: forall m. MonadIO m => m [(UserId, UserInfo)],
+    -- | Retrieves the user accounts whose name contains any of the given
+    -- terms, ignoring case.
+    querySearchUserNames :: forall m. MonadIO m => [String] -> m [(UserId, UserInfo)],
 
     -- | Creates a Hackage 2 user credential.
     newUserAuth       :: UserName -> PasswdPlain -> UserAuth,
@@ -366,6 +375,21 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
     queryGetUserDb :: MonadIO m => m Acid.Users
     queryGetUserDb = UserStore.getUsers userStore
 
+    queryLookupUserId :: MonadIO m => UserId -> m (Maybe UserInfo)
+    queryLookupUserId = UserStore.lookupUserId userStore
+
+    queryLookupUserName :: MonadIO m => UserName -> m (Maybe (UserId, UserInfo))
+    queryLookupUserName = UserStore.lookupUserName userStore
+
+    queryAllUsers :: MonadIO m => m [(UserId, UserInfo)]
+    queryAllUsers = UserStore.enumerateAllUsers userStore
+
+    queryActiveUsers :: MonadIO m => m [(UserId, UserInfo)]
+    queryActiveUsers = UserStore.enumerateActiveUsers userStore
+
+    querySearchUserNames :: MonadIO m => [String] -> m [(UserId, UserInfo)]
+    querySearchUserNames = UserStore.searchUserNames userStore
+
     updateAddUser :: MonadIO m => UserName -> UserAuth -> m (Either Acid.ErrUserNameClash UserId)
     updateAddUser = UserStore.addUser userStore
 
@@ -385,9 +409,8 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
     guardAuthorisedWhenInAnyGroup [] =
         fail "Group list is empty, this is not meant to happen"
     guardAuthorisedWhenInAnyGroup groups = do
-        users <- queryGetUserDb
-        uid   <- guardAuthenticatedWithErrHook users
-        Auth.guardInAnyGroup users uid groups
+        uid <- guardAuthenticated
+        Auth.guardInAnyGroup uid groups
         return uid
 
     -- High level, all in one check that the client is authenticated as a
@@ -399,25 +422,48 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
     -- As above but also return the identity of the client
     guardAuthorised :: [PrivilegeCondition] -> ServerPartE UserId
     guardAuthorised privconds = do
-        users <- queryGetUserDb
-        uid   <- guardAuthenticatedWithErrHook users
-        Auth.guardPriviledged users uid privconds
+        uid <- guardAuthenticated
+        Auth.guardPriviledged uid privconds
         return uid
 
     guardAuthorised' :: [PrivilegeCondition] -> ServerPartE Bool
     guardAuthorised' privconds = do
-        users <- queryGetUserDb
-        uid   <- guardAuthenticatedWithErrHook users
-        valid <- Auth.checkPriviledged users uid privconds
+        uid   <- guardAuthenticated
+        valid <- Auth.checkPriviledged uid privconds
         return valid
 
     -- Simply check if the user is authenticated as some user, without any
     -- check that they have any particular privileges. Only useful as a
     -- building block.
+    -- See note about "authn" cookie below
     guardAuthenticated :: ServerPartE UserId
     guardAuthenticated = do
-        users   <- queryGetUserDb
-        guardAuthenticatedWithErrHook users
+        uid <- Auth.checkAuthenticated realm userLookup userFeatureServerEnv
+                   >>= either handleAuthError return
+        addCookie Session (mkCookie "authn" "1")
+        -- Set-Cookie:authn="1";Path=/;Version="1"
+        return uid
+      where
+        realm = Auth.hackageRealm --TODO: should be configurable
+
+        handleAuthError :: Auth.AuthError -> ServerPartE a
+        handleAuthError Auth.BadHost { actualHost, oughtToBeHost } =
+          errForbidden "Bad Host" [MText $ "Authenticated resources can only be accessed using the regular server host name " <> oughtToBeHost <> ", but was provided host " <> show actualHost]
+        handleAuthError err = do
+          defaultResponse  <- Auth.authErrorResponse realm err
+          overrideResponse <- msum <$> runHook authFailHook err
+          let resp' = fromMaybe defaultResponse overrideResponse
+              -- reset authn to "0" on auth failures
+              resp'' = case resp' of
+                r@ErrorResponse{} -> r { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders r }
+                GenericErrorResponse -> GenericErrorResponse
+          throwError resp''
+
+    userLookup :: Auth.UserLookup
+    userLookup = Auth.UserLookup {
+        Auth.lookupUserByName      = UserStore.lookupUserName userStore,
+        Auth.lookupUserByAuthToken = UserStore.lookupAuthToken userStore
+      }
 
     -- [Note about authentication & `authn` hint cookie]
     --
@@ -450,42 +496,14 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
     --            will be re-synced on the next authentication
     --            attempt.
 
-    -- As above but using the given userdb snapshot
-    -- See note about "authn" cookie above
-    guardAuthenticatedWithErrHook :: Acid.Users -> ServerPartE UserId
-    guardAuthenticatedWithErrHook users = do
-        uid <- Auth.checkAuthenticated realm users userFeatureServerEnv
-                   >>= either handleAuthError return
-        addCookie Session (mkCookie "authn" "1")
-        -- Set-Cookie:authn="1";Path=/;Version="1"
-        return uid
-      where
-        realm = Auth.hackageRealm --TODO: should be configurable
-
-        handleAuthError :: Auth.AuthError -> ServerPartE a
-        handleAuthError Auth.BadHost { actualHost, oughtToBeHost } =
-          errForbidden "Bad Host" [MText $ "Authenticated resources can only be accessed using the regular server host name " <> oughtToBeHost <> ", but was provided host " <> show actualHost]
-        handleAuthError err = do
-          defaultResponse  <- Auth.authErrorResponse realm err
-          overrideResponse <- msum <$> runHook authFailHook err
-          let resp' = fromMaybe defaultResponse overrideResponse
-              -- reset authn to "0" on auth failures
-              resp'' = case resp' of
-                r@ErrorResponse{} -> r { errorHeaders = ("Set-Cookie","authn=\"0\";Path=/;Version=\"1\""):errorHeaders r }
-                GenericErrorResponse -> GenericErrorResponse
-          throwError resp''
-
     -- Check if there is an authenticated userid, and return info, if so.
     -- See note about "authn" cookie above
     checkAuthenticated :: ServerPartE (Maybe UserId)
     checkAuthenticated = do
         authn <- optional (lookCookieValue "authn")
         case authn of
-          Just "1" -> void guardAuthenticated
-          _        -> pure ()
-
-        users <- queryGetUserDb
-        either (const Nothing) Just `fmap` Auth.checkAuthenticated Auth.hackageRealm users userFeatureServerEnv
+          Just "1" -> Just <$> guardAuthenticated
+          _        -> either (const Nothing) Just `fmap` Auth.checkAuthenticated Auth.hackageRealm userLookup userFeatureServerEnv
 
     -- | Resources representing the collection of known users.
     --
@@ -499,7 +517,7 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
 
     serveUsersGet :: DynamicPath -> ServerPartE Response
     serveUsersGet _ = do
-      userlist <- Acid.enumerateActiveUsers <$> queryGetUserDb
+      userlist <- queryActiveUsers
       let users = [ UserNameIdResource {
                       ui_username = userName uinfo,
                       ui_userid   = uid
@@ -645,8 +663,8 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
 
     lookupUserNameFull :: UserName -> ServerPartE (UserId, UserInfo)
     lookupUserNameFull uname = do
-        users <- UserStore.getUsers userStore
-        case Acid.lookupUserName uname users of
+        muser <- queryLookupUserName uname
+        case muser of
           Just u  -> return u
           Nothing -> userLost "Could not find user: not presently registered"
       where userLost = errNotFound "User not found" . return . MText
@@ -656,8 +674,8 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
 
     lookupUserInfo :: UserId -> ServerPartE UserInfo
     lookupUserInfo uid = do
-        users <- UserStore.getUsers userStore
-        case Acid.lookupUserId uid users of
+        muser <- queryLookupUserId uid
+        case muser of
           Just uinfo -> return uinfo
           Nothing    -> errInternalError [MText "user id does not exist"]
 
@@ -732,12 +750,11 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
     groupAddUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupAddUser group _ = do
         actorUid <- guardAuthorised (map InGroup (groupsAllowedToAdd group))
-        users <- UserStore.getUsers userStore
         muser <- optional $ look "user"
         reason <- optional $ look "reason"
         case muser of
             Nothing -> addError "Bad request (could not find 'user' argument)"
-            Just ustr -> case simpleParse ustr >>= \uname -> Acid.lookupUserName uname users of
+            Just ustr -> join <$> traverse queryLookupUserName (simpleParse ustr) >>= \case
                 Nothing      -> addError $ "No user with name " ++ show ustr ++ " found"
                 Just (uid,_) -> do
                              liftIO $ addUserToGroup group uid
