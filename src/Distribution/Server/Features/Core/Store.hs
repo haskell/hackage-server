@@ -27,6 +27,14 @@ data Store = Store {
   , lookupPackageName      :: forall m. MonadIO m => PackageName -> m [PkgInfo]
   , lookupPackageId        :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , latestPackages         :: forall m. MonadIO m => m [PkgInfo]
+    -- | Every package name, in ascending order.
+  , allPackageNames        :: forall m. MonadIO m => m [PackageName]
+  , allPackageIds          :: forall m. MonadIO m => m [PackageId]
+    -- | The number of distinct package names, not package versions.
+  , countPackages          :: forall m. MonadIO m => m Int
+    -- | Package versions whose latest upload or revision is after the first
+    -- time and no later than the second.
+  , latestUploadsBetween   :: forall m. MonadIO m => UTCTime -> UTCTime -> m [PkgInfo]
   , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> m Bool
   , deletePackage          :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , addPackageRevision     :: forall m. MonadIO m => PackageId -> CabalFileText -> UploadInfo -> UserName -> m (Maybe PkgInfo, PkgInfo)

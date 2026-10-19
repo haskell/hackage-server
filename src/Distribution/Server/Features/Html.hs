@@ -44,7 +44,6 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
 
 import qualified Distribution.Server.Pages.Package as Pages
@@ -902,7 +901,7 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
     serveUserList :: DynamicPath -> ServerPartE Response
     serveUserList _ = do
-        userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
+        userlist <- queryActiveUsers
         let hlist = unordList
                       [ anchor ! [href $ userPageUri users "" uname] << display uname
                       | (_, uinfo) <- userlist, let uname = userName uinfo ]
@@ -1325,9 +1324,7 @@ mkHtmlCandidates ServerEnv{..} utilities@HtmlUtilities{..}
       candRender <- liftIO $ candidateRender cand
       let PackageIdentifier pkgname version = packageId cand
           render = candPackageRender candRender
-      otherVersions <- map packageVersion
-                     . flip PackageIndex.lookupPackageName pkgname
-                   <$> queryGetPackageIndex
+          otherVersions = indexedVersions candRender
       prefInfo <- queryGetPreferredInfo pkgname
       let maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
       -- bottom sections, currently documentation and readme
@@ -1350,7 +1347,6 @@ mkHtmlCandidates ServerEnv{..} utilities@HtmlUtilities{..}
 
       let docURL = packageDocsContentUri docs (packageId cand)
 
-      -- also utilize hasIndexedPackage :: Bool
       let warningBox = case renderWarnings candRender of
               [] -> []
               warn -> [thediv ! [theclass "candidate-warn"] << [paragraph << strong (toHtml "Warnings:"), unordList warn]]
@@ -2119,7 +2115,7 @@ mkHtmlReverse HtmlUtilities{..}
                         , corePackageIdUri
                         , corePackageNameUri
                         },
-                        queryGetPackageIndex
+                        queryCountPackages
                       }
            VersionsFeature{withPackageVersion}
            ListFeature{}
@@ -2188,6 +2184,6 @@ mkHtmlReverse HtmlUtilities{..}
     serveReverseList :: DynamicPath -> ServerPartE Response
     serveReverseList _ = do
         namesWithCounts <- revCountForAllPackages
-        hackCount <- PackageIndex.indexSize <$> queryGetPackageIndex
+        hackCount <- queryCountPackages
         return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
             reversePackagesRender (corePackageNameUri "") hackCount namesWithCounts

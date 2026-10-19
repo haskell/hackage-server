@@ -9,24 +9,31 @@ import qualified Distribution.Server.Features.Core.State as Acid
 import Distribution.Server.Features.Security.Migration
 import Distribution.Server.Framework
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Packages.Types (PkgInfo, pkgLatestUploadTime)
+
+import Distribution.Package (packageId)
 
 import qualified Data.List.NonEmpty as NE
 
 acidStore :: ServerEnv -> Verbosity -> Bool -> FilePath -> IO Backend
 acidStore env verbosity freshDB stateDir = do
   packagesState <- packagesStateComponent verbosity freshDB stateDir
+  let withIndex :: MonadIO m => (PackageIndex.PackageIndex PkgInfo -> a) -> m a
+      withIndex f = f . Acid.packageIndex <$> queryState packagesState Acid.GetPackagesState
   pure Backend {
       backendStore = Store {
           getPackagesState       = queryState packagesState Acid.GetPackagesState
-        , lookupPackageName      = \pkgname -> do
-                                     packages <- queryState packagesState Acid.GetPackagesState
-                                     pure (PackageIndex.lookupPackageName (Acid.packageIndex packages) pkgname)
-        , lookupPackageId        = \pkgid -> do
-                                     packages <- queryState packagesState Acid.GetPackagesState
-                                     pure (PackageIndex.lookupPackageId (Acid.packageIndex packages) pkgid)
-        , latestPackages         = do
-                                     packages <- queryState packagesState Acid.GetPackagesState
-                                     pure (NE.last <$> PackageIndex.allPackagesByNameNE (Acid.packageIndex packages))
+        , lookupPackageName      = \pkgname -> withIndex (`PackageIndex.lookupPackageName` pkgname)
+        , lookupPackageId        = \pkgid -> withIndex (`PackageIndex.lookupPackageId` pkgid)
+        , latestPackages         = withIndex (map NE.last . PackageIndex.allPackagesByNameNE)
+        , allPackageNames        = withIndex PackageIndex.allPackageNames
+        , allPackageIds          = withIndex (map packageId . PackageIndex.allPackages)
+        , countPackages          = withIndex PackageIndex.indexSize
+        , latestUploadsBetween   = \earlier later ->
+                                     let isBetween pkginfo =
+                                           let t = pkgLatestUploadTime pkginfo
+                                           in t > earlier && t <= later
+                                     in withIndex (filter isBetween . PackageIndex.allPackages)
         , addPackage             = \pkginfo uploadinfo username entries ->
                                      updateState packagesState (Acid.AddPackage3 pkginfo uploadinfo username entries)
         , deletePackage          = \pkgid ->

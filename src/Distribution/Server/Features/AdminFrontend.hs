@@ -17,9 +17,7 @@ import Distribution.Server.Features.UserSignup
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Text
-import Distribution.Simple.Utils (lowercase)
 
-import Data.List
 import qualified Data.Text as T
 import Control.Applicative (optional)
 import Data.Maybe (isJust)
@@ -104,9 +102,7 @@ adminFrontendFeature _env templates
         findAccount <- optional (look "find-account")
         accounts    <- case findAccount of
                          Nothing          -> return []
-                         Just searchTerms -> do
-                           users <- queryGetUserDb
-                           return (accountSearch users searchTerms)
+                         Just searchTerms -> querySearchUserNames (words searchTerms)
 
         findSignup <- optional (lookText' "find-signup")
         signups    <- case findSignup of
@@ -123,13 +119,6 @@ adminFrontendFeature _env templates
           , "signups"     $= map signupRequestToTemplate signups
           ]
       where
-        accountSearch users searchTerms =
-          [ (uid, uinfo)
-          | let terms = map lowercase (words searchTerms)
-          , (uid, uinfo@UserInfo{ userName = UserName uname })
-              <- Users.enumerateAllUsers users
-          , any (`isInfixOf` lowercase uname) terms ]
-
         signupSearch allSignupInfo searchTerms =
           [ signupInfo
           | let terms = map T.toCaseFold (T.words searchTerms)
@@ -157,7 +146,7 @@ adminFrontendFeature _env templates
         guardAuthorised_ [InGroup adminGroup]
         cacheControlWithoutETag [Private]
         template <- getTemplate templates "accounts.html"
-        accounts <- Users.enumerateAllUsers <$> queryGetUserDb
+        accounts <- queryAllUsers
         ok $ toResponse $ template
           [ "accounts" $= [ accountBasicInfoToTemplate uid uinfo
                           | (uid, uinfo) <- accounts ]

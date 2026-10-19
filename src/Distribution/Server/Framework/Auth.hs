@@ -25,6 +25,9 @@ module Distribution.Server.Framework.Auth (
     guardInAnyGroup,
     PrivilegeCondition(..),
 
+    -- ** Looking up users
+    UserLookup(..),
+
     -- ** Errors
     AuthError(..),
     authErrorResponse,
@@ -35,9 +38,8 @@ module Distribution.Server.Framework.Auth (
   ) where
 
 import qualified Data.Text as T
-import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), UserInfo)
+import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), UserInfo, AuthToken)
 import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Framework.AuthCrypt
@@ -71,6 +73,12 @@ hackageRealm, adminRealm :: RealmName
 hackageRealm = RealmName "Hackage"
 adminRealm   = RealmName "Hackage admin"
 
+-- | How to find the user account that a client claims to be.
+data UserLookup = UserLookup {
+    lookupUserByName      :: UserName  -> IO (Maybe (UserId, UserInfo)),
+    lookupUserByAuthToken :: AuthToken -> IO (Maybe (UserId, UserInfo))
+  }
+
 
 -- | Check that the client is authenticated and is authorised to perform some
 -- privileged action.
@@ -82,12 +90,12 @@ adminRealm   = RealmName "Hackage admin"
 --   * is a member of a given group of users who are permitted to perform
 --     certain privileged actions.
 --
-guardAuthorised :: RealmName -> Users.Users -> [PrivilegeCondition]
+guardAuthorised :: RealmName -> UserLookup -> [PrivilegeCondition]
                 -> ServerEnv
                 -> ServerPartE UserId
 guardAuthorised realm users privconds env = do
     uid <- guardAuthenticated realm users env
-    guardPriviledged users uid privconds
+    guardPriviledged uid privconds
     return uid
 
 
@@ -100,14 +108,14 @@ guardAuthorised realm users privconds env = do
 -- It only checks the user is known, it does not imply that the user is
 -- authorised to do anything in particular, see 'guardAuthorised'.
 --
-guardAuthenticated :: RealmName -> Users.Users -> ServerEnv -> ServerPartE UserId
+guardAuthenticated :: RealmName -> UserLookup -> ServerEnv -> ServerPartE UserId
 guardAuthenticated realm users env = do
     authres <- checkAuthenticated realm users env
     case authres of
       Left  autherr -> throwError =<< authErrorResponse realm autherr
       Right info    -> return info
 
-checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> ServerEnv -> m (Either AuthError UserId)
+checkAuthenticated :: (ServerMonad m, MonadIO m) => RealmName -> UserLookup -> ServerEnv -> m (Either AuthError UserId)
 checkAuthenticated realm users ServerEnv { serverRequiredBaseHostHeader } = do
     mbHost <- getHost
     case mbHost of
@@ -122,12 +130,12 @@ checkAuthenticated realm users ServerEnv { serverRequiredBaseHostHeader } = do
   where
     goCheck = do
          req <- askRq
-         return $ case getHeaderAuth req of
+         liftIO $ case getHeaderAuth req of
            Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
-           Just _ | plainHttp req  -> Left InsecureAuthError
+           Just _ | plainHttp req  -> return (Left InsecureAuthError)
            Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
            Just (AuthToken,  ahdr) -> checkTokenAuth  users       ahdr
-           Nothing                 -> Left NoAuthError
+           Nothing                 -> return (Left NoAuthError)
 
 -- | Authentication methods supported by hackage-server.
 data AuthMethod
@@ -159,11 +167,11 @@ data PrivilegeCondition = InGroup    Group.UserGroup
                         | IsUserId   UserId
                         | AnyKnownUser
 
-guardInAnyGroup :: Users.Users -> UserId -> [Group.UserGroup] -> ServerPartE ()
-guardInAnyGroup _ _ [] =
+guardInAnyGroup :: UserId -> [Group.UserGroup] -> ServerPartE ()
+guardInAnyGroup _ [] =
   fail "Group list is empty, this is not meant to happen"
-guardInAnyGroup users uid groups = do
-  allok <- checkPriviledged users uid (map InGroup groups)
+guardInAnyGroup uid groups = do
+  allok <- checkPriviledged uid (map InGroup groups)
   let groupTitles = map (Group.groupTitle . Group.groupDesc) groups
       errMsg = "Access denied, you must be member of either of the following groups: "
                <> show groupTitles
@@ -179,27 +187,27 @@ guardInAnyGroup users uid groups = do
 -- It only checks if the user is in the privileged user group, it does not
 -- imply that the current client has been authenticated, see 'guardAuthorised'.
 --
-guardPriviledged :: Users.Users -> UserId -> [PrivilegeCondition] -> ServerPartE ()
-guardPriviledged users uid privconds = do
-  allok <- checkPriviledged users uid privconds
+guardPriviledged :: UserId -> [PrivilegeCondition] -> ServerPartE ()
+guardPriviledged uid privconds = do
+  allok <- checkPriviledged uid privconds
   when (not allok) $
     errForbidden "Forbidden" [MText "No access for this resource."]
 
-checkPriviledged :: MonadIO m => Users.Users -> UserId -> [PrivilegeCondition] -> m Bool
-checkPriviledged _users _uid [] = return False
+checkPriviledged :: MonadIO m => UserId -> [PrivilegeCondition] -> m Bool
+checkPriviledged _uid [] = return False
 
-checkPriviledged users uid (InGroup ugroup:others) = do
+checkPriviledged uid (InGroup ugroup:others) = do
   uset <- liftIO $ Group.queryUserGroup ugroup
   if UserIdSet.member uid uset
     then return True
-    else checkPriviledged users uid others
+    else checkPriviledged uid others
 
-checkPriviledged users uid (IsUserId uid':others) =
+checkPriviledged uid (IsUserId uid':others) =
   if uid == uid'
     then return True
-    else checkPriviledged users uid others
+    else checkPriviledged uid others
 
-checkPriviledged _ _ (AnyKnownUser:_) = return True
+checkPriviledged _ (AnyKnownUser:_) = return True
 
 
 ------------------------------------------------------------------------
@@ -266,16 +274,17 @@ plainHttp req
 --
 
 -- | Handle a auth request using an access token
-checkTokenAuth :: Users.Users -> BS.ByteString
-               -> Either AuthError UserId
-checkTokenAuth users ahdr = do
-    parsedToken <-
-      case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
-        Left _    -> Left BadApiKeyError
-        Right tok -> Right (Users.convertToken tok)
-    (uid, uinfo) <- Users.lookupAuthToken parsedToken users ?! BadApiKeyError
-    _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
-    return uid
+checkTokenAuth :: UserLookup -> BS.ByteString
+               -> IO (Either AuthError UserId)
+checkTokenAuth users ahdr =
+    case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
+      Left _    -> return (Left BadApiKeyError)
+      Right tok -> do
+        muser <- lookupUserByAuthToken users (Users.convertToken tok)
+        return $ do
+          (uid, uinfo) <- muser ?! BadApiKeyError
+          _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
+          return uid
 
 ------------------------------------------------------------------------
 -- Basic auth method
@@ -283,16 +292,20 @@ checkTokenAuth users ahdr = do
 
 -- | Use HTTP Basic auth to authenticate the client as an active enabled user.
 --
-checkBasicAuth :: Users.Users -> RealmName -> BS.ByteString
-               -> Either AuthError UserId
-checkBasicAuth users realm ahdr = do
-    authInfo     <- getBasicAuthInfo realm ahdr       ?! UnrecognizedAuthError
-    let uname    = basicUsername authInfo
-    (uid, uinfo) <- Users.lookupUserName uname users  ?! NoSuchUserError uname
-    uauth        <- getUserAuth uinfo                 ?! UserStatusError uid uinfo
-    let passwdhash = getPasswdHash uauth
-    guard (checkBasicAuthInfo passwdhash authInfo)    ?! PasswordMismatchError uid uinfo
-    return uid
+checkBasicAuth :: UserLookup -> RealmName -> BS.ByteString
+               -> IO (Either AuthError UserId)
+checkBasicAuth users realm ahdr =
+    case getBasicAuthInfo realm ahdr of
+      Nothing       -> return (Left UnrecognizedAuthError)
+      Just authInfo -> do
+        let uname = basicUsername authInfo
+        muser <- lookupUserByName users uname
+        return $ do
+          (uid, uinfo) <- muser                             ?! NoSuchUserError uname
+          uauth        <- getUserAuth uinfo                 ?! UserStatusError uid uinfo
+          let passwdhash = getPasswdHash uauth
+          guard (checkBasicAuthInfo passwdhash authInfo)    ?! PasswordMismatchError uid uinfo
+          return uid
 
 getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
 getBasicAuthInfo realm authHeader
@@ -342,18 +355,22 @@ headerBasicAuthChallenge (RealmName realmName) =
 
 -- | Use HTTP Digest auth to authenticate the client as an active enabled user.
 --
-checkDigestAuth :: Users.Users -> BS.ByteString -> Request
-                -> Either AuthError UserId
-checkDigestAuth users ahdr req = do
-    authInfo     <- getDigestAuthInfo ahdr req         ?! UnrecognizedAuthError
-    let uname    = digestUsername authInfo
-    (uid, uinfo) <- Users.lookupUserName uname users   ?! NoSuchUserError uname
-    uauth        <- getUserAuth uinfo                  ?! UserStatusError uid uinfo
-    let passwdhash = getPasswdHash uauth
-    guard (checkDigestAuthInfo passwdhash authInfo)    ?! PasswordMismatchError uid uinfo
-    -- TODO: if we want to prevent replay attacks, then we must check the
-    -- nonce and nonce count and issue stale=true replies.
-    return uid
+checkDigestAuth :: UserLookup -> BS.ByteString -> Request
+                -> IO (Either AuthError UserId)
+checkDigestAuth users ahdr req =
+    case getDigestAuthInfo ahdr req of
+      Nothing       -> return (Left UnrecognizedAuthError)
+      Just authInfo -> do
+        let uname = digestUsername authInfo
+        muser <- lookupUserByName users uname
+        return $ do
+          (uid, uinfo) <- muser                              ?! NoSuchUserError uname
+          uauth        <- getUserAuth uinfo                  ?! UserStatusError uid uinfo
+          let passwdhash = getPasswdHash uauth
+          guard (checkDigestAuthInfo passwdhash authInfo)    ?! PasswordMismatchError uid uinfo
+          -- TODO: if we want to prevent replay attacks, then we must check the
+          -- nonce and nonce count and issue stale=true replies.
+          return uid
 
 -- | retrieve the Digest auth info from the headers
 --

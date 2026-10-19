@@ -483,7 +483,7 @@ userNotifyFeature UserFeature{..}
                              else lastNotifyTime -- for testing you can increase this
         users <- queryGetUserDb
 
-        revisionsAndUploads <- collectRevisionsAndUploads trimLastTime now
+        revisionsAndUploads <- queryLatestUploadsBetween trimLastTime now
         revisionUploadNotifications <- concatMapM (genRevUploadList notifyPrefs trimLastTime now) revisionsAndUploads
 
         groupActions <- collectAdminActions trimLastTime now
@@ -515,13 +515,6 @@ userNotifyFeature UserFeature{..}
 
         Store.setNotifyTime notifyStore now
 
-    collectRevisionsAndUploads earlier now = do
-        pkgIndex <- queryGetPackageIndex
-        let isRecent pkgInfo =
-               let rt = pkgLatestUploadTime pkgInfo
-               in rt > earlier && rt <= now
-        return $ filter isRecent $ (PackageIndex.allPackages pkgIndex)
-
     collectAdminActions earlier now = do
         aLog <- queryGetAdminLog
         let isRecent (t,_,_,_) = t > earlier && t <= now
@@ -546,13 +539,13 @@ userNotifyFeature UserFeature{..}
         pure $ Map.toList logs
 
     genRevUploadList notifyPrefs earlier now pkg = do
-         pkgIndex <- queryGetPackageIndex
+         let pkgName = packageName . pkgInfoId $ pkg
+         allVersions <- queryLookupPackageName pkgName
          let actor = pkgLatestUploadUser pkg
              isRevision = pkgNumRevisions pkg > 1
-             pkgName = packageName . pkgInfoId $ pkg
-             mbLatest = listToMaybe . take 1 . reverse $ PackageIndex.lookupPackageName pkgIndex pkgName
+             mbLatest = listToMaybe (reverse allVersions)
              isLatestVersion = maybe False (\x -> pkgInfoId pkg == pkgInfoId x) mbLatest
-         maintainers <- queryUserGroup $ maintainersGroup (packageName . pkgInfoId $ pkg)
+         maintainers <- queryUserGroup $ maintainersGroup pkgName
          pure . flip mapMaybe (toList maintainers) $ \uid ->
           fmap (uid,) $ do
             let Acid.NotifyPref{..} = fromMaybe Acid.defaultNotifyPrefs (Map.lookup uid notifyPrefs)

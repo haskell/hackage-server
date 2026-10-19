@@ -126,7 +126,7 @@ data PackageCandidatesResource = PackageCandidatesResource {
 data CandidateRender = CandidateRender {
     candPackageRender :: PackageRender,
     renderWarnings :: [String],
-    hasIndexedPackage :: Bool
+    indexedVersions :: [Version]
 }
 
 
@@ -168,6 +168,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
                   CoreFeature{ coreResource=core@CoreResource{packageInPath, packageTarballInPath}
                              , queryGetPackageIndex
+                             , queryLookupPackageName
                              , updateAddPackage
                              }
                   UploadFeature{..}
@@ -516,7 +517,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidateRender :: CandPkgInfo -> IO CandidateRender
     candidateRender cand = do
         users  <- queryGetUserDb
-        index  <- queryGetPackageIndex
+        indexedPkgs <- queryLookupPackageName (packageName cand)
         let pkg = candPkgInfo cand
         changeLog <- findToplevelFile pkg isChangeLogFile
                  >>= either (\_ -> return Nothing) (return . Just)
@@ -528,7 +529,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                                      , rendChangeLog = changeLog
                                      , rendReadme    = readme},
           renderWarnings    = candWarnings cand,
-          hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
+          indexedVersions   = map packageVersion indexedPkgs
         }
 
     ------------------------------------------------------------------------------
