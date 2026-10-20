@@ -181,9 +181,9 @@ constructReverseDisplay :: (PackageName -> (PreferredInfo, [Version])) -> Map Pa
 constructReverseDisplay indexFunc =
     Map.mapMaybeWithKey (uncurry maybeBestVersion . indexFunc)
 
-getDisplayInfo :: PreferredVersions -> PackageIndex PkgInfo -> VersionIndex
+getDisplayInfo :: Map PackageName PreferredInfo -> PackageIndex PkgInfo -> VersionIndex
 getDisplayInfo preferred index pkgname = (,)
-    (Map.findWithDefault emptyPreferredInfo pkgname $ preferredMap preferred)
+    (Map.findWithDefault emptyPreferredInfo pkgname preferred)
     (map packageVersion . PackageIndex.lookupPackageName index $ pkgname)
 
 

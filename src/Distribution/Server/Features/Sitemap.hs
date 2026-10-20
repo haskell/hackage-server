@@ -155,7 +155,7 @@ sitemapFeature  ServerEnv{..}
     updateSitemapCache :: IO Sitemap
     updateSitemapCache = do
 
-      alltags  <- queryGetTagList
+      alltags  <- queryTagCounts
       pkgIndex <- queryGetPackageIndex
       docIndex <- queryDocumentationIndex
 

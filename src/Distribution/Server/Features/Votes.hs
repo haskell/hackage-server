@@ -14,8 +14,7 @@ import Distribution.Server.Features.Votes.Types (Score)
 import Distribution.Server.Features.Votes.Acid (acidStore)
 import qualified Distribution.Server.Features.Votes.Render as Render
 import Distribution.Server.Features.Votes.Store
-  ( votesScore
-  , Backend(..)
+  ( Backend(..)
   , Store(..) )
 
 import Distribution.Server.Framework
@@ -125,10 +124,10 @@ votesFeature  ServerEnv{..}
     servePackageVotesGet :: DynamicPath -> ServerPartE Response
     servePackageVotesGet _ = do
       cacheControlWithoutETag [Public, maxAgeMinutes 10]
-      votesMap <- getAllPackageVoteSets votesState
+      scores <- getAllPackageVoteScores votesState
       ok . toResponse $ objectL
-        [ (display pkgname, toJSON (votesScore pkgMap))
-        | (pkgname, pkgMap) <- Map.toList votesMap ]
+        [ (display pkgname, toJSON score)
+        | (pkgname, score) <- Map.toList scores ]
 
     -- Get the number of votes a package has. If the package
     -- has never been voted for, returns 0.

@@ -23,7 +23,7 @@ import           Network.URI (parseURI)
 import           System.Random (mkStdGen)
 
 import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, packageName)
-import Distribution.Server.Features.PreferredVersions.State (PreferredVersions(..), PreferredInfo(..))
+import Distribution.Server.Features.PreferredVersions.State (PreferredInfo(..))
 import Distribution.Server.Features.PreferredVersions.Types (VersionStatus(NormalVersion))
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
@@ -123,19 +123,13 @@ mkRevFeat :: [PkgInfo] -> IO ReverseFeature
 mkRevFeat pkgs = do
   let
     idx = PackageIndex.fromList pkgs
-    preferredVersions =
-      PreferredVersions
-        { preferredMap = mempty
-        , deprecatedMap = mempty
-        , migratedEphemeralPrefs = False
-        }
   updateReverse <- newHook
   let constructed = constructReverseIndex idx
   memState <- newMemStateWHNF constructed
   pure $
     reverseFeature
     (pure idx)
-    (pure preferredVersions)
+    (pure mempty)
     memState
     updateReverse
 

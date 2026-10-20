@@ -57,7 +57,7 @@ data VersionsFeature = VersionsFeature {
 
     queryGetPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo,
     queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
-    queryGetPreferredVersions :: forall m. MonadIO m => m PreferredVersions,
+    queryAllPreferredInfo :: forall m. MonadIO m => m (Map.Map PackageName PreferredInfo),
 
     versionsResource :: VersionsResource,
     deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
@@ -158,11 +158,11 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName])
     queryGetDeprecatedFor = Store.getDeprecatedFor preferredStore
 
-    queryGetPreferredVersions :: MonadIO m => m PreferredVersions
-    queryGetPreferredVersions = Store.getPreferredVersions preferredStore
+    queryAllPreferredInfo :: MonadIO m => m (Map.Map PackageName PreferredInfo)
+    queryAllPreferredInfo = Store.getAllPreferredInfo preferredStore
 
     updateDeprecatedTags = do
-      pkgs <- deprecatedMap <$> Store.getPreferredVersions preferredStore
+      pkgs <- Store.getAllDeprecated preferredStore
       setCalculatedTag (Tag "deprecated") (Map.keysSet pkgs)
 
     CoreResource{..} = coreResource
@@ -212,7 +212,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     handlePackagesDeprecatedGet :: DynamicPath -> ServerPartE Response
     handlePackagesDeprecatedGet _ = do
-      deprPkgs <- deprecatedMap <$> Store.getPreferredVersions preferredStore
+      deprPkgs <- Store.getAllDeprecated preferredStore
       return $ toResponse $ array
           [ object
               [ ("deprecated-package", string $ display deprPkg)
@@ -387,16 +387,16 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
       Store.getDeprecatedFor preferredStore pkgname
 
     doPreferredsRender :: MonadIO m => m [(PackageName, PreferredRender)]
-    doPreferredsRender = Store.getPreferredVersions preferredStore >>=
-        return . map (second renderPrefInfo) . Map.toList . preferredMap
+    doPreferredsRender = Store.getAllPreferredInfo preferredStore >>=
+        return . map (second renderPrefInfo) . Map.toList
 
     doDeprecatedsRender :: MonadIO m => m [(PackageName, [PackageName])]
-    doDeprecatedsRender = Store.getPreferredVersions preferredStore >>=
-        return . Map.toList . deprecatedMap
+    doDeprecatedsRender = Store.getAllDeprecated preferredStore >>=
+        return . Map.toList
 
     makeGlobalPreferredVersions :: (Functor m, MonadIO m) => m String
     makeGlobalPreferredVersions = do
-      prefs <- preferredMap <$> Store.getPreferredVersions preferredStore
+      prefs <- Store.getAllPreferredInfo preferredStore
       return $! formatGlobalPreferredVersions (Map.toList prefs)
 
     formatSinglePreferredVersions :: PackageName -> PreferredInfo -> Maybe String
@@ -422,10 +422,10 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     -- One-off complex migration
     ephemeralPrefsMigration = do
-      PreferredVersions {migratedEphemeralPrefs, preferredMap}
-        <- Store.getPreferredVersions preferredStore
+      migratedEphemeralPrefs <- Store.isMigratedEphemeralPrefs preferredStore
       unless migratedEphemeralPrefs $
         logTiming verbosity "preferred-versions migration" $ do
+          preferredMap <- Store.getAllPreferredInfo preferredStore
           sequence_
             [ updateIndexPackagePreferredVersions pkgname prefinfo
             | (pkgname, prefinfo) <- Map.toList preferredMap ]

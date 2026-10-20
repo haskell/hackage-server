@@ -45,7 +45,8 @@ data TagsFeature = TagsFeature {
 
     tagsResource :: TagsResource,
 
-    queryGetTagList     :: forall m. MonadIO m => m [(Tag, Set PackageName)],
+    -- | Retrieves every tag with its number of packages, in tag order.
+    queryTagCounts      :: forall m. MonadIO m => m [(Tag, Int)],
     queryTagsForPackage :: forall m. MonadIO m => PackageName -> m (Set Tag),
     queryReviewTagsForPackage :: forall m. MonadIO m => PackageName -> m (Set Tag,Set Tag),
     queryAliasForTag :: forall m. MonadIO m => Tag -> m Tag,
@@ -178,8 +179,8 @@ tagsFeature CoreFeature{ queryLatestPackages }
             let calcTags' = Map.toList . Map.fromListWith Set.union $ zip aliases (Map.elems calcTags)
             forM_ calcTags' $ uncurry setCalculatedTag
 
-    queryGetTagList :: MonadIO m => m [(Tag, Set PackageName)]
-    queryGetTagList = Store.getTagList tagsStore
+    queryTagCounts :: MonadIO m => m [(Tag, Int)]
+    queryTagCounts = Store.getTagCounts tagsStore
 
     queryTagsForPackage :: MonadIO m => PackageName -> m (Set Tag)
     queryTagsForPackage = Store.getTagsForPackage tagsStore
@@ -204,9 +205,7 @@ tagsFeature CoreFeature{ queryLatestPackages }
             func tag pkgs
 
     collectTags :: MonadIO m => Set PackageName -> m (Map PackageName (Set Tag))
-    collectTags pkgs = do
-        pkgMap <- liftM State.packageTags $ Store.getPackageTags tagsStore
-        return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
+    collectTags pkgs = Store.getTagsForPackages tagsStore (Set.toList pkgs)
 
     mergeTags :: Maybe String -> Tag -> ServerPartE ()
     mergeTags targetTag deprTag =

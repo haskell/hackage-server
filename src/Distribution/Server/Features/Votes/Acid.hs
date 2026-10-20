@@ -16,7 +16,7 @@ acidStore stateDir = do
   votesState <- votesStateComponent stateDir
   return Backend {
     backendStore = Store {
-        getAllPackageVoteSets = queryState votesState Acid.GetAllPackageVoteSets
+        getAllPackageVoteScores = Map.map votesScore <$> queryState votesState Acid.GetAllPackageVoteSets
       , addVote               = \pkgname uid score -> updateState votesState (Acid.AddVote pkgname uid score)
       , removeVote            = \pkgname uid -> updateState votesState (Acid.RemoveVote pkgname uid)
       , getPackageVoteCount   = \pkgname -> queryState votesState (Acid.GetPackageVoteCount pkgname)
