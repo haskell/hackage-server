@@ -15,6 +15,7 @@ module Distribution.Server.Features.UserNotify (
 
     -- * getNotificationEmails
     getNotificationEmails,
+    notificationUserIds,
   ) where
 
 import Distribution.Server.Features.UserDetails.Types
@@ -29,9 +30,8 @@ import Distribution.Package
 import Distribution.Pretty
 import Distribution.Version
 
-import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Group
-import Distribution.Server.Users.Types (UserId, UserInfo (..))
+import Distribution.Server.Users.Types (UserId, UserInfo (..), UserName)
 import Distribution.Server.Users.UserIdSet as UserIdSet
 
 import Distribution.Server.Packages.Types
@@ -481,8 +481,6 @@ userNotifyFeature UserFeature{..}
         let trimLastTime = if diffUTCTime now lastNotifyTime > (60*60*6) -- cap at 6hr
                              then addUTCTime (negate $ (60*60*6)) now
                              else lastNotifyTime -- for testing you can increase this
-        users <- queryGetUserDb
-
         revisionsAndUploads <- queryLatestUploadsBetween trimLastTime now
         revisionUploadNotifications <- concatMapM (genRevUploadList notifyPrefs trimLastTime now) revisionsAndUploads
 
@@ -501,16 +499,18 @@ userNotifyFeature UserFeature{..}
 
         vouchNotifications <- fmap (, NotifyVouchingCompleted) <$> drainQueuedNotifications
 
+        let notifications =
+              concat
+                [ revisionUploadNotifications
+                , groupActionNotifications
+                , docReportNotifications
+                , tagProposalNotifications
+                , dependencyUpdateNotifications
+                , vouchNotifications
+                ]
+        userIdToName <- queryUserNamesFor (concatMap notificationUserIds notifications)
         emails <-
-          getNotificationEmails userFeatureServerEnv userDetailsFeature users templates $
-            concat
-              [ revisionUploadNotifications
-              , groupActionNotifications
-              , docReportNotifications
-              , tagProposalNotifications
-              , dependencyUpdateNotifications
-              , vouchNotifications
-              ]
+          getNotificationEmails userFeatureServerEnv userDetailsFeature userIdToName templates notifications
         mapM_ sendNotifyEmailAndDelay emails
 
         Store.setNotifyTime notifyStore now
@@ -649,6 +649,19 @@ userNotifyFeature UserFeature{..}
       -- send out too many emails
       threadDelay 250000
 
+-- | The users whose names the email for a notification shows, including its
+-- recipient.
+notificationUserIds :: (UserId, Notification) -> [UserId]
+notificationUserIds (recipient, notif) =
+  recipient : case notif of
+    NotifyNewVersion{notifyPackageInfo} -> [pkgLatestUploadUser notifyPackageInfo]
+    NotifyNewRevision{notifyRevisions} -> map snd notifyRevisions
+    NotifyMaintainerUpdate{notifyUserActor, notifyUserSubject} -> [notifyUserActor, notifyUserSubject]
+    NotifyDocsBuild{} -> []
+    NotifyUpdateTags{} -> []
+    NotifyDependencyUpdate{} -> []
+    NotifyVouchingCompleted -> []
+
 -- | Notifications in the same group are batched in the same email.
 --
 -- TODO: How often do multiple notifications come in at once? Maybe it's
@@ -662,14 +675,14 @@ data NotificationGroup
 getNotificationEmails
   :: ServerEnv
   -> UserDetailsFeature
-  -> Users.Users
+  -> (UserId -> UserName)
   -> Templates
   -> [(UserId, Notification)]
   -> IO [Mail]
 getNotificationEmails
   ServerEnv{serverBaseURI}
   UserDetailsFeature{queryUserDetails}
-  allUsers
+  userIdToName
   templates
   notifications = do
     let userIds = Set.fromList $ map fst notifications
@@ -725,7 +738,7 @@ getNotificationEmails
               { uriPath =
                   concatMap ("/" <>)
                     [ "user"
-                    , display $ Users.userIdToName allUsers uid
+                    , display $ userIdToName uid
                     , "notify"
                     ]
               }
@@ -850,7 +863,7 @@ getNotificationEmails
           { uriPath = "/package/" <> display (packageName pkg) <> "-" <> display (packageVersion pkg)
           }
 
-    renderUser = emailContentDisplay . Users.userIdToName allUsers
+    renderUser = emailContentDisplay . userIdToName
 
     renderTime = emailContentStr . formatTime defaultTimeLocale "%c"
 

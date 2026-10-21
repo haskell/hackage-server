@@ -377,7 +377,6 @@ getNotificationEmailsTests =
           . getNotificationEmail
               testServerEnv
               testUserDetailsFeature
-              allUsers
               userWatcher
           $ NotifyDependencyUpdate
               { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
@@ -389,7 +388,6 @@ getNotificationEmailsTests =
           . getNotificationEmail
               testServerEnv
               testUserDetailsFeature
-              allUsers
               userWatcher
           $ NotifyDependencyUpdate
               { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
@@ -401,7 +399,6 @@ getNotificationEmailsTests =
           . getNotificationEmail
               testServerEnv
               testUserDetailsFeature
-              allUsers
               userWatcher
           $ NotifyDependencyUpdate
               { notifyPackageId = PackageIdentifier "base" (mkVersion [4, 18, 0, 0])
@@ -468,8 +465,8 @@ getNotificationEmailsTests =
           <*> addUser "user-actor"
           <*> addUser "user-subject"
 
-    getNotificationEmail env details users uid notif =
-      getNotificationEmails env details users (mockTemplates ["datafiles/templates/UserNotify"] ["endorsements-complete.txt"]) [(uid, notif)] >>= \case
+    getNotificationEmail env details uid notif =
+      getNotificationEmails env details (mentionedUserNames [(uid, notif)]) (mockTemplates ["datafiles/templates/UserNotify"] ["endorsements-complete.txt"]) [(uid, notif)] >>= \case
         [email] -> pure email
         _ -> error "Did not get exactly one email"
 
@@ -490,17 +487,25 @@ getNotificationEmailsTests =
                   , accountAdminNotes = ""
                   }
         }
-    getNotificationEmailsMocked =
+    getNotificationEmailsMocked notifs =
       getNotificationEmails
         testServerEnv
         testUserDetailsFeature
-        allUsers
+        (mentionedUserNames notifs)
         (mockTemplates ["datafiles/templates/UserNotify"] ["endorsements-complete.txt"])
+        notifs
     getNotificationEmailMocked =
       getNotificationEmail
         testServerEnv
         testUserDetailsFeature
-        allUsers
+    -- Resolves only the users that notificationUserIds lists, as the
+    -- notification job does.
+    mentionedUserNames notifs =
+      Users.userIdToNameIn . Map.fromList $
+        [ (uid, uinfo)
+        | uid <- concatMap notificationUserIds notifs
+        , Just uinfo <- [Users.lookupUserId uid allUsers]
+        ]
 
     renderMail = fst . Mail.renderMail (mkStdGen 0)
     timestamp = Time.UTCTime (Time.fromGregorian 2020 1 1) 0
