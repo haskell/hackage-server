@@ -30,6 +30,7 @@ import qualified Data.Foldable                                      as Foldable
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
 import           Data.Time.Format                                   (defaultTimeLocale, formatTime)
+import           Data.Containers.ListUtils                          (nubOrd)
 import qualified Data.Vector                                        as Vec
 
 -- hackage
@@ -621,12 +622,13 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     --
     getIndexTarball :: IO IndexTarballInfo
     getIndexTarball = do
-      users <- queryGetUserDb  -- note, changes here don't automatically propagate
       time  <- getCurrentTime
       Acid.PackagesState index (Right updateSeq) <- Store.getPackagesState packagesStore
+      -- note, changes to users here don't automatically propagate
+      userIdToName <- queryUserNamesFor (nubOrd (map pkgLatestUploadUser (PackageIndex.allPackages index)))
       let updateLog     = Foldable.toList updateSeq
           legacyTarball = Packages.Index.writeLegacy
-                            users
+                            userIdToName
                             (Packages.Index.legacyExtras updateLog)
                             index
           incremTarball = Packages.Index.writeIncremental

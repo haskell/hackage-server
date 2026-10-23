@@ -25,7 +25,6 @@ module Distribution.Server.Users.Users (
     lookupAuthToken,
 
     -- ** Lookup utils
-    userIdToName,
     userIdToNameIn,
     userNameOrPlaceholder,
 
@@ -169,14 +168,8 @@ lookupAuthToken authTok users =
        uinfo <- lookupUserId uid users
        return (uid, uinfo)
 
--- | Convert a 'UserId' to a 'UserName'. If the user id doesn't exist,
--- an ugly placeholder is used instead.
---
-userIdToName :: Users -> UserId -> UserName
-userIdToName users userId =
-    userNameOrPlaceholder userId (lookupUserId userId users)
-
--- | Like 'userIdToName', but for users that have already been looked up.
+-- | Convert a 'UserId' to a 'UserName' using users that have already been
+-- looked up. If the user id is missing, an ugly placeholder is used instead.
 --
 userIdToNameIn :: Map.Map UserId UserInfo -> UserId -> UserName
 userIdToNameIn infos userId =
