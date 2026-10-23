@@ -14,6 +14,7 @@ import Distribution.Server.Packages.Types (PkgInfo, pkgLatestUploadTime)
 import Distribution.Package (packageId)
 
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map as Map
 
 acidStore :: ServerEnv -> Verbosity -> Bool -> FilePath -> IO Backend
 acidStore env verbosity freshDB stateDir = do
@@ -25,6 +26,11 @@ acidStore env verbosity freshDB stateDir = do
           getPackagesState       = queryState packagesState Acid.GetPackagesState
         , lookupPackageName      = \pkgname -> withIndex (`PackageIndex.lookupPackageName` pkgname)
         , lookupPackageId        = \pkgid -> withIndex (`PackageIndex.lookupPackageId` pkgid)
+        , lookupPackageNames     = \pkgnames -> withIndex $ \index ->
+                                     Map.fromList [ (pkgname, pkgs)
+                                                  | pkgname <- pkgnames
+                                                  , let pkgs = PackageIndex.lookupPackageName index pkgname
+                                                  , not (null pkgs) ]
         , latestPackages         = withIndex (map NE.last . PackageIndex.allPackagesByNameNE)
         , allPackageNames        = withIndex PackageIndex.allPackageNames
         , allPackageIds          = withIndex (map packageId . PackageIndex.allPackages)

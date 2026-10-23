@@ -12,6 +12,7 @@ import Distribution.Server.Features.BuildReports.BuildReports
 import Distribution.Server.Framework (AbstractStateComponent)
 
 import Control.Monad.Trans (MonadIO)
+import Data.Time.Clock (UTCTime)
 
 data Backend = Backend {
     backendStore :: Store
@@ -21,6 +22,9 @@ data Backend = Backend {
 data Store = Store {
     lookupReportCovg :: forall m. MonadIO m => PackageId -> BuildReportId -> m (Maybe (BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog))
   , lookupPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)]
+    -- | Reports whose time is after the first time and no later than the
+    -- second, in package id order.
+  , reportsBetween :: forall m. MonadIO m => UTCTime -> UTCTime -> m [(PackageId, BuildReport)]
   , lookupFailCount :: forall m. MonadIO m => PackageId -> m (Maybe BuildStatus)
   , lookupLatestReport :: forall m. MonadIO m => PackageId -> m (Maybe (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog))
   , lookupRunTests :: forall m. MonadIO m => PackageId -> m Bool
