@@ -350,7 +350,9 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
           Just {} -> do
               depr <- optional $ fmap words $ look "by"
               case mapM simpleParse =<< depr of
-                  Just deprs -> filterM (fmap null . queryLookupPackageName) deprs >>= \case
+                  Just deprs -> do
+                    existing <- queryLookupPackageNames deprs
+                    case filter (`Map.notMember` existing) deprs of
                       [] -> case pkgname `elem` deprs of
                               True -> deprecatedError "You can not deprecate a package in favor of itself!"
                               _ -> do

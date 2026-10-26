@@ -14,6 +14,8 @@ import Distribution.Server.Features.Core
 
 import qualified Distribution.Server.Features.BuildReports.Acid as Acid
 import qualified Distribution.Server.Features.BuildReports.Store as Store
+
+import Data.Time.Clock (UTCTime)
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId(..), BuildCovg(..), BuildLog(..), TestLog(..), TestReportLog(..))
@@ -44,6 +46,9 @@ data ReportsFeature = ReportsFeature {
     packageReport  :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe TestLog, Maybe BuildCovg, Maybe TestReportLog),
 
     queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
+    -- | Retrieves the reports whose time is after the first time and no later
+    -- than the second, in package id order.
+    queryReportsBetween :: forall m. MonadIO m => UTCTime -> UTCTime -> m [(PackageId, BuildReport)],
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
     queryTestLog        :: forall m. MonadIO m => TestLog   -> m Resource.TestLog,
     queryTestReportLog  :: forall m. MonadIO m => TestReportLog -> m Resource.TestReportLog,
@@ -205,6 +210,9 @@ buildReportsFeature name
 
     queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)]
     queryPackageReports = Store.lookupPackageReports reportsStore
+
+    queryReportsBetween :: MonadIO m => UTCTime -> UTCTime -> m [(PackageId, BuildReport)]
+    queryReportsBetween = Store.reportsBetween reportsStore
 
     queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog
     queryBuildLog (BuildLog blobId) = do

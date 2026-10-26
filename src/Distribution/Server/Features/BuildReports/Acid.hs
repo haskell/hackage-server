@@ -6,8 +6,11 @@ module Distribution.Server.Features.BuildReports.Acid
 import qualified Distribution.Server.Features.BuildReports.State as State
 import Distribution.Server.Features.BuildReports.Backup (dumpBackup, restoreBackup)
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports)
+import qualified Distribution.Server.Features.BuildReports.BuildReports as BuildReports
 import qualified Distribution.Server.Features.BuildReports.Store as Store
 import Distribution.Server.Framework
+
+import qualified Data.Map as Map
 
 acidStore :: String -> FilePath -> IO Store.Backend
 acidStore name stateDir = do
@@ -18,6 +21,14 @@ acidStore name stateDir = do
         , Store.lookupPackageReports = \pkgid -> do
             reports <- queryState reportsState (State.LookupPackageReports pkgid)
             pure $ map (\(reportId, (report, _, _, _)) -> (reportId, report)) reports
+        , Store.reportsBetween = \earlier later -> do
+            buildReports <- queryState reportsState State.GetBuildReports
+            pure [ (pkgid, report)
+                 | (pkgid, pkgReports) <- Map.toList (BuildReports.reportsIndex buildReports)
+                 , (report, _, _, _, _) <- Map.elems (BuildReports.reports pkgReports)
+                 , Just t <- [BuildReports.time report]
+                 , t > earlier && t <= later
+                 ]
         , Store.lookupFailCount = \pkgid -> queryState reportsState (State.LookupFailCount pkgid)
         , Store.lookupLatestReport = \pkgid -> queryState reportsState (State.LookupLatestReport pkgid)
         , Store.lookupRunTests = \pkgid -> queryState reportsState (State.LookupRunTests pkgid)

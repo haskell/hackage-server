@@ -67,7 +67,7 @@ import Data.Bimap (lookup, lookupR)
 import Data.Graph (Vertex)
 import Data.Hashable (Hashable(..))
 import Data.List (maximumBy, sortOn)
-import Data.Maybe (fromMaybe, listToMaybe, mapMaybe, maybeToList)
+import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Ord (Down(..), comparing)
 import Data.Time (addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
 import Distribution.Text (display)
@@ -482,7 +482,8 @@ userNotifyFeature UserFeature{..}
                              then addUTCTime (negate $ (60*60*6)) now
                              else lastNotifyTime -- for testing you can increase this
         revisionsAndUploads <- queryLatestUploadsBetween trimLastTime now
-        revisionUploadNotifications <- concatMapM (genRevUploadList notifyPrefs trimLastTime now) revisionsAndUploads
+        uploadedPackages <- queryLookupPackageNames (map (packageName . pkgInfoId) revisionsAndUploads)
+        revisionUploadNotifications <- concatMapM (genRevUploadList notifyPrefs uploadedPackages trimLastTime now) revisionsAndUploads
 
         groupActions <- collectAdminActions trimLastTime now
         groupActionNotifications <- concatMapM (genGroupUploadList notifyPrefs) groupActions
@@ -521,27 +522,28 @@ userNotifyFeature UserFeature{..}
         return $ filter isRecent $ aLog
 
     collectDocReport earlier now = do
-        pkgs <- PackageIndex.allPackages <$> queryGetPackageIndex
-        pkgRpts <- forM pkgs $ \pkg -> do
-          rpts <- queryPackageReports (packageId pkg)
-          pure $ (pkg,) $ do
-            -- List monad, filter out recent docbuilds
-            (_, rpt@BuildReport.BuildReport{..}) <- rpts
-            t <- maybeToList time
-            guard $ docsOutcome /= BuildReport.NotTried && t > earlier && t <= now
-            pure rpt
-        let isBuildOk BuildReport.BuildReport{..} = docsOutcome == BuildReport.Ok
-        pure $ map (second (all isBuildOk)) $ filter (not . Prelude.null . snd) pkgRpts
+        rpts <- queryReportsBetween earlier now
+        let docRpts = Map.fromListWith (flip (++))
+              [ (pkgid, [rpt])
+              | (pkgid, rpt) <- rpts
+              , BuildReport.docsOutcome rpt /= BuildReport.NotTried
+              ]
+            isBuildOk rpt = BuildReport.docsOutcome rpt == BuildReport.Ok
+        indexedPackages <- queryLookupPackageNames (map packageName (Map.keys docRpts))
+        let isInMainIndex pkgid =
+              any ((== pkgid) . pkgInfoId) (Map.findWithDefault [] (packageName pkgid) indexedPackages)
+        pure $ filter (isInMainIndex . fst) $
+          map (second (all isBuildOk)) (Map.toList docRpts)
 
     collectTagProposals = do
         logs <- readMemState tagProposalLog
         writeMemState tagProposalLog Map.empty
         pure $ Map.toList logs
 
-    genRevUploadList notifyPrefs earlier now pkg = do
+    genRevUploadList notifyPrefs uploadedPackages earlier now pkg = do
          let pkgName = packageName . pkgInfoId $ pkg
-         allVersions <- queryLookupPackageName pkgName
-         let actor = pkgLatestUploadUser pkg
+             allVersions = Map.findWithDefault [] pkgName uploadedPackages
+             actor = pkgLatestUploadUser pkg
              isRevision = pkgNumRevisions pkg > 1
              mbLatest = listToMaybe (reverse allVersions)
              isLatestVersion = maybe False (\x -> pkgInfoId pkg == pkgInfoId x) mbLatest
@@ -601,8 +603,8 @@ userNotifyFeature UserFeature{..}
               }
         _ -> pure []
 
-    genDocReportList notifyPrefs (pkg, success) = do
-      maintainers <- queryUserGroup $ maintainersGroup (packageName $ pkgInfoId pkg)
+    genDocReportList notifyPrefs (pkgid, success) = do
+      maintainers <- queryUserGroup $ maintainersGroup (packageName pkgid)
       pure . flip mapMaybe (toList maintainers) $ \uid ->
         fmap (uid,) $ do
           let Acid.NotifyPref{..} = fromMaybe Acid.defaultNotifyPrefs (Map.lookup uid notifyPrefs)
@@ -610,7 +612,7 @@ userNotifyFeature UserFeature{..}
           guard notifyDocBuilderReport
           Just
             NotifyDocsBuild
-              { notifyPackageId = pkgInfoId pkg
+              { notifyPackageId = pkgid
               , notifyBuildSuccess = success
               }
 
