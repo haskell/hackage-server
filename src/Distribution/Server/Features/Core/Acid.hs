@@ -9,12 +9,14 @@ import qualified Distribution.Server.Features.Core.State as Acid
 import Distribution.Server.Features.Security.Migration
 import Distribution.Server.Framework
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Server.Packages.Types (PkgInfo, pkgLatestUploadTime)
+import Distribution.Server.Packages.Types (PkgInfo, pkgLatestUploadTime, pkgNumRevisions, pkgOriginalUploadTime)
 
 import Distribution.Package (packageId)
 
+import Data.List (sortOn)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
+import Data.Ord (Down(Down))
 
 acidStore :: ServerEnv -> Verbosity -> Bool -> FilePath -> IO Backend
 acidStore env verbosity freshDB stateDir = do
@@ -40,6 +42,16 @@ acidStore env verbosity freshDB stateDir = do
                                            let t = pkgLatestUploadTime pkginfo
                                            in t > earlier && t <= later
                                      in withIndex (filter isBetween . PackageIndex.allPackages)
+        , recentPackageVersions  = withIndex $ \index ->
+                                     let versions = PackageIndex.allPackages index
+                                     in RecentPackageVersions {
+                                          recentPackageVersionsUploads =
+                                            sortOn (Down . pkgOriginalUploadTime) versions
+                                        , recentPackageVersionsRevisions =
+                                            sortOn (Down . pkgLatestUploadTime)
+                                              . filter ((> 1) . pkgNumRevisions)
+                                              $ versions
+                                        }
         , addPackage             = \pkginfo uploadinfo username entries ->
                                      updateState packagesState (Acid.AddPackage3 pkginfo uploadinfo username entries)
         , deletePackage          = \pkgid ->

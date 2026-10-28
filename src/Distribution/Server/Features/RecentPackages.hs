@@ -9,9 +9,6 @@ import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 import Distribution.Server.Packages.Types
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Data.List (sortOn)
-import Data.Ord (Down(Down))
 
 data RecentPackagesFeature = RecentPackagesFeature {
     recentPackagesFeatureInterface :: HackageFeature,
@@ -60,8 +57,8 @@ initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verb
 recentPackagesFeature :: ServerEnv
                       -> UserFeature
                       -> CoreFeature
-                      -> AsyncCache ([PkgInfo], [PkgInfo])
-                      -> (RecentPackagesFeature, IO ([PkgInfo], [PkgInfo]))
+                      -> AsyncCache RecentPackageVersions
+                      -> (RecentPackagesFeature, IO RecentPackageVersions)
 
 recentPackagesFeature _
                       UserFeature{..}
@@ -81,19 +78,10 @@ recentPackagesFeature _
 
 
     getRecentPackages :: MonadIO m => m [PkgInfo]
-    getRecentPackages = fst <$> readAsyncCache cacheRecent
+    getRecentPackages = recentPackageVersionsUploads <$> readAsyncCache cacheRecent
     
     getRecentRevisions :: MonadIO m => m [PkgInfo]
-    getRecentRevisions = snd <$> readAsyncCache cacheRecent
+    getRecentRevisions = recentPackageVersionsRevisions <$> readAsyncCache cacheRecent
 
-    updateRecentCache :: IO ([PkgInfo], [PkgInfo])
-    updateRecentCache = do
-        pkgIndex <- queryGetPackageIndex
-
-        let packages = PackageIndex.allPackages pkgIndex
-            isRevised pkgInfo = pkgNumRevisions pkgInfo > 1
-            revisionTime pkgInfo = pkgLatestUploadTime pkgInfo
-            recentChanges = sortOn (Down . pkgOriginalUploadTime) packages
-            recentRevisions = sortOn (Down . revisionTime) . filter isRevised $ packages
-
-        return (recentChanges, recentRevisions)
+    updateRecentCache :: IO RecentPackageVersions
+    updateRecentCache = queryRecentPackageVersions

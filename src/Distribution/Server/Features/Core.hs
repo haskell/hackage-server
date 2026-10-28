@@ -5,6 +5,7 @@
 module Distribution.Server.Features.Core (
     CoreFeature(..),
     CoreResource(..),
+    Store.RecentPackageVersions(..),
     initCoreFeature,
 
     -- * Change events
@@ -98,6 +99,11 @@ data CoreFeature = CoreFeature {
     -- | Retrieves the package versions whose latest upload or revision
     -- happened after the first time and no later than the second.
     queryLatestUploadsBetween :: forall m. MonadIO m => UTCTime -> UTCTime -> m [PkgInfo],
+
+    -- | Retrieves every package version ordered by original upload time, and
+    -- the versions with more than one revision ordered by latest revision
+    -- time, both newest first.
+    queryRecentPackageVersions :: forall m. MonadIO m => m Store.RecentPackageVersions,
 
     -- | Retrieve the raw tarball info
     queryGetIndexTarballInfo :: forall m. MonadIO m => m IndexTarballInfo,
@@ -538,6 +544,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     queryLatestUploadsBetween :: MonadIO m => UTCTime -> UTCTime -> m [PkgInfo]
     queryLatestUploadsBetween = Store.latestUploadsBetween packagesStore
+
+    queryRecentPackageVersions :: MonadIO m => m Store.RecentPackageVersions
+    queryRecentPackageVersions = Store.recentPackageVersions packagesStore
 
     queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
     queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball
