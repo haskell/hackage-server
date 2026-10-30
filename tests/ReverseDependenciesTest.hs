@@ -241,9 +241,9 @@ allTests = testGroup "ReverseDependenciesTest"
           base4_15 = PackageIdentifier "base" (mkVersion [4,15])
           base4_16 = PackageIdentifier "base" (mkVersion [4,16])
           runWithPref preferences index pkg = runIdentity $
-            getUserNotificationsOnRelease userSetIdForPackage index (constructReverseIndex index) preferences pkg
+            getUserNotificationsOnRelease userSetIdForPackage (PackageIndex.lookupPackageName index) (constructReverseIndex index) preferences pkg
           runWithPrefAlsoMtl2 preferences index pkg = runIdentity $
-            getUserNotificationsOnRelease userSet index (constructReverseIndex index) preferences pkg
+            getUserNotificationsOnRelease userSet (PackageIndex.lookupPackageName index) (constructReverseIndex index) preferences pkg
               where
               userSet arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
                           | arg == mkPackageName "mtl2" = Identity (UserIdSet.fromList [UserId 0])
@@ -300,6 +300,29 @@ allTests = testGroup "ReverseDependenciesTest"
                 \    build-depends: base >= 4.15 && < 4.16"
             ])
           base4_15)
+      assertEqual
+        "getUserNotificationsOnRelease(trigger=BoundsOutOfRange) should judge each reverse dependency by its own latest version"
+        (Map.singleton (UserId 0) [PackageIdentifier (mkPackageName "mtl2") (mkVersion [2,0])])
+        (runWithPrefAlsoMtl2
+          (pref BoundsOutOfRange)
+          (PackageIndex.fromList
+            [ mkPackage "base" [4,14] []
+            , mkPackage "base" [4,15] []
+            , mkPackage "mtl" [2,2] ["base < 4.15"]
+            , mkPackage "mtl" [2,3] ["base < 5"]
+            , mkPackage "mtl2" [2,0] ["base < 4.15"]
+            ])
+          base4_15)
+      assertEqual
+        "getUserNotificationsOnRelease shouldn't generate a notification when the new package can't be found"
+        mempty
+        (runIdentity $
+          getUserNotificationsOnRelease
+            userSetIdForPackage
+            (const [])
+            (constructReverseIndex (PackageIndex.fromList newBaseReleased))
+            (pref BoundsOutOfRange)
+            base4_15)
   , getNotificationEmailsTests
   , testCase "hedgehogTests" $ do
       res <- hedgehogTests

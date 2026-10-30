@@ -35,7 +35,6 @@ import Distribution.Server.Users.Types (UserId, UserInfo (..), UserName)
 import Distribution.Server.Users.UserIdSet as UserIdSet
 
 import Distribution.Server.Packages.Types
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
@@ -64,11 +63,10 @@ import Control.Concurrent (threadDelay)
 import Data.Aeson.TH (deriveJSON)
 import Data.Bifunctor (Bifunctor(second))
 import Data.Bimap (lookup, lookupR)
-import Data.Graph (Vertex)
 import Data.Hashable (Hashable(..))
-import Data.List (maximumBy, sortOn)
+import Data.List (sortOn)
 import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
-import Data.Ord (Down(..), comparing)
+import Data.Ord (Down(..))
 import Data.Time (addUTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
 import Distribution.Text (display)
 import Network.Mail.Mime
@@ -244,6 +242,24 @@ initUserNotifyFeature ServerEnv{ serverStateDir, serverTemplatesDir,
 
 data InRange = InRange | OutOfRange
 
+isNewestVersion :: [PkgInfo] -> PackageId -> Bool
+isNewestVersion versions pkgId =
+  pkgId `elem` map packageId versions
+    && all ((<= pkgVersion pkgId) . packageVersion) versions
+
+reverseDependencyNames :: ReverseIndex -> PackageName -> [PackageName]
+reverseDependencyNames (ReverseIndex revs nodemap _) pkgname =
+  case lookup pkgname nodemap :: Maybe NodeId of
+    Nothing -> []
+    Just node -> mapMaybe (`lookupR` nodemap) (Set.toList (suc revs node))
+
+latestDependencies :: Map PackageId [Dependency] -> PackageName -> Maybe (PackageId, [Dependency])
+latestDependencies dependencies pkgname =
+  Map.lookupMax
+    . Map.takeWhileAntitone ((== pkgname) . pkgName)
+    . Map.dropWhileAntitone ((< pkgname) . pkgName)
+    $ dependencies
+
 -- | Acid.Get the users to notify when a new package has been released.
 --   The new package (PackageId) must already be in the indexes.
 --   The keys in the returned map are the user to notify, and the values are
@@ -252,41 +268,32 @@ data InRange = InRange | OutOfRange
 getUserNotificationsOnRelease
   :: forall m. Monad m
   => (PackageName -> m UserIdSet)
-  -> PackageIndex.PackageIndex PkgInfo
+  -> (PackageName -> [PkgInfo])
   -> ReverseIndex
   -> (UserId -> m (Maybe Acid.NotifyPref))
   -> PackageId
   -> m (Map.Map UserId [PackageId])
-getUserNotificationsOnRelease _ index _ _ pkgId
-  | let versionsForNewRelease = packageVersion <$> PackageIndex.lookupPackageName index (pkgName pkgId)
-  , pkgVersion pkgId /= maximum versionsForNewRelease
+getUserNotificationsOnRelease _ packagesNamed _ _ pkgId
+  | not (isNewestVersion (packagesNamed (pkgName pkgId)) pkgId)
   -- If e.g. a minor bugfix release is made for an old release series, never notify maintainers.
   -- Only start checking if the new version is the highest.
   = pure mempty
-getUserNotificationsOnRelease userSetIdForPackage index (ReverseIndex revs nodemap dependencies) queryGetUserNotifyPref pkgId =
-  case lookup (pkgName pkgId) nodemap :: Maybe NodeId of
-    Nothing -> pure mempty
-    Just foundPackage -> do
-      let
-        vertices :: Set.Set Vertex
-        vertices = suc revs foundPackage
-        revDepNames :: [PackageName]
-        revDepNames = mapMaybe (`lookupR` nodemap) (Set.toList vertices)
-      toNotify <- traverse maintainersToNotify revDepNames
-      pure $
-        Map.fromListWith (++)
-          [ (maintainerId, [packageId latestRevDep])
-          | (ids, latestRevDep) <- toNotify
-          , maintainerId <- ids
-          ]
+getUserNotificationsOnRelease userSetIdForPackage packagesNamed revIdx@(ReverseIndex _ _ dependencies) queryGetUserNotifyPref pkgId = do
+  toNotify <- traverse maintainersToNotify
+    . mapMaybe (latestDependencies dependencies)
+    $ reverseDependencyNames revIdx (pkgName pkgId)
+  pure $
+    Map.fromListWith (++)
+      [ (maintainerId, [latestRevDep])
+      | (ids, latestRevDep) <- toNotify
+      , maintainerId <- ids
+      ]
   where
-    -- | Goes through the maintainers of the reverse dep identified by the PackageName passed in,
-    --   finds the ones to notify.
-    --   Returns the userIds and when they wanted notifications (NotifyTriggerBounds).
-    --   The PkgInfo is the latest version of the reverse dependency passed in as PackageName.
-    maintainersToNotify :: PackageName -> m ([UserId], PkgInfo)
-    maintainersToNotify revDepName = do
-      userIdSet <- userSetIdForPackage revDepName
+    -- Finds the maintainers of a reverse dependency to notify, judged by the
+    -- dependencies of its latest version.
+    maintainersToNotify :: (PackageId, [Dependency]) -> m ([UserId], PackageId)
+    maintainersToNotify (latestRevDep, depListWithCollisions) = do
+      userIdSet <- userSetIdForPackage (pkgName latestRevDep)
       let ids = UserIdSet.toList userIdSet
       mPrefs <- traverse queryGetUserNotifyPref ids
       let
@@ -296,7 +303,6 @@ getUserNotificationsOnRelease userSetIdForPackage index (ReverseIndex revs nodem
           guard $ not notifyOptOut
           guard notifyDependencyForMaintained
 
-          Just depListWithCollisions <- [mDepList]
           -- Acid.Remove collisions on the same PackageName, amassed e.g. across
           -- multiple conditional branches. The branches could be from either
           -- side of an 'if' block conditioned on a flag. If either of them
@@ -305,7 +311,7 @@ getUserNotificationsOnRelease userSetIdForPackage index (ReverseIndex revs nodem
 
           case notifyDependencyTriggerBounds of
             NewIncompatibility -> do
-              let allNewUploadPkgInfos = PackageIndex.lookupPackageName index (pkgName pkgId)
+              let allNewUploadPkgInfos = packagesNamed (pkgName pkgId)
                   sortedByVersionDesc = sortOn (Down . packageVersion) allNewUploadPkgInfos
                   mSecondHighest =
                     case sortedByVersionDesc of
@@ -326,9 +332,6 @@ getUserNotificationsOnRelease userSetIdForPackage index (ReverseIndex revs nodem
           [userId]
       pure (idsAndTriggers, latestRevDep)
       where
-        latestRevDep = maximumBy (comparing packageVersion) (PackageIndex.lookupPackageName index revDepName)
-        mDepList :: Maybe [Dependency]
-        mDepList = Map.lookup (packageId latestRevDep) dependencies
         isDependencyMatchingAnd :: InRange -> Version -> Dependency -> Bool
         isDependencyMatchingAnd InRange depVersion (Dependency depName depRange _)
           | depName /= pkgName pkgId = False
@@ -494,9 +497,9 @@ userNotifyFeature UserFeature{..}
         tagProposals <- collectTagProposals
         tagProposalNotifications <- concatMapM (genTagProposalList notifyPrefs) tagProposals
 
-        idx <- queryGetPackageIndex
         revIdx <- liftIO queryReverseIndex
-        dependencyUpdateNotifications <- concatMapM (genDependencyUpdateList notifyPrefs idx revIdx . pkgInfoToPkgId) revisionsAndUploads
+        let packagesNamed pkgname = Map.findWithDefault [] pkgname uploadedPackages
+        dependencyUpdateNotifications <- concatMapM (genDependencyUpdateList notifyPrefs packagesNamed revIdx . pkgInfoToPkgId) revisionsAndUploads
 
         vouchNotifications <- fmap (, NotifyVouchingCompleted) <$> drainQueuedNotifications
 
@@ -630,7 +633,7 @@ userNotifyFeature UserFeature{..}
               , notifyDeletedTags = deletedTags
               }
 
-    genDependencyUpdateList notifyPrefs idx revIdx pkg = do
+    genDependencyUpdateList notifyPrefs packagesNamed revIdx pkg = do
       let toNotif uid watchedPkgs =
             NotifyDependencyUpdate
               { notifyPackageId = pkg
@@ -640,7 +643,7 @@ userNotifyFeature UserFeature{..}
                     fromMaybe Acid.defaultNotifyPrefs (Map.lookup uid notifyPrefs)
               }
       Map.toList . Map.mapWithKey toNotif
-        <$> getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) idx revIdx queryGetUserNotifyPref pkg
+        <$> getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) packagesNamed revIdx queryGetUserNotifyPref pkg
 
     sendNotifyEmailAndDelay :: Mail -> IO ()
     sendNotifyEmailAndDelay email = do
