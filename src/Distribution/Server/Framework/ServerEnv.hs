@@ -89,6 +89,31 @@ getHost = do
       Just hostHeaderPair | [oneValue] <- hValue hostHeaderPair -> Just oneValue
       _ -> Nothing
 
+data RequestHost
+  = MainHost -- ^ Request host matching 'serverRequiredBaseHostHeader'.
+  | UserContentHost -- ^ Request host matching 'serverUserContentBaseURI'.
+  | UnrecognisedHost -- ^ A host that matches neither the main or user-content host.
+
+requestHost :: ServerMonad m => ServerEnv -> m RequestHost
+requestHost ServerEnv {serverUserContentBaseURI, serverRequiredBaseHostHeader} = do
+  mHost <- getHost
+  let isMain = mHost == Just (encodeUtf8 (T.pack serverRequiredBaseHostHeader))
+      isUserContent = case URI.uriAuthority serverUserContentBaseURI of
+        Just auth -> mHost == Just (encodeUtf8 (T.pack (URI.uriRegName auth ++ URI.uriPort auth)))
+        Nothing -> False
+  pure $ case (isMain, isUserContent) of
+    (True, False) -> MainHost
+    (False, True) -> UserContentHost
+    _ -> UnrecognisedHost
+
+userContentRequestURI :: ServerMonad m => ServerEnv -> m URI.URI
+userContentRequestURI ServerEnv {serverUserContentBaseURI} = do
+  rq <- askRq
+  pure serverUserContentBaseURI
+    { URI.uriPath = rqUri rq
+    , URI.uriQuery = rqQuery rq
+    }
+
 requireUserContent :: ServerEnv -> Response -> ServerPartE Response
 requireUserContent ServerEnv {serverUserContentBaseURI, serverRequiredBaseHostHeader} action = do
   Just hostHeaderValue <- getHost

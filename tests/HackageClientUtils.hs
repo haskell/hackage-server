@@ -26,6 +26,7 @@ import Util
 import HttpUtils ( ExpectedCode
                  , isOk
                  , isAccepted
+                 , isFound
                  , isSeeOther
                  , isNotModified
                  , isUnauthorized
@@ -310,6 +311,19 @@ getUrl auth url = Http.execRequest auth (mkGetReq url)
 
 getUserContentUrl :: Authorization -> RelativeURL -> IO String
 getUserContentUrl auth url = Http.execRequest auth (mkGetUserContentReq url)
+
+-- | Check that the URL, requested from the main host, is a temporary redirect
+-- to the same path on the user content host, and that the redirect itself is
+-- not cacheable (so that every download reaches the server to be counted).
+checkRedirectsToUserContent :: RelativeURL -> IO ()
+checkRedirectsToUserContent url = do
+  void $ Http.execRequest' NoAuth (mkGetReq url) isFound
+  cacheControl <- Http.responseHeader HdrCacheControl (mkGetReq url)
+  unless (cacheControl == "no-store") $
+    die $ "Expected 'Cache-Control: no-store' but got " ++ show cacheControl
+  location <- Http.responseHeader HdrLocation (mkGetReq url)
+  unless (location == mkUserContentUrl url) $
+    die $ "Expected redirect to " ++ mkUserContentUrl url ++ " but got " ++ show location
 
 getETag :: RelativeURL -> IO String
 getETag url = Http.responseHeader HdrETag (mkGetReq url)
