@@ -229,7 +229,7 @@ distroFeature UserFeature{..}
 maintainerGroupDescription :: DistroName -> GroupDescription
 maintainerGroupDescription dname = nullDescription
   { groupTitle = "Maintainers"
-  , groupEntity = Just (str, Just $ "/distro/" ++ display dname)
+  , groupEntity = Just (str, Just $ "/distro/" ++ str ++ "/packages")
   , groupPrologue = "Maintainers for a distribution can map packages to it."
   }
   where str = display dname
