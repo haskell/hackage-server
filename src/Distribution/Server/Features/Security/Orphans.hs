@@ -13,7 +13,6 @@ import Control.DeepSeq
 import Data.SafeCopy
 import Data.Serialize
 import qualified Data.ByteString.Lazy as BS.L
-import qualified Crypto.Sign.Ed25519  as Ed25519
 
 -- hackage
 import Distribution.Server.Framework.MemSize
@@ -71,13 +70,9 @@ instance MemSize (Some Sec.Key) where
   memSize (Some key) = memSize key
 
 instance MemSize (Sec.Key typ) where
-  memSize (Sec.KeyEd25519 pub pri) = memSize pub + memSize pri
-
-instance MemSize Ed25519.PublicKey where
-  memSize = memSize . Ed25519.unPublicKey
-
-instance MemSize Ed25519.SecretKey where
-  memSize = memSize . Ed25519.unSecretKey
+  memSize (Sec.KeyEd25519 _pub _pri) =
+      5 {- ByteString overhead -} + 4 {- 32-byte public key -}
+    + 5 {- ByteString overhead -} + 8 {- 64-byte public key -}
 
 instance MemSize Sec.FileVersion where
   memSize (Sec.FileVersion v) = memSize v

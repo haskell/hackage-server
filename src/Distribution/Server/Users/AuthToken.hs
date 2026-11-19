@@ -18,10 +18,12 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Base16 as BS16
-import qualified Crypto.Hash.SHA256 as SHA256
 import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Compat.CharParsing as P
+
+import qualified Data.ByteArray as BA
+import qualified Crypto.Hash    as Hash
 
 import Data.SafeCopy
 
@@ -38,7 +40,8 @@ newtype AuthToken = AuthToken BSS.ShortByteString
 
 convertToken :: OriginalToken -> AuthToken
 convertToken (OriginalToken bs) =
-    AuthToken $ BSS.toShort $ SHA256.hash $ getRawNonceBytes bs
+    AuthToken . BSS.toShort . BA.convert . Hash.hashWith Hash.SHA256
+    $ getRawNonceBytes bs
 
 viewOriginalToken :: OriginalToken -> T.Text
 viewOriginalToken (OriginalToken ot) = T.pack $ renderNonce ot
