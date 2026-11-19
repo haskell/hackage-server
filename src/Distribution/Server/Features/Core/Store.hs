@@ -3,9 +3,10 @@
 module Distribution.Server.Features.Core.Store
   ( Backend(..)
   , Store(..)
+  , RecentPackageVersions(..)
   ) where
 
-import Distribution.Server.Framework (AbstractStateComponent)
+import Distribution.Server.Framework (AbstractStateComponent, MemSize(..), memSize2)
 import Distribution.Server.Features.Core.State (PackagesState)
 import Distribution.Server.Packages.Index (TarIndexEntry)
 import Distribution.Server.Packages.Types
@@ -38,6 +39,7 @@ data Store = Store {
     -- | Package versions whose latest upload or revision is after the first
     -- time and no later than the second.
   , latestUploadsBetween   :: forall m. MonadIO m => UTCTime -> UTCTime -> m [PkgInfo]
+  , recentPackageVersions  :: forall m. MonadIO m => m RecentPackageVersions
   , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> m Bool
   , deletePackage          :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , addPackageRevision     :: forall m. MonadIO m => PackageId -> CabalFileText -> UploadInfo -> UserName -> m (Maybe PkgInfo, PkgInfo)
@@ -49,3 +51,16 @@ data Store = Store {
   , migratePackageTarballs :: IO ()
   , createStoreCheckpoint  :: IO ()
   }
+
+-- | Package versions ordered for the recent uploads and recent revisions
+-- lists, both read from the same state of the package database.
+data RecentPackageVersions = RecentPackageVersions {
+    -- | Every package version, by original upload time, newest first.
+    recentPackageVersionsUploads   :: [PkgInfo]
+    -- | Package versions with more than one revision, by latest revision
+    -- time, newest first.
+  , recentPackageVersionsRevisions :: [PkgInfo]
+  }
+
+instance MemSize RecentPackageVersions where
+  memSize (RecentPackageVersions uploads revisions) = memSize2 uploads revisions
