@@ -342,8 +342,10 @@ runPackageTests = do
        cabalFile <- getUrl NoAuth "/package/testpackage-1.0.0.0/testpackage.cabal"
        unless (cabalFile == testpackageCabalFile) $
            die "Bad Cabal file"
+    do info "Getting testpackage tar file from the main host redirects to the user content host"
+       checkRedirectsToUserContent "/package/testpackage/testpackage-1.0.0.0.tar.gz"
     do info "Getting testpackage tar file"
-       tarFile <- getUrl NoAuth "/package/testpackage/testpackage-1.0.0.0.tar.gz"
+       tarFile <- getUserContentUrl NoAuth "/package/testpackage/testpackage-1.0.0.0.tar.gz"
        unless (tarFile == testpackageTarFileContent) $
            die "Bad tar file"
     do info "Getting testpackage source"
