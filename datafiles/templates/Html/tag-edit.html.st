@@ -4,7 +4,6 @@
     <head>
         $hackageCssTheme()$
         <title>Edit package tags | Hackage</title>
-        <script src="/static/jquery.min.js"></script>
         <style>
             .accept {
                 color: green;
@@ -109,7 +108,7 @@
 
                     if ("$addns$".trim() != "") {
                         var ads = "$addns$".replace(/\s/g, '').split(',')
-                        \$.each(ads, function(i) {
+                        ads.forEach( function(i) {
                             var li = \$('<li/>')
                                 .text(ads[i])
                                 .appendTo(aList);
@@ -122,7 +121,7 @@
                     if ("$delns$".trim() != "") {
                         var dels = "$delns$".replace(/\s/g, '').split(',')
 
-                        \$.each(dels, function(i) {
+                        dels.forEach( function(i) {
                             var li = \$('<li/>')
                                 .text(dels[i])
                                 .appendTo(dList);

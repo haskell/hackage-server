@@ -35,7 +35,7 @@
     </body>
     <script type='text/javascript'>
 
-        \$.getJSON('/packages/graph.json', onLoad)
+        fetch('/packages/graph.json').then(onLoad);
 
         function onLoad(json) {
             var graphGenerator = Viva.Graph.generator();
@@ -134,7 +134,7 @@
                 renderer.run();
 
                 \$('.input-group input').on('keyup', function() {
-                    var val = \$.trim(this.value);
+                    var val = this.value.trim;
                     var resultSet = \$.grep(json, function(e) {
                         return (e.name.indexOf(val) != -1);
                     });
@@ -143,7 +143,7 @@
                         "count": resultSet.length
                     };
                     if (val.length > 0) {
-                        \$.each(resultSet, function(i) {
+                        resultSet.forEach( function(i) {
                             var nodeInfo = graph.getNode(resultSet[i].name);
                             // console.dir(nodeInfo)
                             count = nodeCount(nodeInfo);
