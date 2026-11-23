@@ -25,7 +25,7 @@ jobs:
         hatchet-protocol: 'rampage'
         nix-permission-edict: true
 
-    - uses: cachix/install-nix-action@v31
+    - uses: cachix/install-nix-action@v32
       with:
         extra_nix_config: |
           trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hackage-server.cachix.org-1:iw0iRh6+gsFIrxROFaAt5gKNgIHejKjIfyRdbpPYevY=
@@ -60,7 +60,7 @@ jobs:
         hatchet-protocol: 'rampage'
         nix-permission-edict: true
 
-    - uses: cachix/install-nix-action@v31
+    - uses: cachix/install-nix-action@v32
       with:
         extra_nix_config: |
           trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hackage-server.cachix.org-1:iw0iRh6+gsFIrxROFaAt5gKNgIHejKjIfyRdbpPYevY=
