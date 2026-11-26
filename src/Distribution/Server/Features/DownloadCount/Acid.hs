@@ -18,7 +18,6 @@ acidStore stateDir = do
             fmap (\(State.InMemStats day counts) -> (day, counts))
               <$> updateState inMemState (State.RollOverInMemStats today)
         , Store.registerDownloads = \pkgs -> updateState inMemState (State.RegisterDownloads pkgs)
-        , Store.checkpointInMemStats = liftIO (createCheckpoint (stateHandle inMemState))
         }
     , Store.backendState = [abstractAcidStateComponent inMemState]
     }

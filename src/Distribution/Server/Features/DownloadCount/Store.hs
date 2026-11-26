@@ -24,5 +24,4 @@ data Store = Store {
     rollOverDay           :: forall m. MonadIO m => Day -> m (Maybe (Day, SimpleCountingMap PackageId))
     -- | Record a batch of downloads: @(package, number of downloads)@ pairs.
   , registerDownloads     :: forall m. MonadIO m => [(PackageId, Int)] -> m ()
-  , checkpointInMemStats  :: forall m. MonadIO m => m ()
   }

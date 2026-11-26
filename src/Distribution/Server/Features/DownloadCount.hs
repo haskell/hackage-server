@@ -142,6 +142,9 @@ downloadFeature CoreFeature{}
   = DownloadFeature{..}
   where
     inMemStore = Store.backendStore inMemBackend
+    -- Writing a checkpoint is part of the backend's lifecycle, not the store
+    -- interface; it does nothing for backends without one.
+    checkpointInMemStats = mapM_ abstractStateCheckpoint (Store.backendState inMemBackend)
 
     downloadFeatureInterface = (emptyHackageFeature "download") {
         featureResources = [ topDownloads downloadResource
@@ -190,7 +193,7 @@ downloadFeature CoreFeature{}
     shutdownFlush = do
         flushDownloadsSafe
         logErrors "Error checkpointing download counts" $
-          Store.checkpointInMemStats inMemStore
+          checkpointInMemStats
 
     flushDownloads :: IO ()
     flushDownloads = withMVar flushLock $ \() -> do
@@ -214,7 +217,7 @@ downloadFeature CoreFeature{}
         forM_ mYesterday $ \(day, counts) -> do
           let inMemStats = InMemStats day counts
           -- we can discard the large eventlog by writing a small checkpoint
-          Store.checkpointInMemStats inMemStore
+          checkpointInMemStats
 
           -- Write yesterday's downloads to the log
           appendToLog (dcPath serverStateDir) inMemStats
