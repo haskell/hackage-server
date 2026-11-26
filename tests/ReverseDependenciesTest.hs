@@ -128,6 +128,12 @@ mkRevFeat pkgs = do
   pure $
     reverseFeature
     (pure idx)
+    (\names -> pure $ Map.fromList
+       [ (name, versions)
+       | name <- names
+       , let versions = PackageIndex.lookupPackageName idx name
+       , not (Prelude.null versions) ])
+    (pure (PackageIndex.allPackageNames idx))
     (pure mempty)
     memState
     updateReverse
@@ -216,7 +222,7 @@ allTests = testGroup "ReverseDependenciesTest"
       assertEqual "must match reference" ref res
   , testCase "revDisplayInfo" $ do
       ReverseFeature{revDisplayInfo} <- mkRevFeat mtlBeelineLens
-      res <- revDisplayInfo
+      res <- revDisplayInfo ["beeline"]
       assertEqual "beeline preferred is old" (PreferredInfo [] [] Nothing, [mkVersion [0]]) (res "beeline")
   , testCase "getUserNotificationsOnRelease sends notification" $ do
       let userSetIdForPackage arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])
