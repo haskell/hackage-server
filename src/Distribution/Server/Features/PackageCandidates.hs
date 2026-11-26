@@ -385,8 +385,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         guardAuthorised_ [InGroup uploadersGroup]
         regularIndex <- queryGetPackageIndex
         -- ensure that the user has proper auth if the package exists
-        (uid, uresult, tarball) <- extractPackage $ \uid info ->
-                                     processCandidate isRight regularIndex uid info
+        (uid, uresult, tarball, ()) <- extractPackage $ \uid info ->
+                                     maybe (Right ()) Left <$> processCandidate isRight regularIndex uid info
         now <- liftIO getCurrentTime
         let (UploadResult pkg pkgStr _) = uresult
             pkgid      = packageId pkg
