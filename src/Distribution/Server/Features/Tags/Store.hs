@@ -27,9 +27,20 @@ data Store = Store {
   , getPackagesForTag :: forall m. MonadIO m => Tag -> m (Set PackageName)
     -- | The tags of each given package, including packages with none.
   , getTagsForPackages :: forall m. MonadIO m => [PackageName] -> m (Map PackageName (Set Tag))
-  , setPackageTags :: forall m. MonadIO m => PackageName -> Set Tag -> m ()
+    -- | Add and remove tags of a package, applied to its current tags.
+    -- Returns the resulting tags.
+  , addRemovePackageTags :: forall m. MonadIO m => PackageName -> Set Tag -> Set Tag -> m (Set Tag)
+    -- | Add and remove tags as 'addRemovePackageTags' does, and drop the
+    -- given proposed additions and removals from the package's review tags.
+    -- Returns the resulting tags and review tags.
+  , editPackageTags :: forall m. MonadIO m => PackageName -> Set Tag -> Set Tag -> Set Tag -> Set Tag -> m (Set Tag, (Set Tag, Set Tag))
+    -- | Propose adding the given tags the package does not have and removing
+    -- those it has, judged against its current tags. Returns what was
+    -- proposed.
+  , proposePackageTags :: forall m. MonadIO m => PackageName -> Set Tag -> Set Tag -> m (Set Tag, Set Tag)
+    -- | Replace the first tag with the second on every package that has it.
+    -- Returns the changed packages with their resulting tags.
+  , mergePackageTag :: forall m. MonadIO m => Tag -> Tag -> m [(PackageName, Set Tag)]
   , setTagPackages :: forall m. MonadIO m => Tag -> Set PackageName -> m ()
   , addTagAlias :: forall m. MonadIO m => Tag -> Tag -> m ()
-  , insertReviewTags :: forall m. MonadIO m => PackageName -> Set Tag -> Set Tag -> m ()
-  , replaceReviewTags :: forall m. MonadIO m => PackageName -> Set Tag -> Set Tag -> m ()
   }

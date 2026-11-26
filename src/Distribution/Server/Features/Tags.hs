@@ -111,10 +111,18 @@ initTagsFeature ServerEnv{serverStateDir} = do
           Just pkginfo -> do
             let pkgname = packageName pkgid
                 itags = constructImmutableTags . pkgDesc $ pkginfo
+            -- Aliases are kept apart from the tags, so look them up first.
+            -- The update then applies to the package's tags as they are
+            -- by then: add the immutable tags, and swap any tag that has
+            -- an alias for that alias.
             curtags <- Store.getTagsForPackage tagsStore pkgname
-            aliases <- mapM (Store.getTagAlias tagsStore) (itags ++ Set.toList curtags)
-            let newtags = Set.fromList aliases
-            Store.setPackageTags tagsStore pkgname newtags
+            itagAliases <- mapM (Store.getTagAlias tagsStore) itags
+            curAliases <- forM (Set.toList curtags) $ \tag ->
+                            (,) tag <$> Store.getTagAlias tagsStore tag
+            let aliased = [ (tag, alias) | (tag, alias) <- curAliases, tag /= alias ]
+            newtags <- Store.addRemovePackageTags tagsStore pkgname
+                         (Set.fromList (itagAliases ++ map snd aliased))
+                         (Set.fromList (map fst aliased))
             runHook_ updateTag (Set.singleton pkgname, newtags)
 
       return feature
@@ -211,24 +219,11 @@ tagsFeature CoreFeature{ queryLatestPackages }
     mergeTags targetTag deprTag =
         case simpleParse =<< targetTag of
             Just (Tag orig) -> do
-                latestPkgs <- queryLatestPackages
-                let pkgNames = packageName <$> latestPkgs
                 Store.addTagAlias tagsStore (Tag orig) deprTag
-                void $ constructMergedTagIndex (Tag orig) deprTag pkgNames
+                changed <- Store.mergePackageTag tagsStore deprTag (Tag orig)
+                forM_ changed $ \(pn, newTags) ->
+                  runHook_ tagsUpdated (Set.singleton pn, newTags)
             _ -> errBadRequest "Tag not recognised" [MText "Couldn't parse tag. It should be a single tag."]
-
-    -- tags on merging
-    constructMergedTagIndex :: forall m. (Functor m, MonadIO m) => Tag -> Tag -> [PackageName] -> m State.PackageTags
-    constructMergedTagIndex orig depr = foldM addToTags State.emptyPackageTags
-      where addToTags calcTags pn = do
-                pkgTags <- queryTagsForPackage pn
-                if Set.member depr pkgTags
-                    then do
-                        let newTags = Set.delete depr (Set.insert orig pkgTags)
-                        Store.setPackageTags tagsStore pn newTags
-                        runHook_ tagsUpdated (Set.singleton pn, newTags)
-                        return $ State.setTags pn newTags calcTags
-                    else return $ State.setTags pn pkgTags calcTags
 
     putTags :: Maybe String -> Maybe String -> Maybe String -> Maybe String -> PackageName -> ServerPartE ()
     putTags addns delns raddns rdelns pkgname =
@@ -240,11 +235,8 @@ tagsFeature CoreFeature{ queryLatestPackages }
                         user <- guardAuthorised' [AnyKnownUser]
                         if trustainer
                             then do
-                                calcTags <- queryTagsForPackage pkgname
                                 aliases <- mapM (Store.getTagAlias tagsStore) add
-                                revTags <- queryReviewTagsForPackage pkgname
-                                let tagSet = (addTags `Set.union` calcTags) `Set.difference` delTags
-                                    addTags = Set.fromList aliases
+                                let addTags = Set.fromList aliases
                                     delTags = Set.fromList del
                                     rdel' = case simpleParse =<< rdelns of
                                         Just (TagList rdel) -> rdel
@@ -252,21 +244,20 @@ tagsFeature CoreFeature{ queryLatestPackages }
                                     radd' = case simpleParse =<< raddns of
                                         Just (TagList radd) -> radd
                                         Nothing -> []
-                                    addRev = Set.difference (fst revTags) (Set.fromList add `Set.union` Set.fromList radd')
-                                    delRev = Set.difference (snd revTags) (Set.fromList del `Set.union` Set.fromList rdel')
-                                    modifyTags (a, d) = (a `Set.intersection` addRev, d `Set.intersection` delRev)
-                                Store.setPackageTags tagsStore pkgname tagSet
-                                Store.replaceReviewTags tagsStore pkgname addRev delRev
+                                    -- proposals this edit has dealt with
+                                    handledAdds = Set.fromList add `Set.union` Set.fromList radd'
+                                    handledDels = Set.fromList del `Set.union` Set.fromList rdel'
+                                (tagSet, (addRev, delRev)) <-
+                                  Store.editPackageTags tagsStore pkgname addTags delTags handledAdds handledDels
+                                let modifyTags (a, d) = (a `Set.intersection` addRev, d `Set.intersection` delRev)
                                 modifyMemState tagProposalLog (Map.adjust modifyTags pkgname)
                                 runHook_ tagsUpdated (Set.singleton pkgname, tagSet)
                                 return ()
                             else if user
                                 then do
                                     aliases <- mapM (Store.getTagAlias tagsStore) add
-                                    calcTags <- queryTagsForPackage pkgname
-                                    let addTags = Set.fromList aliases `Set.difference` calcTags
-                                        delTags = Set.fromList del `Set.intersection` calcTags
-                                    Store.insertReviewTags tagsStore pkgname addTags delTags
+                                    (addTags, delTags) <-
+                                      Store.proposePackageTags tagsStore pkgname (Set.fromList aliases) (Set.fromList del)
                                     modifyMemState tagProposalLog (Map.insertWith (<>) pkgname (addTags, delTags))
                                     return ()
                                 else errBadRequest "Authorization Error" [MText "You need to be logged in to propose tags"]
