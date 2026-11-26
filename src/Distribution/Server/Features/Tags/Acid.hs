@@ -34,6 +34,9 @@ acidStore stateDir = do
         , Store.proposePackageTags = \pkgname add del -> updateState tagsState (State.ProposePackageTags pkgname add del)
         , Store.mergePackageTag = \depr orig -> updateState tagsState (State.MergePackageTag depr orig)
         , Store.setTagPackages = \tag pkgs -> updateState tagsState (State.SetTagPackages tag pkgs)
+        , Store.setPackageTag = \pkgname tag on ->
+            if on then void (updateState tagsState (State.AddPackageTag pkgname tag))
+                  else void (updateState tagsState (State.RemovePackageTag pkgname tag))
         , Store.addTagAlias = \tag alias -> updateState tagAlias (State.AddTagAlias tag alias)
         }
     , Store.backendState = [ abstractAcidStateComponent tagsState

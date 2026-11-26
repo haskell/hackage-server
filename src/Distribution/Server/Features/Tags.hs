@@ -34,6 +34,7 @@ import qualified Distribution.SPDX as SPDX
 
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Maybe (fromMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Function (fix)
@@ -64,6 +65,10 @@ data TagsFeature = TagsFeature {
     -- and license tags, as well as package categories on
     -- initial import.
     setCalculatedTag :: Tag -> Set PackageName -> IO (),
+
+    -- | Give one package a calculated tag, or take it away (when False),
+    -- leaving other packages' tags alone.
+    setCalculatedTagFor :: Tag -> PackageName -> Bool -> IO (),
 
     tagProposalLog :: MemState (Map PackageName (Set Tag, Set Tag)),
 
@@ -204,6 +209,13 @@ tagsFeature CoreFeature{ queryLatestPackages }
       modifyMemState calculatedTags (State.setTag tag pkgs)
       Store.setTagPackages tagsStore tag pkgs
       runHook_ tagsUpdated (pkgs, Set.singleton tag)
+
+    setCalculatedTagFor :: Tag -> PackageName -> Bool -> IO ()
+    setCalculatedTagFor tag pkgname on = do
+      let change = if on then State.addTag else State.removeTag
+      modifyMemState calculatedTags (\tags -> fromMaybe tags (change pkgname tag tags))
+      Store.setPackageTag tagsStore pkgname tag on
+      runHook_ tagsUpdated (Set.singleton pkgname, Set.singleton tag)
 
     withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPartE a) -> ServerPartE a
     withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of

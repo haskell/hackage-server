@@ -42,5 +42,7 @@ data Store = Store {
     -- Returns the changed packages with their resulting tags.
   , mergePackageTag :: forall m. MonadIO m => Tag -> Tag -> m [(PackageName, Set Tag)]
   , setTagPackages :: forall m. MonadIO m => Tag -> Set PackageName -> m ()
+    -- | Give a package a tag, or take it away (when False).
+  , setPackageTag :: forall m. MonadIO m => PackageName -> Tag -> Bool -> m ()
   , addTagAlias :: forall m. MonadIO m => Tag -> Tag -> m ()
   }

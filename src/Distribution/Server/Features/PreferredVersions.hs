@@ -164,6 +164,12 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
       pkgs <- Store.getAllDeprecated preferredStore
       setCalculatedTag (Tag "deprecated") (Map.keysSet pkgs)
 
+    -- Change only this package's tag, rather than recompute the tag for all
+    -- packages from a read that a concurrent change could make stale.
+    updateDeprecatedTagFor :: PackageName -> Maybe [PackageName] -> IO ()
+    updateDeprecatedTagFor pkgname deprs =
+      setCalculatedTagFor (Tag "deprecated") pkgname (isJust deprs)
+
     CoreResource{..} = coreResource
     versionsResource = fix $ \r -> VersionsResource
       { preferredResource        = resourceAt "/packages/preferred.:format"
@@ -265,7 +271,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     updatePackageDeprecation pkgname deprs = liftIO $ do
       Store.setDeprecatedFor preferredStore pkgname deprs
       runHook_ deprecatedHook (pkgname, deprs)
-      updateDeprecatedTags
+      updateDeprecatedTagFor pkgname deprs
 
     withPackageVersion :: PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a
     withPackageVersion pkgid func = do
@@ -367,7 +373,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
         doUpdates deprs = do
             Store.setDeprecatedFor preferredStore pkgname deprs
             runHook_ deprecatedHook (pkgname, deprs)
-            liftIO updateDeprecatedTags
+            liftIO (updateDeprecatedTagFor pkgname deprs)
 
     renderPrefInfo :: PreferredInfo -> PreferredRender
     renderPrefInfo pref = PreferredRender {
