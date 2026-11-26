@@ -25,8 +25,7 @@ acidStore stateDir = do
       withUsers f = f <$> queryState usersState Acid.GetUserDb
   pure Store.Backend {
       Store.backendStore = Store.Store {
-          Store.getUsers = queryState usersState Acid.GetUserDb
-        , Store.lookupUserId = \uid -> withUsers (Acid.lookupUserId uid)
+          Store.lookupUserId = \uid -> withUsers (Acid.lookupUserId uid)
         , Store.lookupUserName = \uname -> withUsers (Acid.lookupUserName uname)
         , Store.lookupUserIds = \uids -> withUsers $ \users ->
             Map.fromList [ (uid, uinfo) | uid <- uids, Just uinfo <- [Acid.lookupUserId uid users] ]
@@ -53,6 +52,7 @@ acidStore stateDir = do
     , Store.backendState = [ abstractAcidStateComponent usersState
                            , abstractAcidStateComponent adminsState
                            ]
+    , Store.backendAcidUserDb = queryState usersState Acid.GetUserDb
     }
 
 usersStateComponent :: FilePath -> IO (StateComponent AcidState Acid.Users)

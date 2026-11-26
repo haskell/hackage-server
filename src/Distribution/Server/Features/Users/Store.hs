@@ -23,11 +23,13 @@ import Data.Text (Text)
 data Backend = Backend {
     backendStore :: Store
   , backendState :: [AbstractStateComponent]
+    -- | The whole acid-state user database. Only the migration of old acid
+    -- core state needs this, not the server itself.
+  , backendAcidUserDb :: IO Users
   }
 
 data Store = Store {
-    getUsers :: forall m. MonadIO m => m Users
-  , lookupUserId :: forall m. MonadIO m => UserId -> m (Maybe UserInfo)
+    lookupUserId :: forall m. MonadIO m => UserId -> m (Maybe UserInfo)
   , lookupUserName :: forall m. MonadIO m => UserName -> m (Maybe (UserId, UserInfo))
     -- | The given users that exist.
   , lookupUserIds :: forall m. MonadIO m => [UserId] -> m (Map UserId UserInfo)

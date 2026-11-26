@@ -71,7 +71,8 @@ data UserFeature = UserFeature {
     -- | A hook to override the default authentication error in particular
     -- circumstances.
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
-    -- | Retrieves the entire user base.
+    -- | Retrieves the entire acid-state user base. Only the migration of old
+    -- acid core state needs this.
     queryGetUserDb    :: forall m. MonadIO m => m Acid.Users,
     queryLookupUserId :: forall m. MonadIO m => UserId -> m (Maybe UserInfo),
     queryLookupUserName :: forall m. MonadIO m => UserName -> m (Maybe (UserId, UserInfo)),
@@ -289,7 +290,7 @@ userFeature :: Templates
             -> GroupResource
             -> ServerEnv
             -> (UserFeature, UserGroup)
-userFeature templates UserStore.Backend{backendStore = userStore, backendState = userStateComponents}
+userFeature templates UserStore.Backend{backendStore = userStore, backendState = userStateComponents, backendAcidUserDb}
              groupIndex userAdded authFailHook groupChangedHook
              adminGroup adminResource userFeatureServerEnv
   = (UserFeature {..}, adminGroupDesc)
@@ -378,7 +379,7 @@ userFeature templates UserStore.Backend{backendStore = userStore, backendState =
     --
 
     queryGetUserDb :: MonadIO m => m Acid.Users
-    queryGetUserDb = UserStore.getUsers userStore
+    queryGetUserDb = liftIO backendAcidUserDb
 
     queryLookupUserId :: MonadIO m => UserId -> m (Maybe UserInfo)
     queryLookupUserId = UserStore.lookupUserId userStore
