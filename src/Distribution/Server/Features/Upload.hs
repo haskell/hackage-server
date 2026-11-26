@@ -279,14 +279,23 @@ uploadFeature ServerEnv{serverBlobStore = store}
             uploadinfo = (now, uid)
             -- what processUpload checked against; the add fails if it changed
             checked    = map packageId (PackageIndex.lookupPackageNameModuloCase pkgIndex (packageName pkgid))
+            existedBefore = packageExists pkgIndex pkgid
+        -- For a new package, claim its maintainers group in one step before
+        -- adding it, so that someone uploading a candidate for the same name
+        -- at the same time cannot become a maintainer as well.
+        unless existedBefore $ do
+            claimed <- liftIO $ claimPackageMaintainers (packageName pkgid) uid
+            unless claimed $
+              errForbidden "Upload failed"
+                [MText $ "Someone else became a maintainer of '"
+                      ++ display (packageName pkgid) ++ "' while this "
+                      ++ "upload was being checked."]
         addResult <- updateAddPackage pkgid cabalfile uploadinfo (Just tarball) checked
         case addResult of
           PackageAdded -> do
-             -- make package maintainers group for new package
-            let existedBefore = packageExists pkgIndex pkgid
+             -- announce the new package's maintainers group, claimed above
             when (not existedBefore) $ do
                 let group = maintainersGroup (packageName pkgid)
-                liftIO $ addUserToGroup group uid
                 runHook_ groupChangedHook (groupDesc group, True,uid,uid,"initial upload")
 
             runHook_ packageUploaded pkgid
