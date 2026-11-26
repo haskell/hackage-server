@@ -9,14 +9,16 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.TarIndexCache.Store
 import Distribution.Server.Features.TarIndexCache.State as Acid
 
+import qualified Data.Map as Map
+
 acidStore :: FilePath -> IO Backend
 acidStore stateDir = do
   state <- tarIndexCacheStateComponent stateDir
   let st = stateHandle state
   pure Backend {
       backendStore = Store {
-          getTarIndexCache     = query st Acid.GetTarIndexCache
-        , replaceTarIndexCache  = update st . Acid.ReplaceTarIndexCache
+          allTarIndices         = Map.toList . Acid.tarIndexCacheMap <$> query st Acid.GetTarIndexCache
+        , clearTarIndices       = update st (Acid.ReplaceTarIndexCache Acid.initialTarIndexCache)
         , findTarIndex          = query st . Acid.FindTarIndex
         , setTarIndex           = \tar index -> update st (Acid.SetTarIndex tar index)
         }
