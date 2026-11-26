@@ -60,6 +60,12 @@ data UploadFeature = UploadFeature {
     -- | The group of maintainers for a given package.
     maintainersGroup   :: PackageName -> UserGroup,
 
+    -- | Make the user the first maintainer of a package that has none yet.
+    -- Returns whether the user is now a maintainer (also true if they
+    -- already were). Unlike checking the group and then adding to it, two
+    -- users cannot both claim the same package this way.
+    claimPackageMaintainers :: PackageName -> Users.UserId -> IO Bool,
+
     -- | Takes an upload request and, depending on the result of the
     -- passed-in function, either commits the uploaded tarball to the blob
     -- storage or throws it away and yields an error.
@@ -169,6 +175,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
    = ( UploadFeature {..}
      , trusteesGroupDescription, uploadersGroupDescription, maintainersGroupDescription)
    where
+    claimPackageMaintainers :: PackageName -> Users.UserId -> IO Bool
+    claimPackageMaintainers = UploadStore.claimPackageMaintainers uploadStore
+
     uploadFeatureInterface = (emptyHackageFeature "upload") {
         featureDesc = "Support for package uploads, and define groups for trustees, uploaders, and package maintainers"
       , featureResources =

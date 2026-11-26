@@ -41,6 +41,15 @@ modifyPackageMaintainers name func = State.modify (\pm -> pm {maintainers = alte
 addPackageMaintainer :: PackageName -> UserId -> Update PackageMaintainers ()
 addPackageMaintainer name uid = modifyPackageMaintainers name (Group.insert uid)
 
+-- | Add a maintainer to a package that has none yet. Returns whether the
+-- user is now a maintainer, which they also are if they already were.
+claimPackageMaintainers :: PackageName -> UserId -> Update PackageMaintainers Bool
+claimPackageMaintainers name uid = do
+    current <- fromMaybe Group.empty . Map.lookup name <$> State.gets maintainers
+    if Group.null current || uid `Group.member` current
+      then modifyPackageMaintainers name (Group.insert uid) >> return True
+      else return False
+
 removePackageMaintainer :: PackageName -> UserId -> Update PackageMaintainers ()
 removePackageMaintainer name uid = modifyPackageMaintainers name (Group.delete uid)
 
@@ -59,6 +68,7 @@ makeAcidic ''PackageMaintainers ['getPackageMaintainers
                                 ,'setPackageMaintainers
                                 ,'replacePackageMaintainers
                                 ,'allPackageMaintainers
+                                ,'claimPackageMaintainers
                                 ]
 
 -------------------------------- Trustee list

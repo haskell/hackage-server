@@ -404,9 +404,16 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         checkCandidate "Upload failed" uid regularIndex candidate >>= \case
             Just failed -> throwError failed
             Nothing -> do
+                -- Claim the maintainers group in one step, rather than add
+                -- to it after checking it above, so that two users cannot
+                -- both become the first maintainers of a new package.
+                claimed <- liftIO $ claimPackageMaintainers (packageName pkgid) uid
+                unless claimed $
+                  errForbidden "Upload failed"
+                    [MText $ "Someone else became a maintainer of '"
+                          ++ display (packageName pkgid) ++ "' while this "
+                          ++ "candidate was being checked."]
                 Store.addCandidate candidatesStore candidate
-                let group = maintainersGroup (packageName pkgid)
-                liftIO $ Group.addUserToGroup group uid
                 return candidate
 
     -- | Helper function for uploadCandidate.

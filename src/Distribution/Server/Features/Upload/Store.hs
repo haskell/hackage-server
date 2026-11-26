@@ -28,4 +28,7 @@ data Store = Store {
   , getPackageMaintainers :: forall m. MonadIO m => PackageName -> m UserIdSet
   , addPackageMaintainer :: forall m. MonadIO m => PackageName -> UserId -> m ()
   , removePackageMaintainer :: forall m. MonadIO m => PackageName -> UserId -> m ()
+    -- | Add a maintainer to a package that has none yet. Returns whether the
+    -- user is now a maintainer, which they also are if they already were.
+  , claimPackageMaintainers :: forall m. MonadIO m => PackageName -> UserId -> m Bool
   }
