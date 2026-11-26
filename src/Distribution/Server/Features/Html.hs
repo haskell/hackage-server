@@ -1175,9 +1175,7 @@ mkHtmlCandidates :: ServerEnv
                  -> Templates
                  -> HtmlCandidates
 mkHtmlCandidates ServerEnv{..} utilities@HtmlUtilities{..}
-                 CoreFeature{ coreResource = CoreResource{packageInPath}
-                            , queryGetPackageIndex
-                            }
+                 CoreFeature{ coreResource = CoreResource{packageInPath} }
                  VersionsFeature{ queryGetPreferredInfo }
                  UploadFeature{..}
                  DocumentationFeature{documentationResource, queryDocumentation,..}
@@ -1381,8 +1379,7 @@ mkHtmlCandidates ServerEnv{..} utilities@HtmlUtilities{..}
       uid <- guardAuthorisedAsMaintainer (packageName candidate)
 
       let pkgid = packageId candidate
-      packages <- queryGetPackageIndex
-      checkPublish uid packages candidate >>= \case
+      checkPublish uid candidate >>= \case
           Just err -> throwError err
           Nothing  -> do
               return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"
