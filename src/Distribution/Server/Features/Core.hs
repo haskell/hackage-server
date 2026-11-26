@@ -308,53 +308,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
 
     return $ \users -> do
 
-      -- One-off complex migration
-      --
-      -- As part of the support for TUF we made two changes to the state:
-      --
-      -- \* We made the index append-only, and added a package update log
-      --   to support this.
-      -- \* We changed the PkgTarball data structure to contain BlobInfo rather
-      --   rather than BlobId; that is, we additionally record the length and
-      --   SHA256 hash for all blobs.
-      --
-      -- Acid.Additionally, we now need `package.json` files for all versions of all
-      -- packages. For new packages we add these when the package is uploaded,
-      -- but for previously uploaded packages we need to add them.
-      --
-      -- Migrating the package tarball info and introducing metadata for
-      -- pre-existing packages requires a full search through the package DB.
-      -- Fortunately, since all these changes were introduced at the same time,
-      -- we can use the check for the existence of the update log to see if we
-      -- need any other kind of migration.
-
-      migrateUpdateLog <- (isLeft . Acid.packageUpdateLog) <$>
-                             Store.getPackagesState packagesStore
-      when migrateUpdateLog $ do
-        -- Migrate Acid.PackagesState (introduce package update log)
-        logTiming verbosity "migrating package update log" $ do
-          userdb <- queryGetUserDb users
-          Store.migrateAddUpdateLog packagesStore userdb
-
-        -- Migrate PkgTarball
-        logTiming verbosity "migrating PkgTarball" $
-          Store.migratePackageTarballs packagesStore
-
-        -- Create a checkpoint
-        --
-        -- Creating a checkpoint after the migration is important for two
-        -- reasons: one, the migration is expensive and we don't want to  repeat
-        -- it. But there is a second, more important reason. Until we have
-        -- migrated we do not have a package log. This means that if we have a
-        -- DB with no checkpoints at all but some old style (pre introduction of
-        -- the package log) transactions as well as some new style transactions
-        -- (post introduction of the package log), those new transactions will
-        -- not be updating the package log. Since migration does not happen
-        -- until _after_ replaying all those transactions, this means we would
-        -- reconstruct the package log rather than use the package log as it was
-        -- constructed in the first place, and we might potentially lose
-        -- information.
-        Store.createStoreCheckpoint packagesStore
+      Store.backendMigrate packagesBackend (queryGetUserDb users)
 
       rec let (feature, getIndexTarball)
                 = coreFeature env users

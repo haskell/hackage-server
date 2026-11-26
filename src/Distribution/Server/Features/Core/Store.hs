@@ -20,8 +20,12 @@ import Data.Map (Map)
 import Data.Time.Clock (UTCTime)
 
 data Backend = Backend {
-    backendStore :: Store
-  , backendState :: [AbstractStateComponent]
+    backendStore   :: Store
+  , backendState   :: [AbstractStateComponent]
+    -- | Bring existing state up to date, given a way to get the user
+    -- database (only needed by some migrations). Run once at startup,
+    -- before the feature is used.
+  , backendMigrate :: IO Users -> IO ()
   }
 
 data Store = Store {
@@ -47,9 +51,6 @@ data Store = Store {
   , setPackageUploader     :: forall m. MonadIO m => PackageId -> UserId -> m (Maybe (PkgInfo, PkgInfo))
   , setPackageUploadTime   :: forall m. MonadIO m => PackageId -> UTCTime -> m (Maybe (PkgInfo, PkgInfo))
   , addOtherIndexEntry     :: forall m. MonadIO m => TarIndexEntry -> m ()
-  , migrateAddUpdateLog    :: forall m. MonadIO m => Users -> m ()
-  , migratePackageTarballs :: IO ()
-  , createStoreCheckpoint  :: IO ()
   }
 
 -- | Package versions ordered for the recent uploads and recent revisions
