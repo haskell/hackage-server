@@ -50,6 +50,15 @@ setNotifyTime t = do
     NotifyData (m,_) <- get
     put $! NotifyData (m,t)
 
+-- | Move the notification time from the first time to the second, but only if
+-- it is still the first. Returns whether it did.
+claimNotifyWindow :: UTCTime -> UTCTime -> Update NotifyData Bool
+claimNotifyWindow expected t = do
+    NotifyData (m,current) <- get
+    if current == expected
+      then (put $! NotifyData (m,t)) >> return True
+      else return False
+
 lookupNotifyPref :: UserId -> Query NotifyData (Maybe NotifyPref)
 lookupNotifyPref uid = do
     NotifyData (m,_) <- ask
@@ -95,6 +104,9 @@ instance IsAcidic NotifyData where
          safeCopyMethodSerialiser,
        UpdateEvent
          (\ (SetNotifyTime arg_aDhN) -> setNotifyTime arg_aDhN)
+         safeCopyMethodSerialiser,
+       UpdateEvent
+         (\ (ClaimNotifyWindow expected t) -> claimNotifyWindow expected t)
          safeCopyMethodSerialiser]
 data GetNotifyData = GetNotifyData
 instance SafeCopy GetNotifyData where
@@ -172,3 +184,20 @@ instance Data.Acid.Compat.Method SetNotifyTime where
   methodTag = movedMethodTag "Distribution.Server.Features.UserNotify"
 instance UpdateEvent SetNotifyTime
 
+
+-- Added after the move, by hand in the same style and with the same tag
+-- prefix as the others.
+data ClaimNotifyWindow = ClaimNotifyWindow UTCTime UTCTime
+instance SafeCopy ClaimNotifyWindow where
+  putCopy (ClaimNotifyWindow expected t)
+    = contain
+        (do safePut expected
+            safePut t
+            return ())
+  getCopy = contain (ClaimNotifyWindow <$> safeGet <*> safeGet)
+  errorTypeName _ = "Data.SafeCopy.SafeCopy.SafeCopy ClaimNotifyWindow"
+instance Data.Acid.Compat.Method ClaimNotifyWindow where
+  type MethodResult ClaimNotifyWindow = Bool
+  type MethodState ClaimNotifyWindow = NotifyData
+  methodTag = movedMethodTag "Distribution.Server.Features.UserNotify"
+instance UpdateEvent ClaimNotifyWindow

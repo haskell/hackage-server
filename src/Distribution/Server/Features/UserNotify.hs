@@ -479,6 +479,14 @@ userNotifyFeature UserFeature{..}
     notifyCronAction = do
         (notifyPrefs, lastNotifyTime) <- Store.getNotificationData notifyStore
         now <- getCurrentTime
+        -- Claim the window before sending, so that a concurrent run (say, from
+        -- another server on the same store) skips it rather than sending the
+        -- same notifications again. If sending then fails, those are lost.
+        claimed <- Store.claimNotifyWindow notifyStore lastNotifyTime now
+        when claimed $
+          sendNotifications notifyPrefs lastNotifyTime now
+
+    sendNotifications notifyPrefs lastNotifyTime now = do
         let trimLastTime = if diffUTCTime now lastNotifyTime > (60*60*6) -- cap at 6hr
                              then addUTCTime (negate $ (60*60*6)) now
                              else lastNotifyTime -- for testing you can increase this
@@ -514,8 +522,6 @@ userNotifyFeature UserFeature{..}
         emails <-
           getNotificationEmails userFeatureServerEnv userDetailsFeature userIdToName templates notifications
         mapM_ sendNotifyEmailAndDelay emails
-
-        Store.setNotifyTime notifyStore now
 
     collectAdminActions earlier now = do
         aLog <- queryGetAdminLog
