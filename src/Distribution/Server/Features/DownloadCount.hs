@@ -202,17 +202,17 @@ downloadFeature CoreFeature{}
 
     checkDayRollover :: IO ()
     checkDayRollover = do
-        today  <- getToday
-        today' <- Store.recordedToday inMemStore
+        today <- getToday
 
         --TODO: this should be a daily cron job rather than being polled by the
         -- flush loop: the rollover does a lot of I/O (it rewrites the whole
         -- on-disk history) and it holds up the flush of the counts while it
         -- runs.
-        when (today /= today') $ do
-          -- For the first flush each day we reset the in-memory stats and..
-          inMemStats <- Store.getInMemStats inMemStore
-          Store.replaceInMemStats inMemStore $ initInMemStats today
+
+        -- For the first flush each day we reset the in-memory stats and..
+        mYesterday <- Store.rollOverDay inMemStore today
+        forM_ mYesterday $ \(day, counts) -> do
+          let inMemStats = InMemStats day counts
           -- we can discard the large eventlog by writing a small checkpoint
           Store.checkpointInMemStats inMemStore
 

@@ -262,6 +262,17 @@ replaceInMemStats = put
 recordedToday :: Query InMemStats Day
 recordedToday = asks inMemToday
 
+-- | Start counting a new day, unless the stats are already for the given
+-- day. Returns the previous day's stats if it did.
+rollOverInMemStats :: Day -> Update InMemStats (Maybe InMemStats)
+rollOverInMemStats today = do
+  st <- get
+  if inMemToday st == today
+    then return Nothing
+    else do
+      put $! initInMemStats today
+      return (Just st)
+
 -- | Record a single download.
 --
 -- Superseded by 'registerDownloads', which coalesces many downloads into a
@@ -285,4 +296,5 @@ makeAcidic ''InMemStats [ 'getInMemStats
                         , 'recordedToday
                         , 'registerDownload
                         , 'registerDownloads
+                        , 'rollOverInMemStats
                         ]

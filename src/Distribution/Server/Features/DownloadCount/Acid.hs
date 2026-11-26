@@ -14,9 +14,9 @@ acidStore stateDir = do
   inMemState <- inMemStateComponent stateDir
   pure Store.Backend {
       Store.backendStore = Store.Store {
-          Store.recordedToday = queryState inMemState State.RecordedToday
-        , Store.getInMemStats = queryState inMemState State.GetInMemStats
-        , Store.replaceInMemStats = \stats -> updateState inMemState (State.ReplaceInMemStats stats)
+          Store.rollOverDay = \today ->
+            fmap (\(State.InMemStats day counts) -> (day, counts))
+              <$> updateState inMemState (State.RollOverInMemStats today)
         , Store.registerDownloads = \pkgs -> updateState inMemState (State.RegisterDownloads pkgs)
         , Store.checkpointInMemStats = liftIO (createCheckpoint (stateHandle inMemState))
         }
