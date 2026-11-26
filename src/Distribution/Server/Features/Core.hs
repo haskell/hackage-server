@@ -87,6 +87,10 @@ data CoreFeature = CoreFeature {
     -- do not exist.
     queryLookupPackageNames :: forall m. MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo]),
 
+    -- | Retrieves every version of every package whose name equals the
+    -- given one ignoring case, for checking uploads against case clashes.
+    queryLookupPackageNameModuloCase :: forall m. MonadIO m => PackageName -> m [PkgInfo],
+
     -- | Retrieves the latest version of every package.
     queryLatestPackages :: forall m. MonadIO m => m [PkgInfo],
 
@@ -500,6 +504,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     queryLookupPackageNames :: MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo])
     queryLookupPackageNames = Store.lookupPackageNames packagesStore
+
+    queryLookupPackageNameModuloCase :: MonadIO m => PackageName -> m [PkgInfo]
+    queryLookupPackageNameModuloCase = Store.lookupPackageNameModuloCase packagesStore
 
     queryLatestPackages :: MonadIO m => m [PkgInfo]
     queryLatestPackages = Store.latestPackages packagesStore

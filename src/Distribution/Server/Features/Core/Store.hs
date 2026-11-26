@@ -36,6 +36,9 @@ data Store = Store {
   , lookupPackageId        :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
     -- | The given packages that exist, with all their versions.
   , lookupPackageNames     :: forall m. MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo])
+    -- | Every version of every package whose name equals the given one
+    -- ignoring case, including the given name itself if it exists.
+  , lookupPackageNameModuloCase :: forall m. MonadIO m => PackageName -> m [PkgInfo]
   , latestPackages         :: forall m. MonadIO m => m [PkgInfo]
     -- | Every package name, in ascending order.
   , allPackageNames        :: forall m. MonadIO m => m [PackageName]

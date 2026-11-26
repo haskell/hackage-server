@@ -36,6 +36,7 @@ acidStore env verbosity freshDB stateDir = do
                                                   | pkgname <- pkgnames
                                                   , let pkgs = PackageIndex.lookupPackageName index pkgname
                                                   , not (null pkgs) ]
+        , lookupPackageNameModuloCase = \pkgname -> withIndex (`PackageIndex.lookupPackageNameModuloCase` pkgname)
         , latestPackages         = withIndex (map NE.last . PackageIndex.allPackagesByNameNE)
         , allPackageNames        = withIndex PackageIndex.allPackageNames
         , allPackageIds          = withIndex (map packageId . PackageIndex.allPackages)
