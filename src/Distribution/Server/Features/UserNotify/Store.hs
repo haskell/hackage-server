@@ -5,7 +5,7 @@ module Distribution.Server.Features.UserNotify.Store
   , Store(..)
   ) where
 
-import qualified Distribution.Server.Features.UserNotify.Acid as Acid
+import Distribution.Server.Features.UserNotify.Types (NotifyPref)
 import Distribution.Server.Framework (AbstractStateComponent)
 import Distribution.Server.Users.Types (UserId)
 
@@ -19,8 +19,8 @@ data Backend = Backend {
   }
 
 data Store = Store {
-    lookupNotifyPref :: forall m. MonadIO m => UserId -> m (Maybe Acid.NotifyPref)
-  , addNotifyPref :: forall m. MonadIO m => UserId -> Acid.NotifyPref -> m ()
-  , getNotificationData :: forall m. MonadIO m => m (Map UserId Acid.NotifyPref, UTCTime)
+    lookupNotifyPref :: forall m. MonadIO m => UserId -> m (Maybe NotifyPref)
+  , addNotifyPref :: forall m. MonadIO m => UserId -> NotifyPref -> m ()
+  , getNotificationData :: forall m. MonadIO m => m (Map UserId NotifyPref, UTCTime)
   , setNotifyTime :: forall m. MonadIO m => UTCTime -> m ()
   }

@@ -1,7 +1,7 @@
 module Distribution.Server.Features.UserNotify.Backup where
 
 import qualified Distribution.Server.Features.UserNotify.Acid as Acid
-import Distribution.Server.Features.UserNotify.Acid (NotifyPref(..))
+import Distribution.Server.Features.UserNotify.Types (NotifyPref(..))
 import Prelude
 
 import Distribution.Server.Users.Types (UserId)
@@ -24,7 +24,7 @@ import Text.CSV (CSV, Record)
 userNotifyBackup :: RestoreBackup Acid.NotifyData
 userNotifyBackup = go []
   where
-   go :: [(UserId, Acid.NotifyPref)] -> RestoreBackup Acid.NotifyData
+   go :: [(UserId, NotifyPref)] -> RestoreBackup Acid.NotifyData
    go st =
      RestoreBackup {
        restoreEntry = \entry -> case entry of
@@ -39,10 +39,10 @@ userNotifyBackup = go []
         return (Acid.NotifyData (Map.fromList st, posixSecondsToUTCTime 0)) -- unixstart time
      }
 
-importNotifyPref :: CSV -> Restore [(UserId, Acid.NotifyPref)]
+importNotifyPref :: CSV -> Restore [(UserId, NotifyPref)]
 importNotifyPref = sequence . map fromRecord . drop 2
   where
-    fromRecord :: Record -> Restore (UserId, Acid.NotifyPref)
+    fromRecord :: Record -> Restore (UserId, NotifyPref)
     fromRecord [uid,o,rr,ul,g,db,t,dep1,dep2] = do
         puid <- parseText "user id" uid
         po <- parseRead "notify opt out" o
@@ -53,7 +53,7 @@ importNotifyPref = sequence . map fromRecord . drop 2
         pt <- parseRead "notify pending tags" t
         pdep1 <- parseRead "notify dependency for maintained" dep1
         pdep2 <- parseRead "notify dependency trigger bounds" dep2
-        return (puid, Acid.NotifyPref po prr pul pg pd pt pdep1 pdep2)
+        return (puid, NotifyPref po prr pul pg pd pt pdep1 pdep2)
     fromRecord x = fail $ "Error processing notify record: " ++ show x
 
 notifyDataToCSV :: BackupType -> Acid.NotifyData -> CSV
