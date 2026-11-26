@@ -21,6 +21,8 @@ data Store = Store {
     getSignupResetInfos       :: forall m. MonadIO m => m [SignupResetInfo]
   , lookupSignupResetInfo    :: forall m. MonadIO m => Nonce -> m (Maybe SignupResetInfo)
   , addSignupResetInfo       :: forall m. MonadIO m => Nonce -> SignupResetInfo -> m Bool
-  , deleteSignupResetInfo    :: forall m. MonadIO m => Nonce -> m ()
+    -- | Delete a nonce, returning what it held if it was there. Only one
+    -- caller can get it, so a nonce cannot be used twice.
+  , takeSignupResetInfo      :: forall m. MonadIO m => Nonce -> m (Maybe SignupResetInfo)
   , deleteExpiredResetInfos  :: forall m. MonadIO m => UTCTime -> m ()
   }

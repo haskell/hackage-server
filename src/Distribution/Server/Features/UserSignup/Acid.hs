@@ -32,7 +32,7 @@ acidStore stateDir = do
             >>= \(SignupResetTable tbl) -> return (Map.elems tbl)
         , Store.lookupSignupResetInfo = \nonce -> queryState signupResetState (LookupSignupResetInfo nonce)
         , Store.addSignupResetInfo = \nonce info -> updateState signupResetState (AddSignupResetInfo nonce info)
-        , Store.deleteSignupResetInfo = \nonce -> updateState signupResetState (DeleteSignupResetInfo nonce)
+        , Store.takeSignupResetInfo = \nonce -> updateState signupResetState (TakeSignupResetInfo nonce)
         , Store.deleteExpiredResetInfos = \expiry -> updateState signupResetState (DeleteAllExpired expiry)
         }
     , Store.backendState = [abstractAcidStateComponent signupResetState]
@@ -81,6 +81,13 @@ deleteSignupResetInfo nonce = do
     SignupResetTable tbl <- get
     put $! SignupResetTable (Map.delete nonce tbl)
 
+-- | Delete a nonce, returning what it held if it was there.
+takeSignupResetInfo :: Nonce -> Update SignupResetTable (Maybe SignupResetInfo)
+takeSignupResetInfo nonce = do
+    SignupResetTable tbl <- get
+    put $! SignupResetTable (Map.delete nonce tbl)
+    return (Map.lookup nonce tbl)
+
 deleteAllExpired :: UTCTime -> Update SignupResetTable ()
 deleteAllExpired expireTime =
     modify $ \(SignupResetTable tbl) ->
@@ -127,6 +134,9 @@ instance IsAcidic SignupResetTable where
          safeCopyMethodSerialiser,
        UpdateEvent
          (\ (DeleteAllExpired arg_a30zG) -> deleteAllExpired arg_a30zG)
+         safeCopyMethodSerialiser,
+       UpdateEvent
+         (\ (TakeSignupResetInfo nonce) -> takeSignupResetInfo nonce)
          safeCopyMethodSerialiser]
 data GetSignupResetTable = GetSignupResetTable
 instance SafeCopy GetSignupResetTable where
@@ -212,3 +222,20 @@ instance Method DeleteAllExpired where
   type MethodState DeleteAllExpired = SignupResetTable
   methodTag = movedMethodTag "Distribution.Server.Features.UserSignup"
 instance UpdateEvent DeleteAllExpired
+
+-- Added after the move, by hand in the same style and with the same tag
+-- prefix as the others.
+newtype TakeSignupResetInfo = TakeSignupResetInfo Nonce
+instance SafeCopy TakeSignupResetInfo where
+  putCopy (TakeSignupResetInfo nonce)
+    = contain
+        (do safePut nonce
+            return ())
+  getCopy = contain (TakeSignupResetInfo <$> safeGet)
+  errorTypeName _
+    = "Data.SafeCopy.SafeCopy.SafeCopy TakeSignupResetInfo"
+instance Method TakeSignupResetInfo where
+  type MethodResult TakeSignupResetInfo = Maybe SignupResetInfo
+  type MethodState TakeSignupResetInfo = SignupResetTable
+  methodTag = movedMethodTag "Distribution.Server.Features.UserSignup"
+instance UpdateEvent TakeSignupResetInfo
