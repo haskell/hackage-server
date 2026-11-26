@@ -48,7 +48,6 @@ import           Distribution.PackageDescription
 import           Distribution.Server.Packages.Types
 import           Distribution.Server.Framework.MemSize
 import           Distribution.Server.Features.PreferredVersions (maybeBestVersion)
-import           Distribution.Server.Features.PreferredVersions.State
 import           Distribution.Server.Features.PreferredVersions.Types
 import           Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex

@@ -7,6 +7,7 @@ module Distribution.Server.Features.PreferredVersions.Backup
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Features.PreferredVersions.State
+import Distribution.Server.Features.PreferredVersions.Types
 import Data.Version (Version(..), showVersion)
 import Distribution.Text (display, simpleParse)
 import Distribution.Package (PackageName)

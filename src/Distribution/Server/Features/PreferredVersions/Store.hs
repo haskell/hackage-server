@@ -6,7 +6,7 @@ module Distribution.Server.Features.PreferredVersions.Store
   ) where
 
 import Distribution.Package (PackageName)
-import Distribution.Server.Features.PreferredVersions.State (PreferredInfo)
+import Distribution.Server.Features.PreferredVersions.Types (PreferredInfo)
 import Distribution.Server.Framework (AbstractStateComponent)
 import Distribution.Version (Version, VersionRange)
 
