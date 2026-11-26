@@ -235,7 +235,7 @@ htmlFeature :: ServerEnv
 
 htmlFeature env@ServerEnv{..}
             user
-            core@CoreFeature{queryGetPackageIndex}
+            core@CoreFeature{queryLatestPackages}
             packages upload
             candidates versions
             revf@ReverseFeature{..}
@@ -363,8 +363,8 @@ htmlFeature env@ServerEnv{..}
 
     packageIndex :: IO Response
     packageIndex = do
-       index <- queryGetPackageIndex
-       let htmlIndex = toResponse $ Resource.XHtml $ Pages.packageIndex index
+       pkgs <- queryLatestPackages
+       let htmlIndex = toResponse $ Resource.XHtml $ Pages.packageIndex pkgs
        return htmlIndex
 
     packagesPage :: IO Response
