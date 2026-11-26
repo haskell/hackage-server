@@ -14,6 +14,7 @@ module Distribution.Server.Features.Core.State (
   , AddPackage3(..)
   , AddPackage4(..)
   , AddPackageRevision2(..)
+  , AddPackageRevisionIfLatest(..)
   , AddPackageTarball(..)
   , DeletePackage(..)
   , GetPackagesState(..)
@@ -365,6 +366,21 @@ addPackage4 !pkginfo uploadinfo username entries expected = do
         added <- addPackage3 pkginfo uploadinfo username entries
         return (if added then PackageAdded else PackageVersionExists)
 
+-- | Like 'addPackageRevision2' for an existing package version, but only if
+-- it has exactly the given number of revisions, the ones the caller checked
+-- the new revision against. Returns the old and new package info if it added
+-- the revision.
+addPackageRevisionIfLatest :: PackageId -> Int -> CabalFileText -> UploadInfo -> UserName
+                           -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
+addPackageRevisionIfLatest pkgid expectedRevisions cabalfile uploadinfo username = do
+    PackagesState pkgindex _ <- State.get
+    case PackageIndex.lookupPackageId pkgindex pkgid of
+      Just pkginfo
+        | Vec.length (pkgMetadataRevisions pkginfo) == expectedRevisions -> do
+            (_, pkginfo') <- addPackageRevision2 pkgid cabalfile uploadinfo username
+            return (Just (pkginfo, pkginfo'))
+      _ -> return Nothing
+
 makeAcidic ''PackagesState
   [ 'getPackagesState
   , 'replacePackagesState
@@ -375,6 +391,7 @@ makeAcidic ''PackagesState
   , 'deletePackage
   , 'addPackageRevision
   , 'addPackageRevision2
+  , 'addPackageRevisionIfLatest
   , 'addPackageTarball
   , 'setPackageUploader
   , 'setPackageUploadTime

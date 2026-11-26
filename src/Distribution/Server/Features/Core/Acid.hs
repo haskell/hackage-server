@@ -61,6 +61,8 @@ acidStore env verbosity freshDB stateDir = do
                                      updateState packagesState (Acid.DeletePackage pkgid)
         , addPackageRevision     = \pkgid cabalfile uploadinfo username ->
                                      updateState packagesState (Acid.AddPackageRevision2 pkgid cabalfile uploadinfo username)
+        , addPackageRevisionIfLatest = \pkgid expected cabalfile uploadinfo username ->
+                                     updateState packagesState (Acid.AddPackageRevisionIfLatest pkgid expected cabalfile uploadinfo username)
         , addPackageTarball      = \pkgid tarball uploadinfo ->
                                      updateState packagesState (Acid.AddPackageTarball pkgid tarball uploadinfo)
         , setPackageUploader     = \pkgid userid ->

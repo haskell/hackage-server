@@ -52,6 +52,10 @@ data Store = Store {
   , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> [PackageId] -> m AddPackageResult
   , deletePackage          :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , addPackageRevision     :: forall m. MonadIO m => PackageId -> CabalFileText -> UploadInfo -> UserName -> m (Maybe PkgInfo, PkgInfo)
+    -- | Add a revision to an existing package version, but only if it has
+    -- exactly the given number of revisions: the ones the caller checked the
+    -- new revision against. Returns the old and new package info if it did.
+  , addPackageRevisionIfLatest :: forall m. MonadIO m => PackageId -> Int -> CabalFileText -> UploadInfo -> UserName -> m (Maybe (PkgInfo, PkgInfo))
   , addPackageTarball      :: forall m. MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m (Maybe (PkgInfo, PkgInfo))
   , setPackageUploader     :: forall m. MonadIO m => PackageId -> UserId -> m (Maybe (PkgInfo, PkgInfo))
   , setPackageUploadTime   :: forall m. MonadIO m => PackageId -> UTCTime -> m (Maybe (PkgInfo, PkgInfo))

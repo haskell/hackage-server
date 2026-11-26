@@ -141,6 +141,15 @@ data CoreFeature = CoreFeature {
     -- on whether a package with the given version already existed.
     updateAddPackageRevision :: forall m. MonadIO m => PackageId ->
                                 CabalFileText -> UploadInfo -> m (),
+    -- | Adds a new Cabal file for an existing package version, but only if
+    -- it has exactly the given number of revisions: the ones the caller
+    -- checked the new revision against. That way a concurrent revision
+    -- cannot slip in between the check and the add.
+    --
+    -- If it added the revision, runs a `PackageChangeInfo` hook and returns
+    -- True.
+    updateAddPackageRevisionIfLatest :: forall m. MonadIO m => PackageId -> Int ->
+                                        CabalFileText -> UploadInfo -> m Bool,
     -- | Sets the source tarball for an existing package version. References to
     -- previous tarballs, if any, are kept around.
     --
@@ -566,6 +575,22 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           runHook_ packageChangeHook  (PackageChangeAdd newpkginfo)
         Just oldpkginfo ->
           runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedCabalFile oldpkginfo newpkginfo)
+
+    updateAddPackageRevisionIfLatest :: MonadIO m => PackageId -> Int -> CabalFileText -> UploadInfo -> m Bool
+    updateAddPackageRevisionIfLatest pkgid expected cabalfile uploadinfo@(_, uid) = logTiming maxBound ("updateAddPackageRevisionIfLatest " ++ display pkgid) $ do
+      muserInfo <- queryLookupUserId uid
+      let Just userInfo = muserInfo
+      madded <- Store.addPackageRevisionIfLatest packagesStore
+                  pkgid
+                  expected
+                  cabalfile
+                  uploadinfo
+                  (userName userInfo)
+      case madded of
+        Nothing -> return False
+        Just (oldpkginfo, newpkginfo) -> do
+          runHook_ packageChangeHook (PackageChangeInfo PackageUpdatedCabalFile oldpkginfo newpkginfo)
+          return True
 
     updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
     updateAddPackageTarball pkgid tarball uploadinfo = logTiming maxBound ("updateAddPackageTarball " ++ display pkgid) $ do
