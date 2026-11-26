@@ -14,6 +14,9 @@ acidStore stateDir = do
   pure Backend {
       backendStore = Store {
           getAdminLog = State.adminLog <$> queryState adminLogState State.GetAdminLog
+        , adminLogBetween = \earlier later ->
+            let isBetween (t,_,_,_) = t > earlier && t <= later
+            in filter isBetween . State.adminLog <$> queryState adminLogState State.GetAdminLog
         , addAdminLog = \entry -> updateState adminLogState (State.AddAdminLog entry)
         }
     , backendState = [abstractAcidStateComponent adminLogState]

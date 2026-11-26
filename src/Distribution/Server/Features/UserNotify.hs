@@ -523,10 +523,7 @@ userNotifyFeature UserFeature{..}
           getNotificationEmails userFeatureServerEnv userDetailsFeature userIdToName templates notifications
         mapM_ sendNotifyEmailAndDelay emails
 
-    collectAdminActions earlier now = do
-        aLog <- queryGetAdminLog
-        let isRecent (t,_,_,_) = t > earlier && t <= now
-        return $ filter isRecent $ aLog
+    collectAdminActions earlier now = queryAdminLogBetween earlier now
 
     collectDocReport earlier now = do
         rpts <- queryReportsBetween earlier now
