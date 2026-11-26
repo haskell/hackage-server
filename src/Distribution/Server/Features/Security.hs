@@ -174,22 +174,14 @@ updateRootMirrorsAndKeys :: ServerEnv
                          -> IO ()
 updateRootMirrorsAndKeys env securityStore = do
     mbRootMirrorsAndKeys <- loadRootMirrorsAndKeys env
-    st <- Store.getSecurityState securityStore
-    case mbRootMirrorsAndKeys of
-      Just (root, mirrors, snapshotKey, timestampKey)
-        | anyChange st root mirrors snapshotKey timestampKey
-        -> do loginfo (serverVerbosity env) "Security files changed, updating"
-              now <- getCurrentTime
-              Store.setRootMirrorsAndKeys securityStore root mirrors snapshotKey timestampKey now
-      _ -> loginfo (serverVerbosity env) "Security files unchanged"
-  where
-    anyChange SecurityState{ securityStateFiles = Nothing } _ _ _ _ = True
-    anyChange SecurityState{ securityStateFiles = Just SecurityStateFiles{..} }
-              root mirrors snapshotKey timestampKey =
-        securityRoot         /= root
-     || securityMirrors      /= mirrors
-     || securitySnapshotKey  /= snapshotKey
-     || securityTimestampKey /= timestampKey
+    changed <- case mbRootMirrorsAndKeys of
+      Just (root, mirrors, snapshotKey, timestampKey) -> do
+        now <- getCurrentTime
+        Store.setRootMirrorsAndKeysIfChanged securityStore root mirrors snapshotKey timestampKey now
+      Nothing -> return False
+    loginfo (serverVerbosity env) $
+      if changed then "Security files changed, updated"
+                 else "Security files unchanged"
 
 loadRootMirrorsAndKeys :: ServerEnv
                        -> IO (Maybe (Root, Mirrors, Some Sec.Key, Some Sec.Key))

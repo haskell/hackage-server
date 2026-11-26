@@ -109,6 +109,25 @@ setRootMirrorsAndKeys root mirrors snapshotKey timestampKey now = do
       }
     updateSnapshotAndTimestamp now
 
+-- | Like 'setRootMirrorsAndKeys', but does nothing if the external files are
+-- the same as the stored ones. Returns whether they changed.
+setRootMirrorsAndKeysIfChanged :: Root -> Mirrors
+                               -> Some Sec.Key -> Some Sec.Key
+                               -> UTCTime
+                               -> Update SecurityState Bool
+setRootMirrorsAndKeysIfChanged root mirrors snapshotKey timestampKey now = do
+    st <- State.get
+    let changed = case securityStateFiles st of
+          Nothing -> True
+          Just SecurityStateFiles{..} ->
+               securityRoot         /= root
+            || securityMirrors      /= mirrors
+            || securitySnapshotKey  /= snapshotKey
+            || securityTimestampKey /= timestampKey
+    when changed $
+      setRootMirrorsAndKeys root mirrors snapshotKey timestampKey now
+    return changed
+
 
 -- | This is used whenever the main index is updated
 setTarGzFileInfo :: FileInfo -> FileInfo -> UTCTime
@@ -441,6 +460,7 @@ makeAcidic ''SecurityState
   , 'getSecurityFiles
   , 'updateSecurityState
   , 'setRootMirrorsAndKeys
+  , 'setRootMirrorsAndKeysIfChanged
   , 'setTarGzFileInfo
   , 'resignSnapshotAndTimestamp
   ]
