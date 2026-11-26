@@ -18,6 +18,7 @@ import Distribution.Server.Features.Security.Layout
 import Distribution.Server.Features.Security.ResponseContentTypes
 import qualified Distribution.Server.Features.Security.Store as Store
 import Distribution.Server.Features.Security.State
+import Distribution.Server.Features.Security.Types
 import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Framework
 import Distribution.Server.Packages.Index

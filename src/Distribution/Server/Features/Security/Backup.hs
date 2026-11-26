@@ -15,6 +15,7 @@ import qualified Data.ByteString.Lazy as BS.Lazy
 -- hackage
 import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Features.Security.State
+import Distribution.Server.Features.Security.Types
 import Distribution.Server.Features.Security.ResponseContentTypes
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore

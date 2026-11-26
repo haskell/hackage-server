@@ -7,7 +7,8 @@ module Distribution.Server.Features.Security.Store
 
 import Distribution.Server.Features.Security.FileInfo (FileInfo)
 import Distribution.Server.Features.Security.ResponseContentTypes (Mirrors, Root)
-import Distribution.Server.Features.Security.State (SecurityState, SecurityStateFiles)
+import Distribution.Server.Features.Security.State (SecurityState)
+import Distribution.Server.Features.Security.Types (SecurityStateFiles)
 import Distribution.Server.Framework (AbstractStateComponent)
 
 import Control.Monad.Trans (MonadIO)
