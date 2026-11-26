@@ -97,6 +97,8 @@ data CoreFeature = CoreFeature {
     -- | Retrieves the name of every package, in ascending order.
     queryAllPackageNames :: forall m. MonadIO m => m [PackageName],
 
+    -- | Retrieves every package version, ordered by name and then by
+    -- version.
     queryAllPackageIds :: forall m. MonadIO m => m [PackageId],
 
     -- | Counts the packages, i.e. the number of distinct package names.

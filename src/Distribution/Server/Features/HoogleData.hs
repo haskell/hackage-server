@@ -12,8 +12,6 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.Documentation
 import Distribution.Server.Features.TarIndexCache
 
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-
 import Data.TarIndex as TarIndex
 
 import Distribution.Package
@@ -33,6 +31,8 @@ import Data.Serialize (runGetLazy, runPutLazy)
 import Data.SafeCopy (SafeCopy, safeGet, safePut)
 
 import Data.Maybe
+import Data.Function (on)
+import Data.List (groupBy)
 import Control.Monad.State
 import System.IO
 import System.IO.Unsafe (unsafeInterleaveIO)
@@ -168,7 +168,7 @@ hoogleDataFeature docsUpdatedState hoogleBundleUpdateJob
           cachedPkgids   = fromSet (oldTarPkgids `Set.difference` docsUpdated)
 
       -- get the package & docs index
-      pkgindex <- queryGetPackageIndex
+      pkgids   <- queryAllPackageIds
       docindex <- queryDocumentationIndex
 
       -- Select the package ids that have corresponding docs that contain a
@@ -188,8 +188,8 @@ hoogleDataFeature docsUpdatedState hoogleBundleUpdateJob
           fmap (Map.fromList . catMaybes) $
           sequence
             [ findFirstCached (lookupHoogleEntry docindex)
-                              (reverse (map packageId pkgs))
-            | pkgs <- PackageIndex.allPackagesByName pkgindex ]
+                              (reverse pkgs)
+            | pkgs <- groupBy ((==) `on` packageName) pkgids ]
 
           -- the set of pkgids to try to reuse from the existing tar file
       let reusePkgs :: Map PackageId ()

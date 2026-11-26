@@ -42,6 +42,7 @@ data Store = Store {
   , latestPackages         :: forall m. MonadIO m => m [PkgInfo]
     -- | Every package name, in ascending order.
   , allPackageNames        :: forall m. MonadIO m => m [PackageName]
+    -- | Every package version, ordered by name and then by version.
   , allPackageIds          :: forall m. MonadIO m => m [PackageId]
     -- | The number of distinct package names, not package versions.
   , countPackages          :: forall m. MonadIO m => m Int
