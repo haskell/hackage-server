@@ -8,6 +8,9 @@ import Distribution.Server.Features.PreferredVersions.Backup
 import qualified Distribution.Server.Features.PreferredVersions.Store as Store
 import Distribution.Server.Framework
 
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+
 acidStore :: FilePath -> IO Store.Backend
 acidStore stateDir = do
   preferredState <- preferredStateComponent False stateDir
@@ -16,6 +19,9 @@ acidStore stateDir = do
           Store.getPreferredInfo = \name -> queryState preferredState (State.GetPreferredInfo name)
         , Store.getDeprecatedFor = \name -> queryState preferredState (State.GetDeprecatedFor name)
         , Store.getAllPreferredInfo = State.preferredMap <$> queryState preferredState State.GetPreferredVersions
+        , Store.lookupPreferredInfos = \names ->
+            (`Map.restrictKeys` Set.fromList names) . State.preferredMap
+              <$> queryState preferredState State.GetPreferredVersions
         , Store.getAllDeprecated = State.deprecatedMap <$> queryState preferredState State.GetPreferredVersions
         , Store.isMigratedEphemeralPrefs = State.migratedEphemeralPrefs <$> queryState preferredState State.GetPreferredVersions
         , Store.setDeprecatedFor = \name deprs -> updateState preferredState (State.SetDeprecatedFor name deprs)

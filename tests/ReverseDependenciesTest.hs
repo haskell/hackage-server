@@ -134,7 +134,7 @@ mkRevFeat pkgs = do
        , let versions = PackageIndex.lookupPackageName idx name
        , not (Prelude.null versions) ])
     (pure (PackageIndex.allPackageNames idx))
-    (pure mempty)
+    (\_ -> pure mempty)
     memState
     updateReverse
 

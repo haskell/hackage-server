@@ -85,14 +85,14 @@ initReverseFeature _ = do
 
     return $ \CoreFeature{ queryGetPackageIndex, queryLookupPackageName, queryLookupPackageNames
                          , queryAllPackageNames, packageChangeHook }
-             VersionsFeature{queryAllPreferredInfo} -> do
+             VersionsFeature{queryLookupPreferredInfos} -> do
       -- Building the reverse dependency graph reads every package, so this
       -- needs the whole index.
       idx <- queryGetPackageIndex
       memState <- newMemStateWHNF $ constructReverseIndex idx
 
       let feature = reverseFeature queryGetPackageIndex queryLookupPackageNames queryAllPackageNames
-                                   queryAllPreferredInfo memState updateReverse
+                                   queryLookupPreferredInfos memState updateReverse
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
@@ -131,7 +131,7 @@ instance ToJSON Edge
 reverseFeature :: IO (PackageIndex PkgInfo)
                -> ([PackageName] -> IO (Map.Map PackageName [PkgInfo]))
                -> IO [PackageName]
-               -> IO (Map.Map PackageName PreferredInfo)
+               -> ([PackageName] -> IO (Map.Map PackageName PreferredInfo))
                -> MemState ReverseIndex
                -> Hook [NE.NonEmpty PkgInfo] ()
                -> ReverseFeature
@@ -139,7 +139,7 @@ reverseFeature :: IO (PackageIndex PkgInfo)
 reverseFeature queryGetPackageIndex
                queryLookupPackageNames
                queryAllPackageNames
-               queryAllPreferredInfo
+               queryLookupPreferredInfos
                reverseMemState
                reverseHook
   = ReverseFeature{..}
@@ -232,7 +232,7 @@ reverseFeature queryGetPackageIndex
 
     displayInfoFrom :: MonadIO m => PackageIndex PkgInfo -> m VersionIndex
     displayInfoFrom pkgIndex = do
-        prefs <- liftIO queryAllPreferredInfo
+        prefs <- liftIO (queryLookupPreferredInfos (PackageIndex.allPackageNames pkgIndex))
         return $ getDisplayInfo prefs pkgIndex
 
     renderReverseWith :: MonadIO m => PackageName -> ReverseDisplay -> (Maybe VersionStatus -> Bool) -> m ReversePageRender

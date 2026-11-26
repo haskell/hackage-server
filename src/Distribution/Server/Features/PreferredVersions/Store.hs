@@ -22,6 +22,8 @@ data Store = Store {
     getPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo
   , getDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName])
   , getAllPreferredInfo :: forall m. MonadIO m => m (Map PackageName PreferredInfo)
+    -- | The preferred info of the given packages that have any.
+  , lookupPreferredInfos :: forall m. MonadIO m => [PackageName] -> m (Map PackageName PreferredInfo)
   , getAllDeprecated :: forall m. MonadIO m => m (Map PackageName [PackageName])
   , isMigratedEphemeralPrefs :: forall m. MonadIO m => m Bool
   , setDeprecatedFor :: forall m. MonadIO m => PackageName -> Maybe [PackageName] -> m ()

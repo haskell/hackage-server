@@ -56,7 +56,8 @@ data VersionsFeature = VersionsFeature {
 
     queryGetPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo,
     queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
-    queryAllPreferredInfo :: forall m. MonadIO m => m (Map.Map PackageName PreferredInfo),
+    -- | Retrieves the preferred info of the given packages that have any.
+    queryLookupPreferredInfos :: forall m. MonadIO m => [PackageName] -> m (Map.Map PackageName PreferredInfo),
 
     versionsResource :: VersionsResource,
     deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
@@ -157,8 +158,8 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName])
     queryGetDeprecatedFor = Store.getDeprecatedFor preferredStore
 
-    queryAllPreferredInfo :: MonadIO m => m (Map.Map PackageName PreferredInfo)
-    queryAllPreferredInfo = Store.getAllPreferredInfo preferredStore
+    queryLookupPreferredInfos :: MonadIO m => [PackageName] -> m (Map.Map PackageName PreferredInfo)
+    queryLookupPreferredInfos = Store.lookupPreferredInfos preferredStore
 
     updateDeprecatedTags = do
       pkgs <- Store.getAllDeprecated preferredStore
