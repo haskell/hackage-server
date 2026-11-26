@@ -455,19 +455,25 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           time <- liftIO getCurrentTime
           let uploadInfo = (time, uid)
               getTarball (tarball, _uploadInfo, _revNo) = tarball
-          success <- updateAddPackage (packageId candidate)
-                                      (pkgLatestCabalFileText pkgInfo)
-                                      uploadInfo
-                                      (fmap getTarball $ pkgLatestTarball pkgInfo)
+              -- what checkPublish checked against; the add fails if it changed
+              checked = map packageId (PackageIndex.lookupPackageNameModuloCase packages (packageName candidate))
+          addResult <- updateAddPackage (packageId candidate)
+                                        (pkgLatestCabalFileText pkgInfo)
+                                        uploadInfo
+                                        (fmap getTarball $ pkgLatestTarball pkgInfo)
+                                        checked
           --FIXME: share code here with upload
           -- currently we do not create the initial maintainer group etc.
-          if success
-            then do
+          case addResult of
+            PackageAdded -> do
               -- delete when requested: "moving" the resource
               -- should this be required? (see notes in PackageCandidatesResource)
               when doDelete $ Store.deleteCandidate candidatesStore (packageId candidate)
               return uresult
-            else errForbidden "Upload failed" [MText "Package already exists."]
+            PackageVersionExists ->
+              errForbidden "Upload failed" [MText "Package already exists."]
+            PackagesChangedModuloCase ->
+              throwError $ ErrorResponse 409 [] "Publish failed" [MText packagesChangedMessage]
 
 
     -- | Helper function for publishCandidate that ensures it's safe to insert into the main index.

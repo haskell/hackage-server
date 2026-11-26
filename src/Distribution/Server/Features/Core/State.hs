@@ -12,6 +12,7 @@ module Distribution.Server.Features.Core.State (
     -- 'AddPackageRevision' (see 'AddPackage3' and 'AddPackageRevision2').
   , AddOtherIndexEntry(..)
   , AddPackage3(..)
+  , AddPackage4(..)
   , AddPackageRevision2(..)
   , AddPackageTarball(..)
   , DeletePackage(..)
@@ -33,6 +34,7 @@ import Distribution.Server.Packages.Index
 import Distribution.Server.Users.Types (UserId, UserName(..), UserInfo(..))
 import Distribution.Server.Users.Users (Users, lookupUserId)
 import Distribution.Server.Framework.MemSize
+import Distribution.Server.Features.Core.Types
 
 import Data.Coerce (Coercible, coerce)
 import Data.Acid     (Query, Update, makeAcidic)
@@ -44,6 +46,7 @@ import qualified Data.Vector as Vec
 import qualified Data.Sequence as Seq
 import Data.ByteString.Lazy (ByteString)
 import Data.Foldable (toList)
+import Data.List (sort)
 import Data.Sequence (Seq)
 
 ---------------------------------- Index of metadata and tarballs
@@ -347,12 +350,28 @@ instance Migrate PackagesState where
 
 deriveSafeCopy 2 'extension ''PackagesState
 
+-- | Like 'addPackage3', but only adds the package if the versions of packages
+-- whose name equals this one modulo case are exactly the given ones, which
+-- are the ones the caller checked the upload against.
+addPackage4 :: PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> [PackageId]
+            -> Update PackagesState AddPackageResult
+addPackage4 !pkginfo uploadinfo username entries expected = do
+    PackagesState pkgindex _ <- State.get
+    let current = map packageId
+                $ PackageIndex.lookupPackageNameModuloCase pkgindex (packageName pkginfo)
+    if sort current /= sort expected
+      then return PackagesChangedModuloCase
+      else do
+        added <- addPackage3 pkginfo uploadinfo username entries
+        return (if added then PackageAdded else PackageVersionExists)
+
 makeAcidic ''PackagesState
   [ 'getPackagesState
   , 'replacePackagesState
   , 'addPackage
   , 'addPackage2
   , 'addPackage3
+  , 'addPackage4
   , 'deletePackage
   , 'addPackageRevision
   , 'addPackageRevision2

@@ -268,9 +268,11 @@ uploadFeature ServerEnv{serverBlobStore = store}
             pkgid      = packageId pkg
             cabalfile  = CabalFileText $ toStrict pkgStr
             uploadinfo = (now, uid)
-        success <- updateAddPackage pkgid cabalfile uploadinfo (Just tarball)
-        if success
-          then do
+            -- what processUpload checked against; the add fails if it changed
+            checked    = map packageId (PackageIndex.lookupPackageNameModuloCase pkgIndex (packageName pkgid))
+        addResult <- updateAddPackage pkgid cabalfile uploadinfo (Just tarball) checked
+        case addResult of
+          PackageAdded -> do
              -- make package maintainers group for new package
             let existedBefore = packageExists pkgIndex pkgid
             when (not existedBefore) $ do
@@ -280,8 +282,10 @@ uploadFeature ServerEnv{serverBlobStore = store}
 
             runHook_ packageUploaded pkgid
             return uresult
-          -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
-          else errForbidden "Upload failed" [MText "Package already exists."]
+          PackageVersionExists ->
+            errForbidden "Upload failed" [MText "Package already exists."]
+          PackagesChangedModuloCase ->
+            throwError $ ErrorResponse 409 [] "Upload failed" [MText packagesChangedMessage]
 
     -- This is a processing function for extractPackage that checks upload-specific requirements.
     -- Does authentication, though not with requirePackageAuth, because it has to be IO.

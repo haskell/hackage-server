@@ -55,8 +55,8 @@ acidStore env verbosity freshDB stateDir = do
                                               . filter ((> 1) . pkgNumRevisions)
                                               $ versions
                                         }
-        , addPackage             = \pkginfo uploadinfo username entries ->
-                                     updateState packagesState (Acid.AddPackage3 pkginfo uploadinfo username entries)
+        , addPackage             = \pkginfo uploadinfo username entries expected ->
+                                     updateState packagesState (Acid.AddPackage4 pkginfo uploadinfo username entries expected)
         , deletePackage          = \pkgid ->
                                      updateState packagesState (Acid.DeletePackage pkgid)
         , addPackageRevision     = \pkgid cabalfile uploadinfo username ->

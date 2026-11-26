@@ -311,6 +311,7 @@ library
     Distribution.Server.Features.Core.Acid
     Distribution.Server.Features.Core.State
     Distribution.Server.Features.Core.Store
+    Distribution.Server.Features.Core.Types
       Distribution.Server.Features.Core.Backup
       Distribution.Server.Features.Security
       Distribution.Server.Features.Security.Acid

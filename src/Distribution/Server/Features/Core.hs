@@ -6,6 +6,7 @@ module Distribution.Server.Features.Core (
     CoreFeature(..),
     CoreResource(..),
     Store.RecentPackageVersions(..),
+    Store.AddPackageResult(..),
     initCoreFeature,
 
     -- * Change events
@@ -19,6 +20,7 @@ module Distribution.Server.Features.Core (
     -- * Misc other utils
     packageExists,
     packageIdExists,
+    packagesChangedMessage,
   ) where
 
 -- stdlib
@@ -114,11 +116,17 @@ data CoreFeature = CoreFeature {
     -- reference to a tarball blob, and does not do any consistency checking
     -- of these.
     --
+    -- The last argument is the ids of the package versions whose name equals
+    -- this one modulo case, as the caller saw them when checking the upload.
+    -- The package is only added if those are still the current ones, so
+    -- checks made against them still hold.
+    --
     -- If a package was able to be newly added, runs a `PackageChangeAdd` hook
-    -- when done and returns True.
+    -- when done and returns `Store.PackageAdded`.
     updateAddPackage         :: forall m. MonadIO m => PackageId ->
                                 CabalFileText -> UploadInfo ->
-                                Maybe PkgTarball -> m Bool,
+                                Maybe PkgTarball -> [PackageId] ->
+                                m Store.AddPackageResult,
     -- | Deletes a version of an existing package, deleting the package if it
     -- was the last version.
     --
@@ -513,25 +521,26 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     --
     updateAddPackage :: MonadIO m => PackageId
                      -> CabalFileText -> UploadInfo
-                     -> Maybe PkgTarball -> m Bool
-    updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
+                     -> Maybe PkgTarball -> [PackageId]
+                     -> m Store.AddPackageResult
+    updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball expected = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
       muserInfo <- queryLookupUserId uid
       let Just userInfo = muserInfo
 
       let pkginfo = Acid.mkPackageInfo pkgid cabalFile uploadinfo mtarball
       additionalEntries <- concat `liftM` runHook preIndexUpdateHook  (PackageChangeAdd pkginfo)
 
-      successFlag <- Store.addPackage packagesStore
-                       pkginfo
-                       uploadinfo
-                       (userName userInfo)
-                       additionalEntries
+      addResult <- Store.addPackage packagesStore
+                    pkginfo
+                    uploadinfo
+                    (userName userInfo)
+                    additionalEntries
+                    expected
 
-      loginfo maxBound ("updateState(AddPackage3," ++ display pkgid ++ ") -> " ++ show successFlag)
-      if successFlag
-        then runHook_ packageChangeHook (PackageChangeAdd pkginfo)
-        else return ()
-      return successFlag
+      loginfo maxBound ("updateState(AddPackage4," ++ display pkgid ++ ") -> " ++ show addResult)
+      when (addResult == Store.PackageAdded) $
+        runHook_ packageChangeHook (PackageChangeAdd pkginfo)
+      return addResult
 
     updateDeletePackage :: MonadIO m => PackageId -> m Bool
     updateDeletePackage pkgid = logTiming maxBound ("updateDeletePackage " ++ display pkgid) $ do
@@ -751,6 +760,12 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           rsCode = 401
         , rsHeaders   = mkHeaders [("Content-Type",  "text/html")]
       }
+
+-- | Why an add failed with `Store.PackagesChangedModuloCase`.
+packagesChangedMessage :: String
+packagesChangedMessage =
+     "A package with the same name, modulo case, changed while this upload "
+  ++ "was being checked. Please try again."
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 -- | Whether a package exists in the given package index.

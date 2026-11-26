@@ -4,10 +4,12 @@ module Distribution.Server.Features.Core.Store
   ( Backend(..)
   , Store(..)
   , RecentPackageVersions(..)
+  , AddPackageResult(..)
   ) where
 
 import Distribution.Server.Framework (AbstractStateComponent, MemSize(..), memSize2)
 import Distribution.Server.Features.Core.State (PackagesState)
+import Distribution.Server.Features.Core.Types (AddPackageResult(..))
 import Distribution.Server.Packages.Index (TarIndexEntry)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId, UserName)
@@ -44,7 +46,10 @@ data Store = Store {
     -- time and no later than the second.
   , latestUploadsBetween   :: forall m. MonadIO m => UTCTime -> UTCTime -> m [PkgInfo]
   , recentPackageVersions  :: forall m. MonadIO m => m RecentPackageVersions
-  , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> m Bool
+    -- | Add a new package version, but only if the versions of packages whose
+    -- name equals its name modulo case are exactly the given ones: the ones
+    -- the caller checked the upload against.
+  , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> [PackageId] -> m AddPackageResult
   , deletePackage          :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , addPackageRevision     :: forall m. MonadIO m => PackageId -> CabalFileText -> UploadInfo -> UserName -> m (Maybe PkgInfo, PkgInfo)
   , addPackageTarball      :: forall m. MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m (Maybe (PkgInfo, PkgInfo))
