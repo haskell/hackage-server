@@ -7,7 +7,6 @@ import qualified Distribution.Server.Features.Vouch.Store as Store
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupRestore (RestoreBackup(..))
 
-import qualified Data.Set as Set
 
 acidStore :: FilePath -> IO Store.Backend
 acidStore stateDir = do
@@ -15,14 +14,9 @@ acidStore stateDir = do
   pure Store.Backend {
       Store.backendStore = Store.Store {
           Store.getVouchesFor = \uid -> queryState vouchState (Acid.GetVouchesFor uid)
-        , Store.addVouch = \uid entry -> updateState vouchState (Acid.PutVouch uid entry)
-        , Store.queueVouchCompleteNotification = \uid -> do
-            Acid.VouchData vouches notNotified <- queryState vouchState Acid.GetVouchesData
-            updateState vouchState (Acid.ReplaceVouchesData (Acid.VouchData vouches (Set.insert uid notNotified)))
-        , Store.drainQueuedNotifications = do
-            Acid.VouchData vouches notNotified <- queryState vouchState Acid.GetVouchesData
-            updateState vouchState (Acid.ReplaceVouchesData (Acid.VouchData vouches mempty))
-            pure (Set.toList notNotified)
+        , Store.addVouchIfAllowed = \vouchee voucher now voucherIsUploader voucheeIsUploader ->
+            updateState vouchState (Acid.AddVouchIfAllowed vouchee voucher now voucherIsUploader voucheeIsUploader)
+        , Store.drainQueuedNotifications = updateState vouchState Acid.DrainQueuedNotifications
         }
     , Store.backendState = [abstractAcidStateComponent vouchState]
     }
