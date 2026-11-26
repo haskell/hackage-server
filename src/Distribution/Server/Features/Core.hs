@@ -30,7 +30,6 @@ import qualified Data.Aeson.Key                                     as Key
 import qualified Data.Aeson.KeyMap                                  as KeyMap
 import           Data.Map                                           (Map)
 import           Data.ByteString.Lazy                               (LazyByteString, fromStrict)
-import qualified Data.Foldable                                      as Foldable
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
 import           Data.Time.Format                                   (defaultTimeLocale, formatTime)
@@ -496,7 +495,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- Queries
     --
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
-    queryGetPackageIndex = Acid.packageIndex <$> Store.getPackagesState packagesStore
+    queryGetPackageIndex = PackageIndex.fromList <$> Store.allPackages packagesStore
 
     queryLookupPackageName :: MonadIO m => PackageName -> m [PkgInfo]
     queryLookupPackageName = Store.lookupPackageName packagesStore
@@ -637,11 +636,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     getIndexTarball :: IO IndexTarballInfo
     getIndexTarball = do
       time  <- getCurrentTime
-      Acid.PackagesState index (Right updateSeq) <- Store.getPackagesState packagesStore
+      (pkgs, updateLog) <- Store.allPackagesAndUpdateLog packagesStore
+      let index = PackageIndex.fromList pkgs
       -- note, changes to users here don't automatically propagate
-      userIdToName <- queryUserNamesFor (nubOrd (map pkgLatestUploadUser (PackageIndex.allPackages index)))
-      let updateLog     = Foldable.toList updateSeq
-          legacyTarball = Packages.Index.writeLegacy
+      userIdToName <- queryUserNamesFor (nubOrd (map pkgLatestUploadUser pkgs))
+      let legacyTarball = Packages.Index.writeLegacy
                             userIdToName
                             (Packages.Index.legacyExtras updateLog)
                             index

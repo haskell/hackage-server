@@ -16,6 +16,7 @@ import Distribution.Package (packageId)
 
 import Control.Monad (when)
 import Data.Either (isLeft)
+import Data.Foldable (toList)
 import Data.List (sortOn)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
@@ -28,7 +29,13 @@ acidStore env verbosity freshDB stateDir = do
       withIndex f = f . Acid.packageIndex <$> queryState packagesState Acid.GetPackagesState
   pure Backend {
       backendStore = Store {
-          getPackagesState       = queryState packagesState Acid.GetPackagesState
+          allPackages            = withIndex PackageIndex.allPackages
+        , allPackagesAndUpdateLog = do
+                                     Acid.PackagesState index ulog <- queryState packagesState Acid.GetPackagesState
+                                     case ulog of
+                                       Right updateSeq -> pure (PackageIndex.allPackages index, toList updateSeq)
+                                       -- backendMigrate creates the update log at startup
+                                       Left _ -> liftIO (ioError (userError "package update log not migrated"))
         , lookupPackageName      = \pkgname -> withIndex (`PackageIndex.lookupPackageName` pkgname)
         , lookupPackageId        = \pkgid -> withIndex (`PackageIndex.lookupPackageId` pkgid)
         , lookupPackageNames     = \pkgnames -> withIndex $ \index ->

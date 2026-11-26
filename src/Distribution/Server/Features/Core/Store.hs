@@ -8,7 +8,6 @@ module Distribution.Server.Features.Core.Store
   ) where
 
 import Distribution.Server.Framework (AbstractStateComponent, MemSize(..), memSize2)
-import Distribution.Server.Features.Core.State (PackagesState)
 import Distribution.Server.Features.Core.Types (AddPackageResult(..))
 import Distribution.Server.Packages.Index (TarIndexEntry)
 import Distribution.Server.Packages.Types
@@ -31,7 +30,12 @@ data Backend = Backend {
   }
 
 data Store = Store {
-    getPackagesState       :: forall m. MonadIO m => m PackagesState
+    -- | Every package version.
+    allPackages            :: forall m. MonadIO m => m [PkgInfo]
+    -- | Every package version and the update log, read from the same state of
+    -- the package database. This is everything the index tarball is built
+    -- from.
+  , allPackagesAndUpdateLog :: forall m. MonadIO m => m ([PkgInfo], [TarIndexEntry])
   , lookupPackageName      :: forall m. MonadIO m => PackageName -> m [PkgInfo]
   , lookupPackageId        :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
     -- | The given packages that exist, with all their versions.
