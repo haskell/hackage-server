@@ -23,8 +23,7 @@ import           Network.URI (parseURI)
 import           System.Random (mkStdGen)
 
 import Distribution.Package (PackageIdentifier(..), mkPackageName, packageId, packageName)
-import Distribution.Server.Features.PreferredVersions.State (PreferredInfo(..))
-import Distribution.Server.Features.PreferredVersions.Types (VersionStatus(NormalVersion))
+import Distribution.Server.Features.PreferredVersions.Types (PreferredInfo(..), VersionStatus(NormalVersion))
 import Distribution.Server.Features.ReverseDependencies (ReverseFeature(..), ReverseCount(..), reverseFeature)
 import Distribution.Server.Features.ReverseDependencies.State (ReverseIndex(..), addPackage, constructReverseIndex, emptyReverseIndex, getDependenciesFlat, getDependencies, getDependenciesFlatRaw, getDependenciesRaw)
 import Distribution.Server.Features.Tags (Tag(..))
@@ -129,7 +128,13 @@ mkRevFeat pkgs = do
   pure $
     reverseFeature
     (pure idx)
-    (pure mempty)
+    (\names -> pure $ Map.fromList
+       [ (name, versions)
+       | name <- names
+       , let versions = PackageIndex.lookupPackageName idx name
+       , not (Prelude.null versions) ])
+    (pure (PackageIndex.allPackageNames idx))
+    (\_ -> pure mempty)
     memState
     updateReverse
 
@@ -217,7 +222,7 @@ allTests = testGroup "ReverseDependenciesTest"
       assertEqual "must match reference" ref res
   , testCase "revDisplayInfo" $ do
       ReverseFeature{revDisplayInfo} <- mkRevFeat mtlBeelineLens
-      res <- revDisplayInfo
+      res <- revDisplayInfo ["beeline"]
       assertEqual "beeline preferred is old" (PreferredInfo [] [] Nothing, [mkVersion [0]]) (res "beeline")
   , testCase "getUserNotificationsOnRelease sends notification" $ do
       let userSetIdForPackage arg | arg == mkPackageName "mtl" = Identity (UserIdSet.fromList [UserId 0])

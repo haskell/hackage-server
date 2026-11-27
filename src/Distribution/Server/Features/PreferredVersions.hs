@@ -22,7 +22,6 @@ import Distribution.Server.Framework
 import qualified Distribution.Server.Features.PreferredVersions.Acid as Acid
 import Distribution.Server.Features.PreferredVersions.Acid (preferredStateComponent)
 import qualified Distribution.Server.Features.PreferredVersions.Store as Store
-import Distribution.Server.Features.PreferredVersions.State
 import Distribution.Server.Features.PreferredVersions.Types
 
 import Distribution.Server.Features.Core
@@ -57,7 +56,8 @@ data VersionsFeature = VersionsFeature {
 
     queryGetPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo,
     queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
-    queryAllPreferredInfo :: forall m. MonadIO m => m (Map.Map PackageName PreferredInfo),
+    -- | Retrieves the preferred info of the given packages that have any.
+    queryLookupPreferredInfos :: forall m. MonadIO m => [PackageName] -> m (Map.Map PackageName PreferredInfo),
 
     versionsResource :: VersionsResource,
     deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
@@ -158,12 +158,18 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName])
     queryGetDeprecatedFor = Store.getDeprecatedFor preferredStore
 
-    queryAllPreferredInfo :: MonadIO m => m (Map.Map PackageName PreferredInfo)
-    queryAllPreferredInfo = Store.getAllPreferredInfo preferredStore
+    queryLookupPreferredInfos :: MonadIO m => [PackageName] -> m (Map.Map PackageName PreferredInfo)
+    queryLookupPreferredInfos = Store.lookupPreferredInfos preferredStore
 
     updateDeprecatedTags = do
       pkgs <- Store.getAllDeprecated preferredStore
       setCalculatedTag (Tag "deprecated") (Map.keysSet pkgs)
+
+    -- Change only this package's tag, rather than recompute the tag for all
+    -- packages from a read that a concurrent change could make stale.
+    updateDeprecatedTagFor :: PackageName -> Maybe [PackageName] -> IO ()
+    updateDeprecatedTagFor pkgname deprs =
+      setCalculatedTagFor (Tag "deprecated") pkgname (isJust deprs)
 
     CoreResource{..} = coreResource
     versionsResource = fix $ \r -> VersionsResource
@@ -266,7 +272,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     updatePackageDeprecation pkgname deprs = liftIO $ do
       Store.setDeprecatedFor preferredStore pkgname deprs
       runHook_ deprecatedHook (pkgname, deprs)
-      updateDeprecatedTags
+      updateDeprecatedTagFor pkgname deprs
 
     withPackageVersion :: PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a
     withPackageVersion pkgid func = do
@@ -368,7 +374,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
         doUpdates deprs = do
             Store.setDeprecatedFor preferredStore pkgname deprs
             runHook_ deprecatedHook (pkgname, deprs)
-            liftIO updateDeprecatedTags
+            liftIO (updateDeprecatedTagFor pkgname deprs)
 
     renderPrefInfo :: PreferredInfo -> PreferredRender
     renderPrefInfo pref = PreferredRender {

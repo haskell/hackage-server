@@ -32,6 +32,7 @@ module Distribution.Server.Packages.PackageIndex (
 
     -- ** Precise lookups
     lookupPackageName,
+    lookupPackageNameModuloCase,
     lookupPackageId,
     lookupPackageForId,
     lookupDependency,
@@ -288,6 +289,15 @@ lookupPackageId index pkgid =
 --
 lookupPackageName :: Package pkg => PackageIndex pkg -> PackageName -> [pkg]
 lookupPackageName index name = lookup index name
+
+-- | Every version of every package whose name equals the given one ignoring
+-- case, including the given name itself.
+--
+lookupPackageNameModuloCase :: Package pkg => PackageIndex pkg -> PackageName -> [pkg]
+lookupPackageNameModuloCase (PackageIndex m) name =
+  concat [ pkgs | (pn, pkgs) <- Map.toList m
+                , lowercase (unPackageName pn) == lname ]
+  where lname = lowercase (unPackageName name)
 
 -- | Search by name of a package identifier, and further select a version if possible.
 --

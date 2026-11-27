@@ -30,6 +30,9 @@ mkAdminAction gd isAdd uid = (if isAdd then Admin_GroupAddUser else Admin_GroupD
 data AdminLogFeature = AdminLogFeature {
       adminLogFeatureInterface :: HackageFeature
     , queryGetAdminLog :: forall m. MonadIO m => m [(UTCTime,UserId,AdminAction,BS.ByteString)]
+    -- | Retrieves the entries logged after the first time and no later than
+    -- the second.
+    , queryAdminLogBetween :: forall m. MonadIO m => UTCTime -> UTCTime -> m [(UTCTime,UserId,AdminAction,BS.ByteString)]
 }
 
 instance IsHackageFeature AdminLogFeature where
@@ -72,6 +75,9 @@ adminLogFeature UserFeature{..} Store.Backend{backendStore = adminLogStore, back
 
     queryGetAdminLog :: MonadIO m => m [(UTCTime,UserId,AdminAction,BS.ByteString)]
     queryGetAdminLog = Store.getAdminLog adminLogStore
+
+    queryAdminLogBetween :: MonadIO m => UTCTime -> UTCTime -> m [(UTCTime,UserId,AdminAction,BS.ByteString)]
+    queryAdminLogBetween = Store.adminLogBetween adminLogStore
 
     serveAdminLogGet _ = do
       rows  <- map mkRow <$> queryGetAdminLog

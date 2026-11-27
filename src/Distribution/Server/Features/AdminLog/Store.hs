@@ -20,5 +20,7 @@ data Backend = Backend {
 
 data Store = Store {
     getAdminLog :: forall m. MonadIO m => m [(UTCTime,UserId,AdminAction,BS.ByteString)]
+    -- | Entries logged after the first time and no later than the second.
+  , adminLogBetween :: forall m. MonadIO m => UTCTime -> UTCTime -> m [(UTCTime,UserId,AdminAction,BS.ByteString)]
   , addAdminLog :: forall m. MonadIO m => (UTCTime, UserId, AdminAction, BS.ByteString) -> m ()
   }

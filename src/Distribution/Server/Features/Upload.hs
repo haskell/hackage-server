@@ -1,4 +1,4 @@
-{-# LANGUAGE RecursiveDo, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RecursiveDo, RankNTypes, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
 module Distribution.Server.Features.Upload (
     UploadFeature(..),
     UploadResource(..),
@@ -60,11 +60,18 @@ data UploadFeature = UploadFeature {
     -- | The group of maintainers for a given package.
     maintainersGroup   :: PackageName -> UserGroup,
 
+    -- | Make the user the first maintainer of a package that has none yet.
+    -- Returns whether the user is now a maintainer (also true if they
+    -- already were). Unlike checking the group and then adding to it, two
+    -- users cannot both claim the same package this way.
+    claimPackageMaintainers :: PackageName -> Users.UserId -> IO Bool,
+
     -- | Takes an upload request and, depending on the result of the
     -- passed-in function, either commits the uploaded tarball to the blob
-    -- storage or throws it away and yields an error.
-    extractPackage     :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
-                       -> ServerPartE (Users.UserId, UploadResult, PkgTarball)
+    -- storage or throws it away and yields an error. On success, also returns
+    -- what the passed-in function returned.
+    extractPackage     :: forall a. (Users.UserId -> UploadResult -> IO (Either ErrorResponse a))
+                       -> ServerPartE (Users.UserId, UploadResult, PkgTarball, a)
 }
 
 instance IsHackageFeature UploadFeature where
@@ -157,7 +164,7 @@ uploadFeature :: ServerEnv
 
 uploadFeature ServerEnv{serverBlobStore = store}
               CoreFeature{ coreResource
-                         , queryGetPackageIndex
+                         , queryLookupPackageNameModuloCase
                          , updateAddPackage
                          }
               UserFeature{..}
@@ -169,6 +176,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
    = ( UploadFeature {..}
      , trusteesGroupDescription, uploadersGroupDescription, maintainersGroupDescription)
    where
+    claimPackageMaintainers :: PackageName -> Users.UserId -> IO Bool
+    claimPackageMaintainers = UploadStore.claimPackageMaintainers uploadStore
+
     uploadFeatureInterface = (emptyHackageFeature "upload") {
         featureDesc = "Support for package uploads, and define groups for trustees, uploaders, and package maintainers"
       , featureResources =
@@ -260,28 +270,43 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
         guardAuthorised_ [AnyKnownUser]
-        pkgIndex <- queryGetPackageIndex
-        (uid, uresult, tarball) <- extractPackage $ \uid info ->
-                                     processUpload pkgIndex uid info
+        (uid, uresult, tarball, pkgIndex) <- extractPackage $ \uid info -> do
+            -- Only packages with this name modulo case matter to the checks.
+            let pkgname = packageName (uploadDesc info)
+            pkgIndex <- PackageIndex.fromList <$> queryLookupPackageNameModuloCase pkgname
+            maybe (Right pkgIndex) Left <$> processUpload pkgIndex uid info
         now <- liftIO getCurrentTime
         let (UploadResult pkg pkgStr _) = uresult
             pkgid      = packageId pkg
             cabalfile  = CabalFileText $ toStrict pkgStr
             uploadinfo = (now, uid)
-        success <- updateAddPackage pkgid cabalfile uploadinfo (Just tarball)
-        if success
-          then do
-             -- make package maintainers group for new package
-            let existedBefore = packageExists pkgIndex pkgid
+            -- what processUpload checked against; the add fails if it changed
+            checked    = map packageId (PackageIndex.allPackages pkgIndex)
+            existedBefore = packageExists pkgIndex pkgid
+        -- For a new package, claim its maintainers group in one step before
+        -- adding it, so that someone uploading a candidate for the same name
+        -- at the same time cannot become a maintainer as well.
+        unless existedBefore $ do
+            claimed <- liftIO $ claimPackageMaintainers (packageName pkgid) uid
+            unless claimed $
+              errForbidden "Upload failed"
+                [MText $ "Someone else became a maintainer of '"
+                      ++ display (packageName pkgid) ++ "' while this "
+                      ++ "upload was being checked."]
+        addResult <- updateAddPackage pkgid cabalfile uploadinfo (Just tarball) checked
+        case addResult of
+          PackageAdded -> do
+             -- announce the new package's maintainers group, claimed above
             when (not existedBefore) $ do
                 let group = maintainersGroup (packageName pkgid)
-                liftIO $ addUserToGroup group uid
                 runHook_ groupChangedHook (groupDesc group, True,uid,uid,"initial upload")
 
             runHook_ packageUploaded pkgid
             return uresult
-          -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
-          else errForbidden "Upload failed" [MText "Package already exists."]
+          PackageVersionExists ->
+            errForbidden "Upload failed" [MText "Package already exists."]
+          PackagesChangedModuloCase ->
+            throwError $ ErrorResponse 409 [] "Upload failed" [MText packagesChangedMessage]
 
     -- This is a processing function for extractPackage that checks upload-specific requirements.
     -- Does authentication, though not with requirePackageAuth, because it has to be IO.
@@ -367,8 +392,8 @@ uploadFeature ServerEnv{serverBlobStore = store}
 
     -- This function generically extracts a package, useful for uploading, checking,
     -- and anything else in the standard user-upload pipeline.
-    extractPackage :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
-                   -> ServerPartE (Users.UserId, UploadResult, PkgTarball)
+    extractPackage :: forall a. (Users.UserId -> UploadResult -> IO (Either ErrorResponse a))
+                   -> ServerPartE (Users.UserId, UploadResult, PkgTarball, a)
     extractPackage processFunc =
         withDataFn (lookInput "package") $ \input ->
             case inputValue input of -- HS6 this has been updated to use the new file upload support in HS6, but has not been tested at all
@@ -382,7 +407,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
             --FIXME: this should have been covered earlier
             uid <- guardAuthenticated
             now <- liftIO getCurrentTime
-            let processPackage :: LazyByteString -> IO (Either ErrorResponse (UploadResult, BlobStorage.BlobId))
+            let processPackage :: LazyByteString -> IO (Either ErrorResponse ((UploadResult, a), BlobStorage.BlobId))
                 processPackage content' = do
                     -- as much as it would be nice to do requirePackageAuth in here,
                     -- processPackage is run in a handle bracket
@@ -392,21 +417,21 @@ uploadFeature ServerEnv{serverBlobStore = store}
                         let uresult = UploadResult pkg pkgStr warnings
                         res <- processFunc uid uresult
                         case res of
-                            Nothing ->
+                            Right x ->
                                 do let decompressedContent = GZip.decompressNamed file content'
                                    blobIdDecompressed <- BlobStorage.add store decompressedContent
-                                   return . Right $ (uresult, blobIdDecompressed)
-                            Just err -> return . Left $ err
+                                   return . Right $ ((uresult, x), blobIdDecompressed)
+                            Left err -> return . Left $ err
             mres <- liftIO $ BlobStorage.consumeFileWith store file processPackage
             case mres of
                 Left  err -> throwError err
-                Right ((res, blobIdDecompressed), blobId) -> do
+                Right (((res, x), blobIdDecompressed), blobId) -> do
                     infoGz <- liftIO $ blobInfoFromId store blobId
                     let tarball = PkgTarball {
                                       pkgTarballGz   = infoGz
                                     , pkgTarballNoGz = blobIdDecompressed
                                     }
-                    return (uid, res, tarball)
+                    return (uid, res, tarball, x)
 
 -- | Whether a particular version of package exists in the package index, but
 -- where we consider versions with trailing 0s to be equivalent, e.g. 1.0

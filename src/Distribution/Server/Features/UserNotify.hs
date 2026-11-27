@@ -20,9 +20,7 @@ module Distribution.Server.Features.UserNotify (
 
 import Distribution.Server.Features.UserDetails.Types
 import qualified Distribution.Server.Features.UserNotify.Acid.Component as AcidComponent
-import qualified Distribution.Server.Features.UserNotify.Acid as Acid
 import qualified Distribution.Server.Features.UserNotify.Store as Store
-import Distribution.Server.Features.UserNotify.Acid (NotifyPref(..))
 import Distribution.Server.Features.UserNotify.Backup
 import Distribution.Server.Features.UserNotify.Types
 import Prelude hiding (lookup)
@@ -92,8 +90,8 @@ Some missing features:
 data UserNotifyFeature = UserNotifyFeature {
     userNotifyFeatureInterface :: HackageFeature,
 
-    queryGetUserNotifyPref  :: forall m. MonadIO m => UserId -> m (Maybe Acid.NotifyPref),
-    updateSetUserNotifyPref :: forall m. MonadIO m => UserId -> Acid.NotifyPref -> m ()
+    queryGetUserNotifyPref  :: forall m. MonadIO m => UserId -> m (Maybe NotifyPref),
+    updateSetUserNotifyPref :: forall m. MonadIO m => UserId -> NotifyPref -> m ()
 }
 
 instance IsHackageFeature UserNotifyFeature where
@@ -155,8 +153,8 @@ instance Hashable NotifyPrefUI where
     `hashWithSalt` hash ui_notifyDocBuilderReport
     `hashWithSalt` hash ui_notifyPendingTags
 
-notifyPrefToUI :: Acid.NotifyPref -> NotifyPrefUI
-notifyPrefToUI Acid.NotifyPref{..} = NotifyPrefUI
+notifyPrefToUI :: NotifyPref -> NotifyPrefUI
+notifyPrefToUI NotifyPref{..} = NotifyPrefUI
   { ui_notifyEnabled          = OK (not notifyOptOut)
   , ui_notifyRevisionRange    = notifyRevisionRange
   , ui_notifyUpload           = OK notifyUpload
@@ -167,9 +165,9 @@ notifyPrefToUI Acid.NotifyPref{..} = NotifyPrefUI
   , ui_notifyDependencyTriggerBounds = notifyDependencyTriggerBounds
   }
 
-notifyPrefFromUI :: NotifyPrefUI -> Acid.NotifyPref
+notifyPrefFromUI :: NotifyPrefUI -> NotifyPref
 notifyPrefFromUI NotifyPrefUI{..}
-  = Acid.NotifyPref
+  = NotifyPref
   { notifyOptOut           = not (unOK ui_notifyEnabled)
   , notifyRevisionRange    = ui_notifyRevisionRange
   , notifyUpload           = unOK ui_notifyUpload
@@ -260,7 +258,7 @@ latestDependencies dependencies pkgname =
     . Map.dropWhileAntitone ((< pkgname) . pkgName)
     $ dependencies
 
--- | Acid.Get the users to notify when a new package has been released.
+-- | Get the users to notify when a new package has been released.
 --   The new package (PackageId) must already be in the indexes.
 --   The keys in the returned map are the user to notify, and the values are
 --   the packages the user maintains that depend on the new package (i.e. the
@@ -270,7 +268,7 @@ getUserNotificationsOnRelease
   => (PackageName -> m UserIdSet)
   -> (PackageName -> [PkgInfo])
   -> ReverseIndex
-  -> (UserId -> m (Maybe Acid.NotifyPref))
+  -> (UserId -> m (Maybe NotifyPref))
   -> PackageId
   -> m (Map.Map UserId [PackageId])
 getUserNotificationsOnRelease _ packagesNamed _ _ pkgId
@@ -299,11 +297,11 @@ getUserNotificationsOnRelease userSetIdForPackage packagesNamed revIdx@(ReverseI
       let
         idsAndTriggers :: [UserId]
         idsAndTriggers = do
-          (userId, Just Acid.NotifyPref{..}) <- zip ids mPrefs
+          (userId, Just NotifyPref{..}) <- zip ids mPrefs
           guard $ not notifyOptOut
           guard notifyDependencyForMaintained
 
-          -- Acid.Remove collisions on the same PackageName, amassed e.g. across
+          -- Remove collisions on the same PackageName, amassed e.g. across
           -- multiple conditional branches. The branches could be from either
           -- side of an 'if' block conditioned on a flag. If either of them
           -- permits the newly released version, avoid sending the notification.
@@ -417,10 +415,10 @@ userNotifyFeature UserFeature{..}
     -- Queries and updates
     --
 
-    queryGetUserNotifyPref  ::  MonadIO m => UserId -> m (Maybe Acid.NotifyPref)
+    queryGetUserNotifyPref  ::  MonadIO m => UserId -> m (Maybe NotifyPref)
     queryGetUserNotifyPref = Store.lookupNotifyPref notifyStore
 
-    updateSetUserNotifyPref ::  MonadIO m => UserId -> Acid.NotifyPref -> m ()
+    updateSetUserNotifyPref ::  MonadIO m => UserId -> NotifyPref -> m ()
     updateSetUserNotifyPref = Store.addNotifyPref notifyStore
 
     -- Request handlers
@@ -428,13 +426,13 @@ userNotifyFeature UserFeature{..}
     handlerGetUserNotify dpath = do
       uid <- lookupUserName =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-      nprefui <- notifyPrefToUI . fromMaybe Acid.defaultNotifyPrefs <$> queryGetUserNotifyPref uid
+      nprefui <- notifyPrefToUI . fromMaybe defaultNotifyPrefs <$> queryGetUserNotifyPref uid
       return $ toResponse (Aeson.toJSON nprefui)
 
     handlerGetUserNotifyHtml dpath = do
       (uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-      NotifyPrefUI{..} <- notifyPrefToUI . fromMaybe Acid.defaultNotifyPrefs <$> queryGetUserNotifyPref uid
+      NotifyPrefUI{..} <- notifyPrefToUI . fromMaybe defaultNotifyPrefs <$> queryGetUserNotifyPref uid
       showConfirmationOfSave <- not . Prelude.null <$> queryString (lookBSs "showConfirmationOfSave")
       template <- getTemplate templates "user-notify-form.html"
       cacheControlWithoutETag [NoCache]
@@ -481,6 +479,14 @@ userNotifyFeature UserFeature{..}
     notifyCronAction = do
         (notifyPrefs, lastNotifyTime) <- Store.getNotificationData notifyStore
         now <- getCurrentTime
+        -- Claim the window before sending, so that a concurrent run (say, from
+        -- another server on the same store) skips it rather than sending the
+        -- same notifications again. If sending then fails, those are lost.
+        claimed <- Store.claimNotifyWindow notifyStore lastNotifyTime now
+        when claimed $
+          sendNotifications notifyPrefs lastNotifyTime now
+
+    sendNotifications notifyPrefs lastNotifyTime now = do
         let trimLastTime = if diffUTCTime now lastNotifyTime > (60*60*6) -- cap at 6hr
                              then addUTCTime (negate $ (60*60*6)) now
                              else lastNotifyTime -- for testing you can increase this
@@ -517,12 +523,7 @@ userNotifyFeature UserFeature{..}
           getNotificationEmails userFeatureServerEnv userDetailsFeature userIdToName templates notifications
         mapM_ sendNotifyEmailAndDelay emails
 
-        Store.setNotifyTime notifyStore now
-
-    collectAdminActions earlier now = do
-        aLog <- queryGetAdminLog
-        let isRecent (t,_,_,_) = t > earlier && t <= now
-        return $ filter isRecent $ aLog
+    collectAdminActions earlier now = queryAdminLogBetween earlier now
 
     collectDocReport earlier now = do
         rpts <- queryReportsBetween earlier now
@@ -553,7 +554,7 @@ userNotifyFeature UserFeature{..}
          maintainers <- queryUserGroup $ maintainersGroup pkgName
          pure . flip mapMaybe (toList maintainers) $ \uid ->
           fmap (uid,) $ do
-            let Acid.NotifyPref{..} = fromMaybe Acid.defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+            let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
             guard $ uid /= actor
             guard $ not notifyOptOut
             if isRevision
@@ -579,7 +580,7 @@ userNotifyFeature UserFeature{..}
       let notifyAllMaintainers actor pkg notif = do
             maintainers <- queryUserGroup $ maintainersGroup (mkPackageName $ BS.unpack pkg)
             pure . flip mapMaybe (toList maintainers) $ \uid -> do
-              let Acid.NotifyPref{..} = fromMaybe Acid.defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+              let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
               guard $ uid /= actor
               guard $ not notifyOptOut
               Just (uid, notif)
@@ -610,7 +611,7 @@ userNotifyFeature UserFeature{..}
       maintainers <- queryUserGroup $ maintainersGroup (packageName pkgid)
       pure . flip mapMaybe (toList maintainers) $ \uid ->
         fmap (uid,) $ do
-          let Acid.NotifyPref{..} = fromMaybe Acid.defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+          let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
           guard $ not notifyOptOut
           guard notifyDocBuilderReport
           Just
@@ -623,7 +624,7 @@ userNotifyFeature UserFeature{..}
       maintainers <- queryUserGroup $ maintainersGroup pkg
       pure . flip mapMaybe (toList maintainers) $ \uid ->
         fmap (uid,) $ do
-          let Acid.NotifyPref{..} = fromMaybe Acid.defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+          let NotifyPref{..} = fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
           guard $ not notifyOptOut
           guard notifyPendingTags
           Just
@@ -640,7 +641,7 @@ userNotifyFeature UserFeature{..}
               , notifyWatchedPackages = watchedPkgs
               , notifyTriggerBounds =
                   notifyDependencyTriggerBounds $
-                    fromMaybe Acid.defaultNotifyPrefs (Map.lookup uid notifyPrefs)
+                    fromMaybe defaultNotifyPrefs (Map.lookup uid notifyPrefs)
               }
       Map.toList . Map.mapWithKey toNotif
         <$> getUserNotificationsOnRelease (queryUserGroup . maintainersGroup) packagesNamed revIdx queryGetUserNotifyPref pkg
@@ -676,7 +677,7 @@ data NotificationGroup
   | DependencyNotification PackageId
   deriving (Eq, Ord)
 
--- | Acid.Get all the emails to send for the given notifications.
+-- | Get all the emails to send for the given notifications.
 getNotificationEmails
   :: ServerEnv
   -> UserDetailsFeature

@@ -9,7 +9,6 @@ import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
                                 ( flattenPackageDescription )
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types
 import Distribution.Simple.Utils (comparing, equating)
 import Distribution.ModuleName (toFilePath)
@@ -20,16 +19,15 @@ import Text.XHtml.Strict hiding ( p, name )
 import qualified Text.XHtml.Strict as XHtml ( name )
 
 import Data.Char (toLower, toUpper, isSpace)
-import Data.List (intersperse, sortBy, groupBy, nub, maximumBy)
+import Data.List (intersperse, sortBy, groupBy, nub)
 
 
-packageIndex :: PackageIndex.PackageIndex PkgInfo -> Html
+-- | Takes the latest version of every package.
+packageIndex :: [PkgInfo] -> Html
 packageIndex = formatPkgGroups
                  . map (mkPackageIndexInfo
                       . flattenPackageDescription
-                      . pkgDesc
-                      . maximumBy (comparing packageVersion))
-                 . PackageIndex.allPackagesByName
+                      . pkgDesc)
 
 data PackageIndexInfo = PackageIndexInfo {
                             pii_pkgName :: !PackageName,

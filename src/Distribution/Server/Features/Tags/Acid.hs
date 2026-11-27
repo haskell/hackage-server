@@ -28,11 +28,16 @@ acidStore stateDir = do
             pkgTags <- State.packageTags <$> queryState tagsState State.GetPackageTags
             pure $ Map.fromList
               [ (pkgname, Map.findWithDefault Set.empty pkgname pkgTags) | pkgname <- pkgnames ]
-        , Store.setPackageTags = \pkgname tags -> updateState tagsState (State.SetPackageTags pkgname tags)
+        , Store.addRemovePackageTags = \pkgname add del -> updateState tagsState (State.AddRemovePackageTags pkgname add del)
+        , Store.editPackageTags = \pkgname add del handledAdds handledDels ->
+            updateState tagsState (State.EditPackageTags pkgname add del handledAdds handledDels)
+        , Store.proposePackageTags = \pkgname add del -> updateState tagsState (State.ProposePackageTags pkgname add del)
+        , Store.mergePackageTag = \depr orig -> updateState tagsState (State.MergePackageTag depr orig)
         , Store.setTagPackages = \tag pkgs -> updateState tagsState (State.SetTagPackages tag pkgs)
+        , Store.setPackageTag = \pkgname tag on ->
+            if on then void (updateState tagsState (State.AddPackageTag pkgname tag))
+                  else void (updateState tagsState (State.RemovePackageTag pkgname tag))
         , Store.addTagAlias = \tag alias -> updateState tagAlias (State.AddTagAlias tag alias)
-        , Store.insertReviewTags = \pkgname add del -> updateState tagsState (State.InsertReviewTags pkgname add del)
-        , Store.replaceReviewTags = \pkgname add del -> updateState tagsState (State.InsertReviewTags' pkgname add del)
         }
     , Store.backendState = [ abstractAcidStateComponent tagsState
                            , abstractAcidStateComponent tagAlias

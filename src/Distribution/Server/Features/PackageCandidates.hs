@@ -69,7 +69,7 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
     doDeleteCandidates    :: DynamicPath -> ServerPartE Response,
     uploadCandidate       :: (PackageId -> Bool) -> ServerPartE CandPkgInfo,
     publishCandidate      :: DynamicPath -> Bool -> ServerPartE UploadResult,
-    checkPublish          :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse),
+    checkPublish          :: forall m. MonadIO m => Users.UserId -> CandPkgInfo -> m (Maybe ErrorResponse),
     candidateRender       :: CandPkgInfo -> IO CandidateRender,
 
     lookupCandidateName :: PackageName -> ServerPartE [CandPkgInfo],
@@ -167,7 +167,7 @@ candidatesFeature :: ServerEnv
 candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
                   CoreFeature{ coreResource=core@CoreResource{packageInPath, packageTarballInPath}
-                             , queryGetPackageIndex
+                             , queryLookupPackageNameModuloCase
                              , queryLookupPackageName
                              , updateAddPackage
                              }
@@ -383,10 +383,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     uploadCandidate :: (PackageId -> Bool) -> ServerPartE CandPkgInfo
     uploadCandidate isRight = do
         guardAuthorised_ [InGroup uploadersGroup]
-        regularIndex <- queryGetPackageIndex
         -- ensure that the user has proper auth if the package exists
-        (uid, uresult, tarball) <- extractPackage $ \uid info ->
-                                     processCandidate isRight regularIndex uid info
+        (uid, uresult, tarball, ()) <- extractPackage $ \uid info ->
+                                     maybe (Right ()) Left <$> processCandidate isRight uid info
         now <- liftIO getCurrentTime
         let (UploadResult pkg pkgStr _) = uresult
             pkgid      = packageId pkg
@@ -401,18 +400,26 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                 candWarnings = uploadWarnings uresult,
                 candPublic = True -- do withDataFn
             }
-        checkCandidate "Upload failed" uid regularIndex candidate >>= \case
-            Just failed -> throwError failed
-            Nothing -> do
+        checkCandidate "Upload failed" uid candidate >>= \case
+            Left failed -> throwError failed
+            Right _ -> do
+                -- Claim the maintainers group in one step, rather than add
+                -- to it after checking it above, so that two users cannot
+                -- both become the first maintainers of a new package.
+                claimed <- liftIO $ claimPackageMaintainers (packageName pkgid) uid
+                unless claimed $
+                  errForbidden "Upload failed"
+                    [MText $ "Someone else became a maintainer of '"
+                          ++ display (packageName pkgid) ++ "' while this "
+                          ++ "candidate was being checked."]
                 Store.addCandidate candidatesStore candidate
-                let group = maintainersGroup (packageName pkgid)
-                liftIO $ Group.addUserToGroup group uid
                 return candidate
 
     -- | Helper function for uploadCandidate.
-    processCandidate :: (PackageId -> Bool) -> PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
-    processCandidate isRight state uid res = do
+    processCandidate :: (PackageId -> Bool) -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
+    processCandidate isRight uid res = do
         let pkg = packageId (uploadDesc res)
+        state <- PackageIndex.fromList <$> queryLookupPackageNameModuloCase (packageName pkg)
         if not (isRight pkg)
           then uploadFailed [MText "Name of package or package version does not match"]
           else do
@@ -439,14 +446,13 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     publishCandidate :: DynamicPath -> Bool -> ServerPartE UploadResult
     publishCandidate dpath doDelete = do
-      packages <- queryGetPackageIndex
       candidate <- packageInPath dpath >>= lookupCandidateId
       -- check authorization to upload - must already be a maintainer
       uid <- guardAuthorised [InGroup . maintainersGroup $ packageName candidate]
       -- check if package or later already exists
-      checkPublish uid packages candidate >>= \case
-        Just failed -> throwError failed
-        Nothing -> do
+      checkCandidate "Publish failed" uid candidate >>= \case
+        Left failed -> throwError failed
+        Right checked -> do
           -- run filters
           let pkgInfo = candPkgInfo candidate
               uresult = UploadResult (pkgDesc pkgInfo)
@@ -455,30 +461,43 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           time <- liftIO getCurrentTime
           let uploadInfo = (time, uid)
               getTarball (tarball, _uploadInfo, _revNo) = tarball
-          success <- updateAddPackage (packageId candidate)
-                                      (pkgLatestCabalFileText pkgInfo)
-                                      uploadInfo
-                                      (fmap getTarball $ pkgLatestTarball pkgInfo)
+          addResult <- updateAddPackage (packageId candidate)
+                                        (pkgLatestCabalFileText pkgInfo)
+                                        uploadInfo
+                                        (fmap getTarball $ pkgLatestTarball pkgInfo)
+                                        checked
           --FIXME: share code here with upload
           -- currently we do not create the initial maintainer group etc.
-          if success
-            then do
+          case addResult of
+            PackageAdded -> do
               -- delete when requested: "moving" the resource
               -- should this be required? (see notes in PackageCandidatesResource)
               when doDelete $ Store.deleteCandidate candidatesStore (packageId candidate)
               return uresult
-            else errForbidden "Upload failed" [MText "Package already exists."]
+            PackageVersionExists ->
+              errForbidden "Upload failed" [MText "Package already exists."]
+            PackagesChangedModuloCase ->
+              throwError $ ErrorResponse 409 [] "Publish failed" [MText packagesChangedMessage]
 
 
     -- | Helper function for publishCandidate that ensures it's safe to insert into the main index.
-    checkPublish :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse)
-    checkPublish = checkCandidate "Publish failed"
+    checkPublish :: forall m. MonadIO m => Users.UserId -> CandPkgInfo -> m (Maybe ErrorResponse)
+    checkPublish uid candidate = either Just (const Nothing) <$> checkCandidate "Publish failed" uid candidate
 
     -- | Helper function that ensures it would be safe to insert a package candidate into the main index.
     --
     -- TODO: share code w/ 'Distribution.Server.Features.Upload.processUpload'
-    checkCandidate :: forall m. MonadIO m => String -> Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse)
-    checkCandidate errorTitle uid packages candidate
+    -- On success, returns the ids of the package versions it checked against:
+    -- those whose name equals the candidate's modulo case.
+    checkCandidate :: forall m. MonadIO m => String -> Users.UserId -> CandPkgInfo -> m (Either ErrorResponse [PackageId])
+    checkCandidate errorTitle uid candidate = do
+        -- Only packages with this name modulo case matter to the checks.
+        packages <- PackageIndex.fromList <$> queryLookupPackageNameModuloCase (packageName candidate)
+        maybe (Right (map packageId (PackageIndex.allPackages packages))) Left
+          <$> checkCandidateAgainst errorTitle uid packages candidate
+
+    checkCandidateAgainst :: forall m. MonadIO m => String -> Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse)
+    checkCandidateAgainst errorTitle uid packages candidate
       | Just _ <- find ((== candVersion) . packageVersion) pkgs
         = return $ Just $ ErrorResponse 403 [] errorTitle [MText "Package name and version already exist in the database"]
 

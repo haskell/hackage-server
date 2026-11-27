@@ -198,6 +198,53 @@ lookupReviewTags :: PackageName -> Query PackageTags (Set Tag, Set Tag)
 lookupReviewTags pkgname = asks $ Map.findWithDefault (Set.empty, Set.empty) pkgname . reviewTags
 
 
+-- | Add and remove tags of a package, applied to its current tags in this
+-- transaction. Returns the resulting tags.
+addRemovePackageTags :: PackageName -> Set Tag -> Set Tag -> Update PackageTags (Set Tag)
+addRemovePackageTags pkgname add del = do
+    pkgTags <- get
+    let tags = (Map.findWithDefault Set.empty pkgname (packageTags pkgTags) `Set.union` add)
+               `Set.difference` del
+    put $! setTags pkgname tags pkgTags
+    return tags
+
+-- | A trustee's or maintainer's edit: add and remove tags as in
+-- 'addRemovePackageTags', and drop the given proposed additions and removals
+-- from the package's review tags. Returns the resulting tags and review tags.
+editPackageTags :: PackageName -> Set Tag -> Set Tag -> Set Tag -> Set Tag
+                -> Update PackageTags (Set Tag, (Set Tag, Set Tag))
+editPackageTags pkgname add del handledAdds handledDels = do
+    tags <- addRemovePackageTags pkgname add del
+    PackageTags p t r <- get
+    let (proposedAdds, proposedDels) = Map.findWithDefault (Set.empty, Set.empty) pkgname r
+        review = ( proposedAdds `Set.difference` handledAdds
+                 , proposedDels `Set.difference` handledDels )
+    put (PackageTags p t (Map.insert pkgname review r))
+    return (tags, review)
+
+-- | A user's proposal: propose adding the given tags the package does not
+-- have and removing those it has, judged against its current tags in this
+-- transaction. Returns what was proposed.
+proposePackageTags :: PackageName -> Set Tag -> Set Tag -> Update PackageTags (Set Tag, Set Tag)
+proposePackageTags pkgname add del = do
+    pkgTags <- get
+    let current = Map.findWithDefault Set.empty pkgname (packageTags pkgTags)
+        adds = add `Set.difference` current
+        dels = del `Set.intersection` current
+    insertReviewTags pkgname adds dels
+    return (adds, dels)
+
+-- | Replace the first tag with the second on every package that has it.
+-- Returns the changed packages with their resulting tags.
+mergePackageTag :: Tag -> Tag -> Update PackageTags [(PackageName, Set Tag)]
+mergePackageTag depr orig = do
+    pkgTags <- get
+    let changed = [ (pkgname, Set.insert orig (Set.delete depr tags))
+                  | pkgname <- Set.toList (Map.findWithDefault Set.empty depr (tagPackages pkgTags))
+                  , let tags = Map.findWithDefault Set.empty pkgname (packageTags pkgTags) ]
+    put $! foldr (uncurry setTags) pkgTags changed
+    return changed
+
 $(makeAcidic ''TagAlias ['addTagAlias
                         ,'getTagAlias
                         ,'lookupTagAlias
@@ -218,4 +265,8 @@ $(makeAcidic ''PackageTags ['tagsForPackage
                          ,'insertReviewTags'
                          ,'lookupReviewTags
                          ,'clearReviewTags
+                         ,'addRemovePackageTags
+                         ,'editPackageTags
+                         ,'proposePackageTags
+                         ,'mergePackageTag
                          ])

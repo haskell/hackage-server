@@ -6,7 +6,6 @@ module Distribution.Server.Features.TarIndexCache.Store
   ) where
 
 import Distribution.Server.Framework (AbstractStateComponent)
-import Distribution.Server.Features.TarIndexCache.State (TarIndexCache)
 import Distribution.Server.Framework.BlobStorage (BlobId)
 
 data Backend = Backend {
@@ -15,8 +14,10 @@ data Backend = Backend {
   }
 
 data Store = Store {
-    getTarIndexCache    :: IO TarIndexCache
-  , replaceTarIndexCache :: TarIndexCache -> IO ()
+    -- | Every tarball blob with a cached tar index, and that index's blob.
+    allTarIndices      :: IO [(BlobId, BlobId)]
+    -- | Forget every cached tar index. The blobs are not removed.
+  , clearTarIndices    :: IO ()
   , findTarIndex       :: BlobId -> IO (Maybe BlobId)
   , setTarIndex        :: BlobId -> BlobId -> IO ()
   }

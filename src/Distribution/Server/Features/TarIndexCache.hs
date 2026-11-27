@@ -19,7 +19,6 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.TarIndexCache.Acid (acidStore)
 import qualified Distribution.Server.Features.TarIndexCache.Store as Store
-import qualified Distribution.Server.Features.TarIndexCache.State as Acid
 import Distribution.Server.Features.Users
 import Distribution.Server.Packages.Types
 import Data.TarIndex
@@ -28,7 +27,6 @@ import Distribution.Server.Util.ServeTarball (constructTarIndex)
 import Distribution.Package (packageId)
 import Distribution.Text (display)
 
-import qualified Data.Map as Map
 import Data.Aeson (toJSON)
 
 data TarIndexCacheFeature = TarIndexCacheFeature {
@@ -105,8 +103,8 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
 
     serveTarIndicesStatus :: ServerPartE Response
     serveTarIndicesStatus = do
-      Acid.TarIndexCache state <- liftIO $ Store.getTarIndexCache tarIndexCache
-      return . toResponse . toJSON . Map.toList $ state
+      indices <- liftIO $ Store.allTarIndices tarIndexCache
+      return . toResponse . toJSON $ indices
 
     -- | With curl:
     --
@@ -116,7 +114,7 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
       guardAuthorised_ [InGroup adminGroup]
       -- TODO: This resets the tar indices _state_ only, we don't actually
       -- remove any blobs
-      liftIO $ Store.replaceTarIndexCache tarIndexCache Acid.initialTarIndexCache
+      liftIO $ Store.clearTarIndices tarIndexCache
       ok $ toResponse "Ok!"
 
     -- Functions to access specific files in a tarball

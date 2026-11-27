@@ -6,6 +6,7 @@ module Distribution.Server.Features.Core (
     CoreFeature(..),
     CoreResource(..),
     Store.RecentPackageVersions(..),
+    Store.AddPackageResult(..),
     initCoreFeature,
 
     -- * Change events
@@ -19,6 +20,7 @@ module Distribution.Server.Features.Core (
     -- * Misc other utils
     packageExists,
     packageIdExists,
+    packagesChangedMessage,
   ) where
 
 -- stdlib
@@ -28,7 +30,6 @@ import qualified Data.Aeson.Key                                     as Key
 import qualified Data.Aeson.KeyMap                                  as KeyMap
 import           Data.Map                                           (Map)
 import           Data.ByteString.Lazy                               (LazyByteString, fromStrict)
-import qualified Data.Foldable                                      as Foldable
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
 import           Data.Time.Format                                   (defaultTimeLocale, formatTime)
@@ -85,12 +86,18 @@ data CoreFeature = CoreFeature {
     -- do not exist.
     queryLookupPackageNames :: forall m. MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo]),
 
+    -- | Retrieves every version of every package whose name equals the
+    -- given one ignoring case, for checking uploads against case clashes.
+    queryLookupPackageNameModuloCase :: forall m. MonadIO m => PackageName -> m [PkgInfo],
+
     -- | Retrieves the latest version of every package.
     queryLatestPackages :: forall m. MonadIO m => m [PkgInfo],
 
     -- | Retrieves the name of every package, in ascending order.
     queryAllPackageNames :: forall m. MonadIO m => m [PackageName],
 
+    -- | Retrieves every package version, ordered by name and then by
+    -- version.
     queryAllPackageIds :: forall m. MonadIO m => m [PackageId],
 
     -- | Counts the packages, i.e. the number of distinct package names.
@@ -114,11 +121,17 @@ data CoreFeature = CoreFeature {
     -- reference to a tarball blob, and does not do any consistency checking
     -- of these.
     --
+    -- The last argument is the ids of the package versions whose name equals
+    -- this one modulo case, as the caller saw them when checking the upload.
+    -- The package is only added if those are still the current ones, so
+    -- checks made against them still hold.
+    --
     -- If a package was able to be newly added, runs a `PackageChangeAdd` hook
-    -- when done and returns True.
+    -- when done and returns `Store.PackageAdded`.
     updateAddPackage         :: forall m. MonadIO m => PackageId ->
                                 CabalFileText -> UploadInfo ->
-                                Maybe PkgTarball -> m Bool,
+                                Maybe PkgTarball -> [PackageId] ->
+                                m Store.AddPackageResult,
     -- | Deletes a version of an existing package, deleting the package if it
     -- was the last version.
     --
@@ -133,6 +146,15 @@ data CoreFeature = CoreFeature {
     -- on whether a package with the given version already existed.
     updateAddPackageRevision :: forall m. MonadIO m => PackageId ->
                                 CabalFileText -> UploadInfo -> m (),
+    -- | Adds a new Cabal file for an existing package version, but only if
+    -- it has exactly the given number of revisions: the ones the caller
+    -- checked the new revision against. That way a concurrent revision
+    -- cannot slip in between the check and the add.
+    --
+    -- If it added the revision, runs a `PackageChangeInfo` hook and returns
+    -- True.
+    updateAddPackageRevisionIfLatest :: forall m. MonadIO m => PackageId -> Int ->
+                                        CabalFileText -> UploadInfo -> m Bool,
     -- | Sets the source tarball for an existing package version. References to
     -- previous tarballs, if any, are kept around.
     --
@@ -308,53 +330,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
 
     return $ \users -> do
 
-      -- One-off complex migration
-      --
-      -- As part of the support for TUF we made two changes to the state:
-      --
-      -- \* We made the index append-only, and added a package update log
-      --   to support this.
-      -- \* We changed the PkgTarball data structure to contain BlobInfo rather
-      --   rather than BlobId; that is, we additionally record the length and
-      --   SHA256 hash for all blobs.
-      --
-      -- Acid.Additionally, we now need `package.json` files for all versions of all
-      -- packages. For new packages we add these when the package is uploaded,
-      -- but for previously uploaded packages we need to add them.
-      --
-      -- Migrating the package tarball info and introducing metadata for
-      -- pre-existing packages requires a full search through the package DB.
-      -- Fortunately, since all these changes were introduced at the same time,
-      -- we can use the check for the existence of the update log to see if we
-      -- need any other kind of migration.
-
-      migrateUpdateLog <- (isLeft . Acid.packageUpdateLog) <$>
-                             Store.getPackagesState packagesStore
-      when migrateUpdateLog $ do
-        -- Migrate Acid.PackagesState (introduce package update log)
-        logTiming verbosity "migrating package update log" $ do
-          userdb <- queryGetUserDb users
-          Store.migrateAddUpdateLog packagesStore userdb
-
-        -- Migrate PkgTarball
-        logTiming verbosity "migrating PkgTarball" $
-          Store.migratePackageTarballs packagesStore
-
-        -- Create a checkpoint
-        --
-        -- Creating a checkpoint after the migration is important for two
-        -- reasons: one, the migration is expensive and we don't want to  repeat
-        -- it. But there is a second, more important reason. Until we have
-        -- migrated we do not have a package log. This means that if we have a
-        -- DB with no checkpoints at all but some old style (pre introduction of
-        -- the package log) transactions as well as some new style transactions
-        -- (post introduction of the package log), those new transactions will
-        -- not be updating the package log. Since migration does not happen
-        -- until _after_ replaying all those transactions, this means we would
-        -- reconstruct the package log rather than use the package log as it was
-        -- constructed in the first place, and we might potentially lose
-        -- information.
-        Store.createStoreCheckpoint packagesStore
+      Store.backendMigrate packagesBackend (queryGetUserDb users)
 
       rec let (feature, getIndexTarball)
                 = coreFeature env users
@@ -519,7 +495,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- Queries
     --
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
-    queryGetPackageIndex = Acid.packageIndex <$> Store.getPackagesState packagesStore
+    queryGetPackageIndex = PackageIndex.fromList <$> Store.allPackages packagesStore
 
     queryLookupPackageName :: MonadIO m => PackageName -> m [PkgInfo]
     queryLookupPackageName = Store.lookupPackageName packagesStore
@@ -529,6 +505,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     queryLookupPackageNames :: MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo])
     queryLookupPackageNames = Store.lookupPackageNames packagesStore
+
+    queryLookupPackageNameModuloCase :: MonadIO m => PackageName -> m [PkgInfo]
+    queryLookupPackageNameModuloCase = Store.lookupPackageNameModuloCase packagesStore
 
     queryLatestPackages :: MonadIO m => m [PkgInfo]
     queryLatestPackages = Store.latestPackages packagesStore
@@ -559,25 +538,26 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     --
     updateAddPackage :: MonadIO m => PackageId
                      -> CabalFileText -> UploadInfo
-                     -> Maybe PkgTarball -> m Bool
-    updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
+                     -> Maybe PkgTarball -> [PackageId]
+                     -> m Store.AddPackageResult
+    updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball expected = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
       muserInfo <- queryLookupUserId uid
       let Just userInfo = muserInfo
 
       let pkginfo = Acid.mkPackageInfo pkgid cabalFile uploadinfo mtarball
       additionalEntries <- concat `liftM` runHook preIndexUpdateHook  (PackageChangeAdd pkginfo)
 
-      successFlag <- Store.addPackage packagesStore
-                       pkginfo
-                       uploadinfo
-                       (userName userInfo)
-                       additionalEntries
+      addResult <- Store.addPackage packagesStore
+                    pkginfo
+                    uploadinfo
+                    (userName userInfo)
+                    additionalEntries
+                    expected
 
-      loginfo maxBound ("updateState(AddPackage3," ++ display pkgid ++ ") -> " ++ show successFlag)
-      if successFlag
-        then runHook_ packageChangeHook (PackageChangeAdd pkginfo)
-        else return ()
-      return successFlag
+      loginfo maxBound ("updateState(AddPackage4," ++ display pkgid ++ ") -> " ++ show addResult)
+      when (addResult == Store.PackageAdded) $
+        runHook_ packageChangeHook (PackageChangeAdd pkginfo)
+      return addResult
 
     updateDeletePackage :: MonadIO m => PackageId -> m Bool
     updateDeletePackage pkgid = logTiming maxBound ("updateDeletePackage " ++ display pkgid) $ do
@@ -603,6 +583,22 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           runHook_ packageChangeHook  (PackageChangeAdd newpkginfo)
         Just oldpkginfo ->
           runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedCabalFile oldpkginfo newpkginfo)
+
+    updateAddPackageRevisionIfLatest :: MonadIO m => PackageId -> Int -> CabalFileText -> UploadInfo -> m Bool
+    updateAddPackageRevisionIfLatest pkgid expected cabalfile uploadinfo@(_, uid) = logTiming maxBound ("updateAddPackageRevisionIfLatest " ++ display pkgid) $ do
+      muserInfo <- queryLookupUserId uid
+      let Just userInfo = muserInfo
+      madded <- Store.addPackageRevisionIfLatest packagesStore
+                  pkgid
+                  expected
+                  cabalfile
+                  uploadinfo
+                  (userName userInfo)
+      case madded of
+        Nothing -> return False
+        Just (oldpkginfo, newpkginfo) -> do
+          runHook_ packageChangeHook (PackageChangeInfo PackageUpdatedCabalFile oldpkginfo newpkginfo)
+          return True
 
     updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
     updateAddPackageTarball pkgid tarball uploadinfo = logTiming maxBound ("updateAddPackageTarball " ++ display pkgid) $ do
@@ -640,11 +636,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     getIndexTarball :: IO IndexTarballInfo
     getIndexTarball = do
       time  <- getCurrentTime
-      Acid.PackagesState index (Right updateSeq) <- Store.getPackagesState packagesStore
+      (pkgs, updateLog) <- Store.allPackagesAndUpdateLog packagesStore
+      let index = PackageIndex.fromList pkgs
       -- note, changes to users here don't automatically propagate
-      userIdToName <- queryUserNamesFor (nubOrd (map pkgLatestUploadUser (PackageIndex.allPackages index)))
-      let updateLog     = Foldable.toList updateSeq
-          legacyTarball = Packages.Index.writeLegacy
+      userIdToName <- queryUserNamesFor (nubOrd (map pkgLatestUploadUser pkgs))
+      let legacyTarball = Packages.Index.writeLegacy
                             userIdToName
                             (Packages.Index.legacyExtras updateLog)
                             index
@@ -797,6 +793,12 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           rsCode = 401
         , rsHeaders   = mkHeaders [("Content-Type",  "text/html")]
       }
+
+-- | Why an add failed with `Store.PackagesChangedModuloCase`.
+packagesChangedMessage :: String
+packagesChangedMessage =
+     "A package with the same name, modulo case, changed while this upload "
+  ++ "was being checked. Please try again."
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 -- | Whether a package exists in the given package index.

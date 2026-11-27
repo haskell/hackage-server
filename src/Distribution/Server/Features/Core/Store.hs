@@ -4,10 +4,11 @@ module Distribution.Server.Features.Core.Store
   ( Backend(..)
   , Store(..)
   , RecentPackageVersions(..)
+  , AddPackageResult(..)
   ) where
 
 import Distribution.Server.Framework (AbstractStateComponent, MemSize(..), memSize2)
-import Distribution.Server.Features.Core.State (PackagesState)
+import Distribution.Server.Features.Core.Types (AddPackageResult(..))
 import Distribution.Server.Packages.Index (TarIndexEntry)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId, UserName)
@@ -20,19 +21,32 @@ import Data.Map (Map)
 import Data.Time.Clock (UTCTime)
 
 data Backend = Backend {
-    backendStore :: Store
-  , backendState :: [AbstractStateComponent]
+    backendStore   :: Store
+  , backendState   :: [AbstractStateComponent]
+    -- | Bring existing state up to date, given a way to get the user
+    -- database (only needed by some migrations). Run once at startup,
+    -- before the feature is used.
+  , backendMigrate :: IO Users -> IO ()
   }
 
 data Store = Store {
-    getPackagesState       :: forall m. MonadIO m => m PackagesState
+    -- | Every package version.
+    allPackages            :: forall m. MonadIO m => m [PkgInfo]
+    -- | Every package version and the update log, read from the same state of
+    -- the package database. This is everything the index tarball is built
+    -- from.
+  , allPackagesAndUpdateLog :: forall m. MonadIO m => m ([PkgInfo], [TarIndexEntry])
   , lookupPackageName      :: forall m. MonadIO m => PackageName -> m [PkgInfo]
   , lookupPackageId        :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
     -- | The given packages that exist, with all their versions.
   , lookupPackageNames     :: forall m. MonadIO m => [PackageName] -> m (Map PackageName [PkgInfo])
+    -- | Every version of every package whose name equals the given one
+    -- ignoring case, including the given name itself if it exists.
+  , lookupPackageNameModuloCase :: forall m. MonadIO m => PackageName -> m [PkgInfo]
   , latestPackages         :: forall m. MonadIO m => m [PkgInfo]
     -- | Every package name, in ascending order.
   , allPackageNames        :: forall m. MonadIO m => m [PackageName]
+    -- | Every package version, ordered by name and then by version.
   , allPackageIds          :: forall m. MonadIO m => m [PackageId]
     -- | The number of distinct package names, not package versions.
   , countPackages          :: forall m. MonadIO m => m Int
@@ -40,16 +54,20 @@ data Store = Store {
     -- time and no later than the second.
   , latestUploadsBetween   :: forall m. MonadIO m => UTCTime -> UTCTime -> m [PkgInfo]
   , recentPackageVersions  :: forall m. MonadIO m => m RecentPackageVersions
-  , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> m Bool
+    -- | Add a new package version, but only if the versions of packages whose
+    -- name equals its name modulo case are exactly the given ones: the ones
+    -- the caller checked the upload against.
+  , addPackage             :: forall m. MonadIO m => PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> [PackageId] -> m AddPackageResult
   , deletePackage          :: forall m. MonadIO m => PackageId -> m (Maybe PkgInfo)
   , addPackageRevision     :: forall m. MonadIO m => PackageId -> CabalFileText -> UploadInfo -> UserName -> m (Maybe PkgInfo, PkgInfo)
+    -- | Add a revision to an existing package version, but only if it has
+    -- exactly the given number of revisions: the ones the caller checked the
+    -- new revision against. Returns the old and new package info if it did.
+  , addPackageRevisionIfLatest :: forall m. MonadIO m => PackageId -> Int -> CabalFileText -> UploadInfo -> UserName -> m (Maybe (PkgInfo, PkgInfo))
   , addPackageTarball      :: forall m. MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m (Maybe (PkgInfo, PkgInfo))
   , setPackageUploader     :: forall m. MonadIO m => PackageId -> UserId -> m (Maybe (PkgInfo, PkgInfo))
   , setPackageUploadTime   :: forall m. MonadIO m => PackageId -> UTCTime -> m (Maybe (PkgInfo, PkgInfo))
   , addOtherIndexEntry     :: forall m. MonadIO m => TarIndexEntry -> m ()
-  , migrateAddUpdateLog    :: forall m. MonadIO m => Users -> m ()
-  , migratePackageTarballs :: IO ()
-  , createStoreCheckpoint  :: IO ()
   }
 
 -- | Package versions ordered for the recent uploads and recent revisions

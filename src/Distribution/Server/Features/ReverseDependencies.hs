@@ -13,7 +13,7 @@ import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.PreferredVersions
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Server.Packages.PackageIndex (PackageIndex, packageNames, allPackagesByNameNE)
+import Distribution.Server.Packages.PackageIndex (PackageIndex, allPackagesByNameNE)
 import Distribution.Server.Packages.Types (PkgInfo)
 import Distribution.Server.Features.ReverseDependencies.State
 import Distribution.Package
@@ -52,7 +52,8 @@ data ReverseFeature = ReverseFeature {
     revPackageStats :: forall m. MonadIO m => PackageName -> m ReverseCount,
     revCountForAllPackages :: forall m. MonadIO m => m [(PackageName, ReverseCount)],
     revJSON :: IO ByteString,
-    revDisplayInfo :: forall m. MonadIO m => m VersionIndex,
+    -- | Version information, valid only for the given package names.
+    revDisplayInfo :: forall m. MonadIO m => [PackageName] -> m VersionIndex,
     revForEachVersion :: PackageName -> IO (Map.Map Version (Set PackageIdentifier)),
     queryReverseIndex :: forall m. MonadIO m => m ReverseIndex
 }
@@ -82,18 +83,22 @@ initReverseFeature :: ServerEnv
 initReverseFeature _ = do
     updateReverse <- newHook
 
-    return $ \CoreFeature{queryGetPackageIndex,packageChangeHook}
-             VersionsFeature{queryAllPreferredInfo} -> do
+    return $ \CoreFeature{ queryGetPackageIndex, queryLookupPackageName, queryLookupPackageNames
+                         , queryAllPackageNames, packageChangeHook }
+             VersionsFeature{queryLookupPreferredInfos} -> do
+      -- Building the reverse dependency graph reads every package, so this
+      -- needs the whole index.
       idx <- queryGetPackageIndex
       memState <- newMemStateWHNF $ constructReverseIndex idx
 
-      let feature = reverseFeature queryGetPackageIndex queryAllPreferredInfo memState updateReverse
+      let feature = reverseFeature queryGetPackageIndex queryLookupPackageNames queryAllPackageNames
+                                   queryLookupPreferredInfos memState updateReverse
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
             Nothing -> return () --PackageRemoveHook
             Just pkginfo -> do
-                index <- queryGetPackageIndex
+                index <- PackageIndex.fromList <$> queryLookupPackageName (packageName pkgid)
                 modifyMemState memState $ addPackage index (packageName pkgid) (getDepNames pkginfo)
                 runHook_ updateReverse [pure pkginfo]
 
@@ -124,13 +129,17 @@ instance ToJSON Edge
 -- instance ToJSON PackageName
 
 reverseFeature :: IO (PackageIndex PkgInfo)
-               -> IO (Map.Map PackageName PreferredInfo)
+               -> ([PackageName] -> IO (Map.Map PackageName [PkgInfo]))
+               -> IO [PackageName]
+               -> ([PackageName] -> IO (Map.Map PackageName PreferredInfo))
                -> MemState ReverseIndex
                -> Hook [NE.NonEmpty PkgInfo] ()
                -> ReverseFeature
 
 reverseFeature queryGetPackageIndex
-               queryAllPreferredInfo
+               queryLookupPackageNames
+               queryAllPackageNames
+               queryLookupPreferredInfos
                reverseMemState
                reverseHook
   = ReverseFeature{..}
@@ -149,6 +158,7 @@ reverseFeature queryGetPackageIndex
 
     initReverseIndex :: IO ()
     initReverseIndex = do
+            -- The hooks get every package, so this needs the whole index.
             index <- liftIO queryGetPackageIndex
             -- We build the proper index earlier, this just fires the reverse hooks
             runHook_ reverseHook $ allPackagesByNameNE index
@@ -186,17 +196,27 @@ reverseFeature queryGetPackageIndex
 
     revPackageId :: MonadIO m => PackageId -> m ReverseDisplay
     revPackageId pkgid = do
-        dispInfo <- revDisplayInfo
-        pkgIndex <- liftIO queryGetPackageIndex
         revs <- queryReverseIndex
+        pkgIndex <- lookupWithReverseDeps revs (packageName pkgid)
+        dispInfo <- displayInfoFrom pkgIndex
         pure $ perVersionReverse dispInfo pkgIndex revs pkgid
 
     revPackageName :: MonadIO m => PackageName -> m ReverseDisplay
     revPackageName pkgname = do
-        dispInfo <- revDisplayInfo
-        pkgIndex <- liftIO queryGetPackageIndex
         revs <- queryReverseIndex
+        pkgIndex <- lookupWithReverseDeps revs pkgname
+        dispInfo <- displayInfoFrom pkgIndex
         pure $ perPackageReverse dispInfo pkgIndex revs pkgname
+
+    -- The given package and its direct reverse dependencies, which is all of
+    -- the package index that the per-package reverse dependency views use.
+    lookupWithReverseDeps :: MonadIO m => ReverseIndex -> PackageName -> m (PackageIndex PkgInfo)
+    lookupWithReverseDeps revs pkgname =
+        lookupIndex (pkgname : Set.toList (getDependencies pkgname revs))
+
+    lookupIndex :: MonadIO m => [PackageName] -> m (PackageIndex PkgInfo)
+    lookupIndex pkgnames =
+        PackageIndex.fromList . concat . Map.elems <$> liftIO (queryLookupPackageNames pkgnames)
 
     revJSON :: IO ByteString
     revJSON = do
@@ -207,10 +227,12 @@ reverseFeature queryGetPackageIndex
             edges = map (\(a,b) -> Edge a (nodeToString a) (map (\x-> nodeToString x) b)) assoc
         return $ encode edges
 
-    revDisplayInfo :: MonadIO m => m VersionIndex
-    revDisplayInfo = do
-        pkgIndex <- liftIO queryGetPackageIndex
-        prefs <- liftIO queryAllPreferredInfo
+    revDisplayInfo :: MonadIO m => [PackageName] -> m VersionIndex
+    revDisplayInfo pkgnames = lookupIndex pkgnames >>= displayInfoFrom
+
+    displayInfoFrom :: MonadIO m => PackageIndex PkgInfo -> m VersionIndex
+    displayInfoFrom pkgIndex = do
+        prefs <- liftIO (queryLookupPreferredInfos (PackageIndex.allPackageNames pkgIndex))
         return $ getDisplayInfo prefs pkgIndex
 
     renderReverseWith :: MonadIO m => PackageName -> ReverseDisplay -> (Maybe VersionStatus -> Bool) -> m ReversePageRender
@@ -267,19 +289,18 @@ reverseFeature queryGetPackageIndex
     -- The returned list is sorted ascendingly on directCount (see ReverseCount).
     revCountForAllPackages :: MonadIO m => m [(PackageName, ReverseCount)]
     revCountForAllPackages = do
-        index <- liftIO queryGetPackageIndex
-        let pkgnames = packageNames index
+        pkgnames <- liftIO queryAllPackageNames
         counts <- mapM revPackageStats pkgnames
         return . sortOn (directCount . snd) $ zip pkgnames counts
 
     revForEachVersion :: PackageName -> IO (Map.Map Version (Set PackageIdentifier))
     revForEachVersion pkg = do
         ReverseIndex revs nodemap depmap <- readMemState reverseMemState
-        index <- queryGetPackageIndex
         let revDepNames :: [PackageName]
             revDepNames = case Bimap.lookup pkg nodemap of
               Nothing -> []
               Just nodeid -> mapMaybe (`Bimap.lookupR` nodemap) (Set.toList $ suc revs nodeid)
+        index <- lookupIndex (pkg : revDepNames)
         let -- The key is the version of 'pkg', and the values are specific
           -- package versions that accept this version of pkg specified in the key
           revDepVersions :: [(Version, Set PackageIdentifier)]

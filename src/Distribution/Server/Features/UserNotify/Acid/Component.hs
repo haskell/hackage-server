@@ -17,7 +17,7 @@ acidStore stateDir = do
           Store.lookupNotifyPref = \uid -> queryState notifyState (Acid.LookupNotifyPref uid)
         , Store.addNotifyPref = \uid pref -> updateState notifyState (Acid.AddNotifyPref uid pref)
         , Store.getNotificationData = Acid.unNotifyData <$> queryState notifyState Acid.GetNotifyData
-        , Store.setNotifyTime = \time -> updateState notifyState (Acid.SetNotifyTime time)
+        , Store.claimNotifyWindow = \expected time -> updateState notifyState (Acid.ClaimNotifyWindow expected time)
         }
     , Store.backendState = [abstractAcidStateComponent notifyState]
     }

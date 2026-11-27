@@ -28,6 +28,7 @@ acidStore stateDir = do
         , Store.getPackageMaintainers = \name -> queryState maintainersState (Acid.GetPackageMaintainers name)
         , Store.addPackageMaintainer = \name -> updateState maintainersState . Acid.AddPackageMaintainer name
         , Store.removePackageMaintainer = \name -> updateState maintainersState . Acid.RemovePackageMaintainer name
+        , Store.claimPackageMaintainers = \name -> updateState maintainersState . Acid.ClaimPackageMaintainers name
         }
     , Store.backendState = [ abstractAcidStateComponent trusteesState
                            , abstractAcidStateComponent uploadersState

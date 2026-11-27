@@ -211,9 +211,12 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
     updateAddSignupResetInfo nonce signupInfo =
         Store.addSignupResetInfo signupResetStore nonce signupInfo
 
-    updateDeleteSignupResetInfo :: Nonce -> MonadIO m => m ()
-    updateDeleteSignupResetInfo nonce =
-        Store.deleteSignupResetInfo signupResetStore nonce
+    -- Use up a nonce, failing if it is already gone, for example because a
+    -- concurrent request used it.
+    useNonce :: String -> Nonce -> ServerPartE ()
+    useNonce thing nonce =
+        Store.takeSignupResetInfo signupResetStore nonce
+        >>= maybe (errNoNonce thing) (const (return ()))
 
     -- Expiry
     --
@@ -365,7 +368,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
         SignupInfo {..} <- lookupSignupInfo nonce
         (passwd, passwdRepeat) <- lookPasswd
         when (passwd /= passwdRepeat) errPasswdMismatch
-        updateDeleteSignupResetInfo nonce
+        useNonce "account signup" nonce
         timenow <- liftIO getCurrentTime
         let username    = UserName (T.unpack signupUserName)
             userauth    = newUserAuth username (PasswdPlain passwd)
@@ -501,7 +504,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
 
         let userauth = newUserAuth userName (PasswdPlain passwd)
 
-        updateDeleteSignupResetInfo nonce
+        useNonce "password reset" nonce
         updateSetUserAuth resetUserId userauth >>= maybe (return ()) errDeleted
         --TODO: confirmation page?
         seeOther (userPageUri userResource "" userName) (toResponse ())

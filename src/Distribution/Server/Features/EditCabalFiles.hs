@@ -110,8 +110,15 @@ editCabalFilesFeature _env templates
             | shouldPublish && not (null changes) -> do
                 template' <- getTemplate templates "cabalFilePublished.html"
                 time <- liftIO getCurrentTime
-                updateAddPackageRevision pkgid (CabalFileText newRevision)
-                                               (time, uid)
+                -- only add it if no other revision landed since we checked
+                -- this one against the latest
+                added <- updateAddPackageRevisionIfLatest pkgid (pkgNumRevisions pkg)
+                           (CabalFileText newRevision) (time, uid)
+                unless added $
+                  throwError $ ErrorResponse 409 [] "Revision not published"
+                    [MText $ "Another revision of this package was published while "
+                          ++ "yours was being checked. Please reload the page and "
+                          ++ "make your edit again."]
                 ok $ toResponse $ template'
                   [ "pkgid"     $= pkgid
                   , "cabalfile" $= newRevision

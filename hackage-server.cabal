@@ -311,6 +311,7 @@ library
     Distribution.Server.Features.Core.Acid
     Distribution.Server.Features.Core.State
     Distribution.Server.Features.Core.Store
+    Distribution.Server.Features.Core.Types
       Distribution.Server.Features.Core.Backup
       Distribution.Server.Features.Security
       Distribution.Server.Features.Security.Acid
@@ -324,6 +325,7 @@ library
     Distribution.Server.Features.Security.SHA256
     Distribution.Server.Features.Security.State
     Distribution.Server.Features.Security.Store
+    Distribution.Server.Features.Security.Types
     Distribution.Server.Features.Mirror
     Distribution.Server.Features.Mirror.Acid
     Distribution.Server.Features.Mirror.Store
