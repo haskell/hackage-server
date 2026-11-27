@@ -39,7 +39,7 @@ import System.Environment
 import System.Exit(exitFailure, ExitCode(..))
 import System.FilePath
 import System.Directory (canonicalizePath, createDirectoryIfMissing,
-                         doesFileExist, doesDirectoryExist, getDirectoryContents,
+                         doesFileExist, getDirectoryContents,
                          renameFile, removeFile,
                          createDirectory, removeDirectoryRecursive,
                          createDirectoryIfMissing, makeAbsolute)
@@ -694,72 +694,24 @@ testPackage verbosity opts docInfo = do
 buildPackage :: Verbosity -> BuildOpts -> BuildConfig
              -> DocInfo
              -> IO (Maybe FilePath, Maybe FilePath, FilePath)
-buildPackage verbosity opts config docInfo = do
+buildPackage verbosity opts _config docInfo = do
     let pkgid = docInfoPackage docInfo
     notice verbosity ("Building " ++ display pkgid)
 
-
-    -- Create the local package db
-    let packageDb = installDirectory opts </> "packages.db"
-    -- TODO: use Distribution.Simple.Program.HcPkg
-    ph <- runProcess "ghc-pkg"
-                     ["init", packageDb]
-                     Nothing Nothing Nothing Nothing Nothing
-    init_ec <- waitForProcess ph
-    unless (init_ec == ExitSuccess) $
-        dieNoVerbosity $ "Could not initialise the package db " ++ packageDb
-
-    -- The documentation is installed within the stateDir because we
-    -- set a prefix while installing
-    let doc_root     = installDirectory opts </> "haddocks"
-        doc_dir_tmpl = doc_root </> "$pkgid-docs"
-        doc_dir_pkg  = doc_root </> display pkgid ++ "-docs"
---        doc_dir_html = doc_dir </> "html"
---        deps_doc_dir = doc_dir </> "deps"
---        temp_doc_dir = doc_dir </> display (docInfoPackage docInfo) ++ "-docs"
-        pkg_url      = "/package" </> "$pkg-$version"
-        pkg_flags    =
-            ["--enable-documentation",
-             "--htmldir=" ++ doc_dir_tmpl,
-             -- We only care about docs, so we want to build as
-             -- quickly as possible, and hence turn
-             -- optimisation off. Also explicitly pass -O0 as a
-             -- GHC option, in case it overrides a .cabal
-             -- setting or anything
-             "--disable-optimization", "--ghc-option", "-O0",
-             "--disable-library-for-ghci",
-             -- We don't want packages installed in the user
-             -- package.conf to affect things. In particular,
-             -- we don't want doc building to fail because
-             -- "packages are likely to be broken by the reinstalls"
-             "--package-db=clear", "--package-db=global",
-             "--package-db=" ++ packageDb,
-             -- Always build the package, even when it's been built
-             -- before. This lets us regenerate documentation when
-             -- dependencies are updated.
-             "--reinstall", "--force-reinstalls",
-             -- We know where this documentation will
-             -- eventually be hosted, bake that in.
-             -- The wiki claims we shouldn't include the
-             -- version in the hyperlinks so we don't have
-             -- to rehaddock some package when the dependent
-             -- packages get updated. However, this is NOT
-             -- what the Hackage v1 did, so ignore that:
-             "--haddock-html-location=" ++ pkg_url </> "docs",
-             -- Link "Contents" to the package page:
-             "--haddock-contents-location=" ++ pkg_url,
-             -- Link to colourised source code:
-             "--haddock-hyperlink-source",
-             "--prefix=" ++ installDirectory opts,
-             "--build-summary=" ++ installDirectory opts </> "reports" </> "$pkgid.report",
-             "--report-planning-failure",
-             -- We want both html documentation and hoogle database generated
-             "--haddock-html",
-             "--haddock-hoogle",
-             -- Generate the quickjump index files
-             "--haddock-option=--quickjump",
-             cabalPackageTarget config docInfo
-             ]
+    -- Build the documentation with @cabal haddock --haddock-for-hackage@.
+    --
+    -- This runs haddock on all the libraries of the package and produces a
+    -- tarball containing the haddocks of all of them, in the layout expected
+    -- by the server (see @checkDocTarball@ in the Documentation feature):
+    -- the main library's haddocks at the root and the sub-libraries' haddocks
+    -- in sub-directories named after the sub-library.
+    --
+    -- @--haddock-for-hackage@ implies @--haddock-html@, @--haddock-hoogle@,
+    -- hyperlinked source and quickjump, and bakes in the URLs under which
+    -- the documentation will be hosted (@/package/$pkg-$version@), so none
+    -- of these need to be passed explicitly.
+    let builddir         = installDirectory opts </> "dist-newstyle"
+        builtDocsTarball = builddir </> display pkgid ++ "-docs" <.> "tar.gz"
 
     -- The installDirectory is purely temporary, while the resultsDirectory is
     -- more persistent. We will grab various outputs from the tmp dir and stash
@@ -772,30 +724,36 @@ buildPackage verbosity opts config docInfo = do
 
     buildLogHnd <- openFile resultLogFile WriteMode
 
-    -- We ignore the result of calling @cabal install@ because
-    -- @cabal install@ succeeds even if the documentation fails to build.
-    void $ cabal opts "v1-install" pkg_flags (Just buildLogHnd)
+    -- We ignore the result of calling @cabal haddock@ because it exits with
+    -- an error (without writing the docs tarball) if the documentation fails
+    -- to build.
+    void $ cabal opts "haddock"
+        [ "all"
+        , "--haddock-for-hackage"
+        , "--disable-optimization", "--ghc-option", "-O0"
+        , "--disable-library-for-ghci"
+        , "--report-planning-failure"
+        , "--build-summary=" ++ resultReportFile
+        ] (Just buildLogHnd)
 
     -- Grab the report for the package we want. Stash it for safe keeping.
-    report <- handleDoesNotExist Nothing $ do
-                renameFile (installDirectory opts </> "reports"
-                                </> display pkgid <.> "report")
-                           resultReportFile
-                appendFile resultReportFile "doc-builder: True\n"
-                -- TODO add real time
-                appendFile resultReportFile "time:\n"
-                return (Just resultReportFile)
+    hasReport <- doesFileExist resultReportFile
+    report <- if hasReport
+        then do
+            appendFile resultReportFile "doc-builder: True\n"
+            -- TODO add real time
+            appendFile resultReportFile "time:\n"
+            return (Just resultReportFile)
+        else return Nothing
 
-    docs_generated <- fmap and $ sequence [
-        doesDirectoryExist doc_dir_pkg,
-        doesFileExist (doc_dir_pkg </> "doc-index.html"),
-        doesFileExist (doc_dir_pkg </> display (docInfoPackageName docInfo) <.> "haddock")]
-    docs <- if docs_generated
+    -- @cabal haddock --haddock-for-hackage@ only writes the tarball if the
+    -- documentation was built successfully.
+    hasDocsTarball <- doesFileExist builtDocsTarball
+    docs <- if hasDocsTarball
               then do
-                when (bo_prune opts) (pruneHaddockFiles doc_dir_pkg)
-                try (tarGzDirectory doc_dir_pkg) >>= either
-                  (\(e :: SomeException) -> print e >> return Nothing)
-                  (\x -> BS.writeFile resultDocsTarball x >> return (Just resultDocsTarball))
+                renameFile builtDocsTarball resultDocsTarball
+                when (bo_prune opts) (pruneDocsTarball opts resultDocsTarball)
+                return (Just resultDocsTarball)
               else return Nothing
 
     notice verbosity $ unlines
@@ -882,6 +840,21 @@ tarGzDirectory dir = do
     -- which tarGzDirectory gets wrapped.
     BS.length gzipped `seq` return gzipped
   where (containing_dir, nested_dir) = splitFileName dir
+
+-- | Apply 'pruneHaddockFiles' to the documentation tarball: unpack it,
+-- remove the files that Hackage does not want to serve, and pack it again.
+pruneDocsTarball :: BuildOpts -> FilePath -> IO ()
+pruneDocsTarball opts docsTarball = do
+    -- The top-level directory of the tarball is "<pkgid>-docs"
+    let unpackDir = installDirectory opts </> "docs-tarball"
+        docsDir   = unpackDir </> takeBaseName docsTarball
+    handleDoesNotExist () $ removeDirectoryRecursive unpackDir
+    createDirectoryIfMissing True unpackDir
+    content <- BS.readFile docsTarball
+    Tar.unpack unpackDir (Tar.read (GZip.decompress content))
+    pruneHaddockFiles docsDir
+    packed <- tarGzDirectory docsDir
+    BS.writeFile docsTarball packed
 
 uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath
                     -> Maybe FilePath -> FilePath -> Maybe FilePath
