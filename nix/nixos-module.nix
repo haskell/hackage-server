@@ -70,7 +70,7 @@ in
 
     ip = lib.mkOption {
       type = lib.types.str;
-      default = "0.0.0.0";
+      default = "127.0.0.1";
       description = "IPv4 address to bind.";
     };
 

@@ -35,7 +35,7 @@ import System.Posix.Signals as Signal
          )
 import System.IO
 import System.Directory
-         ( createDirectory, createDirectoryIfMissing, doesDirectoryExist
+         ( createDirectoryIfMissing, doesDirectoryExist
          , getDirectoryContents, Permissions(..), getPermissions )
 import System.FilePath
          ( (</>), (<.>) )
@@ -296,7 +296,7 @@ runCommand =
           flagRunTmpDir (\v flags -> flags { flagRunTmpDir = v })
           (reqArgFlag "DIR")
       , option [] ["temp-run"]
-          "Set up a temporary server while initializing state for maintenance restarts"
+          "Set up a temporary server while initializing state for maintenance restarts (not with socket activation)"
           flagRunTemp (\v flags -> flags { flagRunTemp = v })
           (noArg (Flag True))
       , option [] ["delay-cache-updates"]
@@ -354,6 +354,7 @@ runAction opts = do
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagRunStaticDir opts)
         tmpDir    = fromFlagOrDefault (confTmpDir    defaults) (flagRunTmpDir    opts)
         flushDownloadPeriod = fromFlagOrDefault (confDownloadFlush defaults) $ flagRunFlushDownloads opts
+        useTempServer = fromFlag (flagRunTemp opts)
         socketActivationOnly = fromFlag (flagRunSocketActivationOnly opts)
         -- Explicitly asking for an address to listen on is itself a request
         -- to bind it ourselves, so it implies --no-socket-activation. (Pass
@@ -366,6 +367,9 @@ runAction opts = do
                           Server.loPortNum = port
                       }
         listenOn
+          -- The temporary server must bind and release its own socket before
+          -- the real server starts, so it cannot use socket activation.
+          | useTempServer = Server.ListenOnInfallible boundSocket
           | noSocketActivation = Server.ListenOnInfallible boundSocket
           | socketActivationOnly = Server.ListenOnSocketActivation Nothing
           | otherwise = Server.ListenOnSocketActivation (Just boundSocket)
@@ -389,17 +393,20 @@ runAction opts = do
 
     when (socketActivationOnly && noSocketActivation) $
       fail "--socket-activation-only conflicts with --no-socket-activation (or with --ip/--port, which imply it)"
+    when (useTempServer && socketActivationOnly) $
+      fail "--temp-run cannot be used with --socket-activation-only"
 
     checkBlankServerState =<< Server.hasSavedState config
     checkStaticDir staticDir (flagRunStaticDir opts)
     checkTmpDir    tmpDir
 
-    -- Get the socket now, rather than when we start serving, so that
-    -- problems (e.g. a bad socket activation environment) are reported
-    -- before we spend a long time loading the server state. This also means
-    -- the temp server and the real server share the one socket.
-    listenSocket <- Server.acquireListenSocket listenOn
-    let config' = config { confListenOn = ListenOnInfallible (ExplicitSocket listenSocket) }
+    -- Keep the temporary server and the real server on separate sockets:
+    -- Happstack closes its listener when the temporary server is torn down.
+    config' <- if useTempServer
+      then pure config
+      else do
+        listenSocket <- Server.acquireListenSocket listenOn
+        pure config { confListenOn = ListenOnInfallible (ExplicitSocket listenSocket) }
 
     onSigTermCleanShutdown
 
@@ -418,7 +425,6 @@ runAction opts = do
           Server.reloadDatafiles server
           lognotice verbosity "Done"
 
-    let useTempServer = fromFlag (flagRunTemp opts)
     withServer config' useTempServer $ \server ->
       withHandler sigUSR1 (checkpointHandler server) $
       withHandler sigUSR2 (backupHandler server) $
@@ -625,7 +631,7 @@ initAction opts = do
     withServer config False $ \server -> do
         lognotice verbosity "Creating initial state..."
         Server.initState server admin
-        createDirectory (stateDir </> "tmp")
+        createDirectoryIfMissing True (stateDir </> "tmp")
         when (flagInitAdmin opts == NoFlag) $
           lognotice verbosity $ "Using default administrator account "
               ++ "(user admin, passwd admin)"
@@ -995,7 +1001,7 @@ restoreAction opts [tarFile] = do
         case res of
             Just err -> fail err
             _ ->
-                do createDirectory (stateDir </> "tmp")
+                do createDirectoryIfMissing True (stateDir </> "tmp")
                    lognotice verbosity "Successfully imported."
 restoreAction _ _ = dieNoVerbosity "There should be exactly one argument: the backup tarball."
 
